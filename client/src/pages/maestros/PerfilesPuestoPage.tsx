@@ -43,7 +43,7 @@ function comparePerfiles(
   b: PerfilPuestoDoc,
   sortKey: string,
   dir: MaestroSortDir,
-  deptMap: Record<string, DepartamentoDoc>,
+  _deptMap: Record<string, DepartamentoDoc>,
 ): number {
   const deptA = deptFromPerfil(a)
   const deptB = deptFromPerfil(b)
@@ -203,7 +203,7 @@ export function PerfilesPuestoPage() {
   const maestro = useMaestroList({
     items: list,
     defaultSortKey: 'titulo',
-    getActivo: (p) => p.activo,
+    getActivo: () => true,
     searchTexts: (p) => {
       const d = deptFromPerfil(p)
       return [p.codigo, p.titulo, p.objetivo, d?.nombre, d?.codigo]

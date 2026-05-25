@@ -1,6 +1,5 @@
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const DAY_MS = 24 * 60 * 60 * 1000
 
 export type TimelineRange = {
   start: number

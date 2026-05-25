@@ -107,7 +107,7 @@ export function evaluarSaludTarea(
   if (fin) {
     const dias = Math.round((fin.getTime() - hoyD.getTime()) / msDia)
     if (dias >= 0 && dias <= 5) return 'en_riesgo'
-    if (dias <= 7 && (t.porcentaje ?? 0) < 50 && t.estado !== 'Completado') {
+    if (dias <= 7 && (t.porcentaje ?? 0) < 50) {
       return 'en_riesgo'
     }
   }

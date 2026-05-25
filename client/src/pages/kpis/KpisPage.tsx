@@ -83,7 +83,6 @@ import {
   type KpiDoc,
   type KpiRegistro,
   type KpiSugerenciaItem,
-  type MetaEstrategicaId,
 } from '@/types/kpi'
 import type { MetaEstrategicaDepto } from '@/types/departamento'
 import type { Proyecto } from '@/types/proyecto'

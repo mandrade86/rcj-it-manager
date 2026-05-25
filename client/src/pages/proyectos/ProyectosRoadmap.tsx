@@ -11,7 +11,6 @@ import {
 
 import { TimelineGanttChart, type TimelineGanttRow } from '@/components/proyectos/TimelineGanttChart'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ejeBarClass } from '@/lib/ejeColors'
 import {
@@ -82,12 +81,11 @@ function MiniTimeline({ proyectos, onSelect }: { proyectos: Proyecto[]; onSelect
 
 function roadmapNodeToGanttRow(
   node: RoadmapTreeNode,
-  collapsed: Set<string>,
+  _collapsed: Set<string>,
   onToggleGroup: (id: string) => void,
   onSelect: (p: Proyecto) => void,
 ): TimelineGanttRow {
   const isGroup = node.kind === 'group'
-  const isCollapsed = isGroup && collapsed.has(node.id)
 
   return {
     id: node.id,

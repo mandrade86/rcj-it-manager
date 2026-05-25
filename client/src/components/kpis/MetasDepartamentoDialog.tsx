@@ -19,7 +19,6 @@ import {
 } from '@/lib/kpiCalculoTipos'
 import { metasEditorFromDepartamento, plantillaMetasEstrategicas } from '@/lib/metasDepartamento'
 import type { DepartamentoDoc, MetaEstrategicaDepto } from '@/types/departamento'
-import type { MetaEstrategicaId } from '@/types/kpi'
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -50,7 +49,7 @@ export function MetasDepartamentoDialog({
     }
   }, [open, departamento])
 
-  function patchMeta(id: MetaEstrategicaId, patch: Partial<MetaEstrategicaDepto>) {
+  function patchMeta(id: MetaEstrategicaDepto['id'], patch: Partial<MetaEstrategicaDepto>) {
     setMetas((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
     setDirty(true)
   }

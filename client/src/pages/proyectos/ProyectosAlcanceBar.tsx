@@ -18,7 +18,7 @@ const items: {
   label: string
   icon: typeof User
   countKey: keyof Props['cuentas'] | null
-  disabled?: (p: Props) => boolean
+  disabled?: (p: Pick<Props, 'puedeVerTodos' | 'miDepartamentoId'>) => boolean
 }[] = [
   { id: 'mis', label: 'Mis proyectos', icon: User, countKey: 'mias' },
   { id: 'equipo', label: 'Mi equipo', icon: UsersRound, countKey: 'equipo' },

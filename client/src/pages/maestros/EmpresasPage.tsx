@@ -112,7 +112,7 @@ export function EmpresasPage() {
     searchTexts: (e) => [e.codigo, e.nombre, e.descripcion, String(e.ehr_empresa_id ?? '')],
     compare: compareEmpresas,
   })
-  const { rows: filtered, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, count, total } =
+  const { rows: filtered, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, total } =
     maestro
 
   const displayed = useMemo(() => {

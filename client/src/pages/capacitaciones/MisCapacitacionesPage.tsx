@@ -140,7 +140,7 @@ export function MisCapacitacionesPage() {
       }
       if (nuevoEstado === 'Completado') {
         body.fecha_completado = new Date().toISOString().slice(0, 10)
-      } else if (nuevoEstado !== 'Completado') {
+      } else {
         body.fecha_completado = null
       }
       await updateAsignacionColaborador(capacitacionId, body)

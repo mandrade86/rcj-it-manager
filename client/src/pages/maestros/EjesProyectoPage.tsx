@@ -152,7 +152,7 @@ export function EjesProyectoPage() {
     searchTexts: (e) => [e.codigo, e.nombre, e.descripcion],
     compare: compareEjes,
   })
-  const { rows: filtered, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, count, total } =
+  const { rows: filtered, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, total } =
     maestro
 
   const pagination = usePagination(filtered.length, {
@@ -193,6 +193,19 @@ export function EjesProyectoPage() {
       </div>
 
       {err && <p className="text-sm text-destructive">{err}</p>}
+
+      {!loading && rows.length > 0 && (
+        <MaestroListToolbar
+          busqueda={busqueda}
+          onBusquedaChange={setBusqueda}
+          busquedaPlaceholder="Código, nombre, descripción…"
+          filterActivo={filterActivo}
+          onFilterActivoChange={setFilterActivo}
+          count={filtered.length}
+          total={total}
+          countLabel="eje(s)"
+        />
+      )}
 
       {!loading && bulk.showBar && (
         <MaestroBulkDeleteBar

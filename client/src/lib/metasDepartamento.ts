@@ -33,7 +33,9 @@ export function tituloMeta(
 }
 
 export function metaActivaIds(metas: MetaEstrategicaDepto[]): MetaEstrategicaId[] {
-  return metas.filter((m) => m.activa !== false && isMetaEstrategicaId(m.id)).map((m) => m.id)
+  return metas
+    .filter((m) => m.activa !== false && isMetaEstrategicaId(m.id))
+    .map((m) => m.id as MetaEstrategicaId)
 }
 
 export function metasEditorFromDepartamento(dept: DepartamentoDoc | null): MetaEstrategicaDepto[] {
