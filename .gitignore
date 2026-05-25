@@ -1,0 +1,15 @@
+node_modules/
+client/node_modules/
+client/dist/
+*.local
+.DS_Store
+
+# Secretos y entorno local
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Datos de negocio (Excel OPEX, certificados, adjuntos) — no subir a GitHub
+data/*
+!data/.gitkeep

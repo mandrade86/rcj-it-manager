@@ -1,0 +1,45 @@
+{
+  "name": "rcj-it-manager",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "nodemon --watch server --ext ts --exec tsx server/index.ts",
+    "build": "npm run build --prefix client",
+    "start": "tsx server/index.ts",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:deploy:ubuntu": "bash scripts/deploy-ubuntu.sh",
+    "preview": "npm run preview --prefix client",
+    "seed": "tsx server/db/seed.ts",
+    "clear:capacitaciones": "tsx server/db/clearCapacitaciones.ts",
+    "normalize:certificados": "tsx server/db/normalizeCertificados.ts",
+    "proyectos:asignar-marcela": "tsx server/db/assignProjectsToMarcela.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "date-fns": "^4.2.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.19.0",
+    "multer": "^2.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^24.10.1",
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

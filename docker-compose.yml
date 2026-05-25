@@ -1,0 +1,41 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '${APP_PORT:-3001}:3001'
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+      MONGODB_URI: mongodb://mongo:27017/rcj_it_manager
+      JWT_SECRET: ${JWT_SECRET:-cambiar-en-produccion}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-IT}
+      JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}
+      MONGODB_CONNECT_RETRIES: 30
+      MONGODB_CONNECT_DELAY_MS: 2000
+    volumes:
+      # Excel OPEX, certificados, adjuntos de tareas
+      - ./data:/app/data
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
