@@ -2,7 +2,6 @@
  * Initializes required reference data on every server start.
  * Safe to run multiple times — uses upsert.
  */
-import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 
 import { Config } from './models/Config.js'
@@ -798,7 +797,7 @@ export async function ensurePlantillasCarrera(): Promise<void> {
   }
 }
 
-// ─── Roles y usuario administrador inicial ────────────────────────────────────
+// ─── Roles iniciales ──────────────────────────────────────────────────────────
 
 const ROLES_INICIALES = [
   {
@@ -860,20 +859,9 @@ export async function ensureRolesYAdmin(): Promise<void> {
     )
   }
 
-  const adminExists = await Usuario.findOne({ email: 'admin@rcj.hn' }).lean()
-  if (!adminExists) {
-    const rolAdmin = await Rol.findOne({ nombre: 'Administrador' }).lean()
-    if (rolAdmin) {
-      const hash = await bcrypt.hash('Admin2026!', 10)
-      await Usuario.create({
-        nombre: 'Administrador RCJ',
-        email: 'admin@rcj.hn',
-        password: hash,
-        rol_id: rolAdmin._id,
-        activo: true,
-      })
-      console.log('✅ Usuario admin creado: admin@rcj.hn / Admin2026!')
-    }
+  const removed = await Usuario.deleteOne({ email: 'admin@rcj.hn' })
+  if (removed.deletedCount) {
+    console.log('Usuario demo admin@rcj.hn eliminado (ya no se crea automáticamente).')
   }
 }
 

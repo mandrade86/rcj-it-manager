@@ -117,12 +117,6 @@ export function LoginPage() {
                 {loading ? 'Ingresando…' : 'Iniciar sesión'}
               </Button>
             </form>
-
-            <div className="mt-6 rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-              <p className="font-medium">Acceso inicial:</p>
-              <p>Usuario: <code className="rounded bg-background px-1">admin@rcj.hn</code></p>
-              <p>Contraseña: <code className="rounded bg-background px-1">Admin2026!</code></p>
-            </div>
           </CardContent>
         </Card>
 
