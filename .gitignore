@@ -13,3 +13,7 @@ client/dist/
 # Datos de negocio (Excel OPEX, certificados, adjuntos) — no subir a GitHub
 data/*
 !data/.gitkeep
+
+# Archivos temporales de Excel / Office
+~$*
+*.tmp

@@ -36,10 +36,19 @@ equipo, capacitaciones, gastos OPEX, KPIs y despliegue Docker.
 '@
 }
 
-$remote = git remote get-url origin 2>$null
-if ($LASTEXITCODE -ne 0) {
+$hasOrigin = $false
+$remote = $null
+try {
+  $remote = git remote get-url origin 2>$null
+  if ($LASTEXITCODE -eq 0 -and $remote) { $hasOrigin = $true }
+} catch {
+  $hasOrigin = $false
+}
+
+if (-not $hasOrigin) {
   Write-Host "Creando repositorio $RepoName en GitHub…"
   gh repo create $RepoName $visibility --source=. --remote=origin --description 'RCJ IT Manager — Plan IT 2026'
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
   Write-Host "Remote origin ya configurado: $remote"
 }
