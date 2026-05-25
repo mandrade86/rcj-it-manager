@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
+import { Eye, EyeOff, Lock, LogIn, User } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { loginApi } from '@/lib/api/auth'
+import { fetchAuthLoginConfig, loginApi, type AuthLoginConfig } from '@/lib/api/auth'
 import { useAuthStore } from '@/store/authStore'
 
 export function LoginPage() {
@@ -15,21 +15,42 @@ export function LoginPage() {
   const token = useAuthStore((s) => s.token)
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  const [email, setEmail] = useState('')
+  const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
   const [showPwd, setShowPwd] = useState(false)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [authConfig, setAuthConfig] = useState<AuthLoginConfig | null>(null)
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
+  useEffect(() => {
+    fetchAuthLoginConfig()
+      .then(setAuthConfig)
+      .catch(() =>
+        setAuthConfig({
+          activeDirectory: true,
+          providerLabel: 'Active Directory RCJ',
+          usernameHint: 'usuario@rcjcorp.com',
+          localFallback: false,
+          emailDomains: ['rcjcorp.com'],
+        }),
+      )
+  }, [])
+
   if (token) return <Navigate to={from} replace />
+
+  const adEnabled = authConfig?.activeDirectory !== false
+  const subtitle = adEnabled
+    ? `Inicia sesión con tus credenciales de ${authConfig?.providerLabel ?? 'Active Directory'}.`
+    : 'Inicia sesión con tu usuario y contraseña de IT Manager.'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setErr(null); setLoading(true)
+    setErr(null)
+    setLoading(true)
     try {
-      const { token: tok, user } = await loginApi(email.trim(), password)
+      const { token: tok, user } = await loginApi(usuario.trim(), password)
       setAuth(tok, user)
       navigate(from, { replace: true })
     } catch (ex) {
@@ -57,7 +78,7 @@ export function LoginPage() {
         <Card className="border-white/10 bg-white shadow-2xl">
           <CardContent className="p-6">
             <h2 className="mb-1 text-xl font-semibold">Bienvenida</h2>
-            <p className="mb-6 text-sm text-muted-foreground">Inicia sesión con tu cuenta corporativa.</p>
+            <p className="mb-6 text-sm text-muted-foreground">{subtitle}</p>
 
             {err && (
               <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -67,17 +88,20 @@ export function LoginPage() {
 
             <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Correo electrónico</Label>
+                <Label htmlFor="usuario">
+                  {adEnabled ? 'Usuario corporativo' : 'Correo electrónico'}
+                </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
+                    id="usuario"
+                    name="username"
+                    type="text"
+                    autoComplete="username"
                     required
-                    placeholder="usuario@empresa.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={authConfig?.usernameHint ?? 'usuario@rcjcorp.com'}
+                    value={usuario}
+                    onChange={(e) => setUsuario(e.target.value)}
                     className="pl-9"
                   />
                 </div>
@@ -89,10 +113,11 @@ export function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="password"
+                    name="password"
                     type={showPwd ? 'text' : 'password'}
                     autoComplete="current-password"
                     required
-                    placeholder="••••••••"
+                    placeholder="Contraseña de Windows / dominio"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-9 pr-9"
@@ -114,9 +139,16 @@ export function LoginPage() {
                 className="w-full gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
               >
                 <LogIn className="size-4" />
-                {loading ? 'Ingresando…' : 'Iniciar sesión'}
+                {loading ? 'Validando…' : 'Iniciar sesión'}
               </Button>
             </form>
+
+            {adEnabled && (
+              <p className="mt-4 text-center text-xs text-muted-foreground">
+                Autenticación unificada con Active Directory. Debes tener un usuario activo en IT
+                Manager (Maestros → Usuarios).
+              </p>
+            )}
           </CardContent>
         </Card>
 

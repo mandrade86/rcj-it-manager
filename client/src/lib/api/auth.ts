@@ -5,11 +5,25 @@ async function parseError(res: Response): Promise<string> {
   catch { return res.statusText }
 }
 
-export async function loginApi(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+export type AuthLoginConfig = {
+  activeDirectory: boolean
+  providerLabel: string
+  usernameHint: string
+  localFallback: boolean
+  emailDomains: string[]
+}
+
+export async function fetchAuthLoginConfig(): Promise<AuthLoginConfig> {
+  const res = await fetch('/api/auth/config')
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<AuthLoginConfig>
+}
+
+export async function loginApi(usuario: string, password: string): Promise<{ token: string; user: AuthUser }> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ usuario, password }),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<{ token: string; user: AuthUser }>

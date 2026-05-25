@@ -130,24 +130,33 @@ app.use(
   },
 )
 
+async function runStartupTasks() {
+  try {
+    await ensureDepartamentos()
+    await sincronizarEmpleadosDepartamentoDesdeEhr()
+    await ensureEjesProyecto()
+    await ensureEhrCompanyListConfig()
+    await ensureDescriptoresPuesto()
+    await ensureRubricasPorPuesto()
+    await ensurePerfilesPuesto()
+    await ensureRubricasPorPerfil()
+    await ensurePlantillasCarrera()
+    await ensureRolesYAdmin()
+    await ensureITArquitecturaData()
+    await ensureMetasDepartamentosIniciales()
+    await ensureKpisIniciales()
+    console.log('Datos iniciales listos.')
+  } catch (err) {
+    console.error('Error en tareas de inicio (la API sigue activa):', err)
+  }
+}
+
 async function main() {
   await connectDb()
-  await ensureDepartamentos()
-  await sincronizarEmpleadosDepartamentoDesdeEhr()
-  await ensureEjesProyecto()
-  await ensureEhrCompanyListConfig()
-  await ensureDescriptoresPuesto()
-  await ensureRubricasPorPuesto()
-  await ensurePerfilesPuesto()
-  await ensureRubricasPorPerfil()
-  await ensurePlantillasCarrera()
-  await ensureRolesYAdmin()
-  await ensureITArquitecturaData()
-  await ensureMetasDepartamentosIniciales()
-  await ensureKpisIniciales()
   app.listen(PORT, HOST, () => {
     console.log(`RCJ IT Manager — http://${HOST}:${PORT}`)
   })
+  void runStartupTasks()
 }
 
 main().catch((err) => {

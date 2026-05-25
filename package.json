@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "npm run dev --prefix client",
-    "dev:server": "nodemon --watch server --ext ts --exec tsx server/index.ts",
+    "dev:server": "nodemon --watch server --ext ts --delay 1500 --exec tsx server/index.ts",
     "build": "npm run build --prefix client",
     "start": "tsx server/index.ts",
     "docker:up": "docker compose up -d --build",

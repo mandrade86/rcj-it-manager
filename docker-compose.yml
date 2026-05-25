@@ -28,6 +28,10 @@ services:
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-IT}
       JIRA_ISSUE_TYPE: ${JIRA_ISSUE_TYPE:-Task}
+      AUTH_AD_ENABLED: ${AUTH_AD_ENABLED:-true}
+      EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehr.rcjcorp.hn:8095/api/Login}
+      AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
+      AUTH_LOCAL_FALLBACK: ${AUTH_LOCAL_FALLBACK:-true}
       MONGODB_CONNECT_RETRIES: 30
       MONGODB_CONNECT_DELAY_MS: 2000
     volumes:

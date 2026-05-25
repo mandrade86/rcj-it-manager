@@ -807,12 +807,13 @@ const ROLES_INICIALES = [
   },
   {
     nombre: 'Jefe IT',
-    descripcion: 'Acceso completo a módulos operativos. Sin gestión de usuarios/roles.',
+    descripcion: 'Acceso completo a módulos operativos y administración de usuarios.',
     permisos: [
       'dashboard:ver', 'proyectos:ver', 'proyectos:editar',
       'equipo:ver', 'equipo:editar', 'capacitaciones:ver', 'capacitaciones:editar',
       'gastos:ver', 'kpis:ver', 'kpis:editar',
       'maestros:ver', 'maestros:editar', 'empleados:ver', 'empleados:editar',
+      'usuarios:ver', 'usuarios:editar', 'roles:ver', 'roles:editar',
       'it:arquitectura:ver', 'it:arquitectura:editar',
     ],
   },
@@ -857,6 +858,9 @@ export async function ensureRolesYAdmin(): Promise<void> {
       { $setOnInsert: r },
       { upsert: true },
     )
+    if (r.nombre === 'Jefe IT') {
+      await Rol.updateOne({ nombre: 'Jefe IT' }, { $set: { permisos: r.permisos, descripcion: r.descripcion } })
+    }
   }
 
   const removed = await Usuario.deleteOne({ email: 'admin@rcj.hn' })

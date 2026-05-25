@@ -4,7 +4,8 @@ const UsuarioSchema = new Schema(
   {
     nombre: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true },
+    /** Vacío = solo inicio de sesión con Active Directory. */
+    password: { type: String, default: '' },
     rol_id: { type: Schema.Types.ObjectId, ref: 'Rol', required: true },
     /**
      * Identidad del usuario en el maestro de empleados (su "número de empleado").

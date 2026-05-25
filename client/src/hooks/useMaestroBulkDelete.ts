@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 
+import { mensajeServidorNoDisponible, isServerUnavailableError } from '@/lib/fetchRetry'
 import { ejecutarEliminarMaestroLote } from '@/lib/maestroBulkDelete'
 import { useMaestroSeleccion } from '@/hooks/useMaestroSeleccion'
 
@@ -38,7 +39,12 @@ export function useMaestroBulkDelete({
         await onAfterDelete?.()
       }
     } catch (ex) {
-      window.alert(ex instanceof Error ? ex.message : 'No se pudo eliminar el lote')
+      const msg = isServerUnavailableError(ex)
+        ? mensajeServidorNoDisponible()
+        : ex instanceof Error
+          ? ex.message
+          : 'No se pudo eliminar el lote'
+      window.alert(msg)
     } finally {
       setBulkDeleting(false)
     }

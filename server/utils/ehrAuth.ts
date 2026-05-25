@@ -40,7 +40,7 @@ export async function normalizeEhrLoginUrl(): Promise<void> {
   }
 }
 
-async function resolveEhrLoginUrl(): Promise<string> {
+export async function resolveEhrLoginUrl(): Promise<string> {
   await normalizeEhrLoginUrl()
   return (
     process.env.EHR_LOGIN_URL?.trim() ||
@@ -149,6 +149,87 @@ async function persistToken(token: string, expiresInSec?: number): Promise<void>
   }
 }
 
+export function isAdLoginEnabled(): boolean {
+  return process.env.AUTH_AD_ENABLED !== 'false'
+}
+
+function parseEhrErrorBody(json: unknown, text: string, status: number): string {
+  if (json && typeof json === 'object') {
+    const o = json as Record<string, unknown>
+    for (const k of ['message', 'error', 'Error', 'Message', 'title', 'detail']) {
+      const v = o[k]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+  }
+  const t = text?.trim()
+  if (t && t.length < 240 && !t.startsWith('{')) return t
+  if (status === 401 || status === 403) return 'Usuario o contraseña incorrectos.'
+  return `No se pudo validar credenciales (${status}).`
+}
+
+function buildEhrLoginAttempts(
+  loginUrl: string,
+  username: string,
+  password: string,
+): Array<{ run: () => Promise<{ token: string; expiresInSec?: number } | null> }> {
+  const isTokenEndpoint = /\/token\/?$/i.test(loginUrl)
+  const attempts: Array<{ run: () => Promise<{ token: string; expiresInSec?: number } | null> }> = []
+
+  if (isTokenEndpoint) {
+    const body = new URLSearchParams({
+      grant_type: 'password',
+      username,
+      password,
+    })
+    attempts.push({
+      run: () =>
+        tryLoginRequest(loginUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        }),
+    })
+  } else {
+    const jsonBodies: Record<string, unknown>[] = [
+      { UserName: username, Password: password },
+      { userName: username, password },
+      { username, password },
+    ]
+    for (const payload of jsonBodies) {
+      attempts.push({
+        run: () =>
+          tryLoginRequest(loginUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(payload),
+          }),
+      })
+    }
+  }
+  return attempts
+}
+
+/**
+ * Valida credenciales de un usuario contra el login EHR (Active Directory corporativo).
+ * No guarda token en Config (no interfiere con la cuenta de servicio de sincronización).
+ */
+export async function authenticateUserViaEhr(username: string, password: string): Promise<void> {
+  const loginUrl = await resolveEhrLoginUrl()
+  const attempts = buildEhrLoginAttempts(loginUrl, username, password)
+  let lastErr: Error | null = null
+
+  for (const att of attempts) {
+    try {
+      await att.run()
+      return
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+    }
+  }
+
+  throw lastErr ?? new Error('Credenciales de Active Directory incorrectas.')
+}
+
 async function tryLoginRequest(
   url: string,
   init: RequestInit,
@@ -170,12 +251,19 @@ async function tryLoginRequest(
     }
     const hit = extractTokenFromJson(json)
     if (hit) return hit
+    if (r.ok) return { token: 'session-ok' }
     const plain = text?.trim().replace(/^"|"$/g, '')
     if (plain && /^eyJ[\w-]*\.[\w-]*\.[\w-]*$/.test(plain)) {
       return { token: plain }
     }
     if (plain && plain.length > 20 && !plain.startsWith('{')) {
       return { token: plain }
+    }
+    if (json && typeof json === 'object') {
+      const o = json as Record<string, unknown>
+      if (o.success === true || o.ok === true || o.isSuccess === true) {
+        return { token: 'session-ok' }
+      }
     }
     throw new Error('La respuesta de login no incluyó un token reconocible.')
   } finally {
@@ -205,49 +293,13 @@ export async function loginEhr(force = false): Promise<string> {
     )
   }
 
-  const isTokenEndpoint = /\/token\/?$/i.test(loginUrl)
-
-  const attempts: Array<{ label: string; run: () => Promise<{ token: string; expiresInSec?: number }> }> =
-    []
-
-  if (isTokenEndpoint) {
-    const body = new URLSearchParams({
-      grant_type: 'password',
-      username,
-      password,
-    })
-    attempts.push({
-      label: 'OAuth /Token',
-      run: () =>
-        tryLoginRequest(loginUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        }),
-    })
-  } else {
-    const jsonBodies: Record<string, unknown>[] = [
-      { UserName: username, Password: password },
-      { userName: username, password },
-      { username, password },
-    ]
-    for (const payload of jsonBodies) {
-      attempts.push({
-        label: JSON.stringify(payload).slice(0, 40),
-        run: () =>
-          tryLoginRequest(loginUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify(payload),
-          }),
-      })
-    }
-  }
+  const attempts = buildEhrLoginAttempts(loginUrl, username, password)
 
   let lastErr: Error | null = null
   for (const att of attempts) {
     try {
       const hit = await att.run()
+      if (!hit) continue
       await persistToken(hit.token, hit.expiresInSec)
       return hit.token
     } catch (e) {

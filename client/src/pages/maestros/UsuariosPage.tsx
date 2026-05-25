@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, Edit2, Key, Plus, Search, Trash2, User as UserIcon, X } from 'lucide-react'
+import { BadgeCheck, Edit2, Key, Plus, Search, Shield, Trash2, User as UserIcon, X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
 import { usePagination } from '@/hooks/usePagination'
 import { useMaestroList } from '@/hooks/useMaestroList'
 import { compareStrings, type MaestroSortDir } from '@/lib/maestroList'
+import { fetchAuthLoginConfig, type AuthLoginConfig } from '@/lib/api/auth'
 import {
   createUsuario, deleteUsuario, fetchUsuarios, resetPasswordUsuario, updateUsuario,
 } from '@/lib/api/usuarios'
@@ -315,6 +316,7 @@ export function UsuariosPage() {
   const [deleteTarget, setDeleteTarget] = useState<UsuarioDoc | null>(null)
   const [resetTarget, setResetTarget] = useState<UsuarioDoc | null>(null)
   const [newPwd, setNewPwd] = useState('')
+  const [authConfig, setAuthConfig] = useState<AuthLoginConfig | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true); setErr(null)
@@ -331,6 +333,10 @@ export function UsuariosPage() {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
+
+  useEffect(() => {
+    fetchAuthLoginConfig().then(setAuthConfig).catch(() => null)
+  }, [])
 
   const maestro = useMaestroList({
     items: list,
@@ -366,6 +372,15 @@ export function UsuariosPage() {
     setForm((f) => ({ ...f, [k]: v }))
   }
 
+  useEffect(() => {
+    if (editing || !form.empleado_id) return
+    const emp = empleados.find((e) => e._id === form.empleado_id)
+    const mail = emp?.email?.trim().toLowerCase()
+    if (mail) {
+      setForm((f) => (f.email.toLowerCase() === mail ? f : { ...f, email: mail }))
+    }
+  }, [form.empleado_id, empleados, editing])
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     try {
@@ -381,12 +396,24 @@ export function UsuariosPage() {
       if (editing) {
         await updateUsuario(editing._id, payload)
       } else {
-        if (form.password.length < 6) throw new Error('Contraseña debe tener al menos 6 caracteres')
-        await createUsuario({ ...payload, password: form.password })
+        if (form.password.length > 0 && form.password.length < 6) {
+          throw new Error('Si defines contraseña local, debe tener al menos 6 caracteres')
+        }
+        await createUsuario({
+          ...payload,
+          ...(form.password.trim() ? { password: form.password } : {}),
+        })
       }
       setOpen(false)
       await reload()
-    } catch (ex) { window.alert(ex instanceof Error ? ex.message : 'Error') }
+    } catch (ex) {
+      const msg = ex instanceof Error ? ex.message : 'Error'
+      if (msg.includes('502') || msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED')) {
+        window.alert('No se pudo contactar al servidor. Espera unos segundos (reinicio del API) e intenta de nuevo.')
+      } else {
+        window.alert(msg)
+      }
+    }
     finally { setSaving(false) }
   }
 
@@ -589,20 +616,66 @@ export function UsuariosPage() {
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar usuario' : 'Nuevo usuario'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
+          <form
+            onSubmit={(e) => void handleSave(e)}
+            className="space-y-4"
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
+          >
+            {!editing && authConfig?.activeDirectory !== false && (
+              <div className="rounded-md border border-[var(--lime)]/50 bg-[var(--lime-lt)] p-4">
+                <div className="mb-2 flex items-center gap-2 text-[var(--navy)]">
+                  <Shield className="size-4 shrink-0" />
+                  <span className="text-sm font-semibold">Acceso con Active Directory</span>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  El usuario iniciará sesión con su <strong>usuario y contraseña de dominio</strong>{' '}
+                  ({authConfig?.providerLabel ?? 'Active Directory RCJ'}). El correo debe ser el mismo
+                  que en AD, por ejemplo <code className="rounded bg-white/80 px-1">{authConfig?.usernameHint ?? 'usuario@rcjcorp.com'}</code>.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  La contraseña local es <strong>opcional</strong>: déjala vacía para que solo use AD.
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2 sm:col-span-2">
                 <Label>Nombre completo <span className="text-destructive">*</span></Label>
                 <Input required value={form.nombre} onChange={(e) => setF('nombre', e.target.value)} />
               </div>
-              <div className="grid gap-2">
-                <Label>Email <span className="text-destructive">*</span></Label>
-                <Input required type="email" value={form.email} onChange={(e) => setF('email', e.target.value)} disabled={Boolean(editing)} />
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Correo (usuario Active Directory) <span className="text-destructive">*</span></Label>
+                <Input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setF('email', e.target.value)}
+                  disabled={Boolean(editing)}
+                  placeholder={authConfig?.usernameHint ?? 'nombre.apellido@rcjcorp.com'}
+                />
+                {!editing && (
+                  <p className="text-xs text-muted-foreground">
+                    Se completa automáticamente al vincular un empleado con correo en el maestro.
+                  </p>
+                )}
               </div>
               {!editing && (
-                <div className="grid gap-2">
-                  <Label>Contraseña inicial <span className="text-destructive">*</span></Label>
-                  <Input required type="password" minLength={6} value={form.password} onChange={(e) => setF('password', e.target.value)} placeholder="Mínimo 6 caracteres" />
+                <div className="grid gap-2 sm:col-span-2">
+                  <Label>Contraseña local (opcional)</Label>
+                  <Input
+                    type="password"
+                    minLength={form.password ? 6 : undefined}
+                    value={form.password}
+                    onChange={(e) => setF('password', e.target.value)}
+                    placeholder="Vacío = solo Active Directory"
+                    autoComplete="new-password"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Solo si necesitas acceso de respaldo sin AD. En producción normalmente se deja vacío.
+                  </p>
                 </div>
               )}
               <div className="grid gap-2">
