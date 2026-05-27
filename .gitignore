@@ -8,7 +8,8 @@ client/dist/
 .env
 .env.*
 !.env.example
-!.env.docker.example
+!.env.development.example
+!.env.production.example
 
 # Datos de negocio (Excel OPEX, certificados, adjuntos) — no subir a GitHub
 data/*

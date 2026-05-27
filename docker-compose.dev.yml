@@ -1,14 +1,16 @@
-# Alias de producción (compatibilidad). Preferir:
-#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Desarrollo / staging — URL sugerida: http://portal-dev.rcjcorp.hn o http://IP:3002
+# Uso: docker compose -f docker-compose.dev.yml --env-file .env.development up -d --build
 
-name: rcj-it-manager-prod
+name: rcj-it-manager-dev
 
 services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    ports:
+      - '${MONGO_HOST_PORT:-27018}:27017'
     volumes:
-      - mongo_data_prod:/data/db
+      - mongo_data_dev:/data/db
     healthcheck:
       test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
       interval: 5s
@@ -20,16 +22,17 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - '127.0.0.1:${APP_PORT:-3001}:3001'
+      - '${APP_PORT:-3002}:3001'
     env_file:
-      - .env.production
+      - .env.development
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 3001
       HOST: 0.0.0.0
-      MONGODB_URI: mongodb://mongo:27017/rcj_it_manager
+      MONGODB_URI: mongodb://mongo:27017/rcj_it_manager_dev
       MONGODB_CONNECT_RETRIES: 30
       MONGODB_CONNECT_DELAY_MS: 2000
+      AUTH_LOCAL_FALLBACK: ${AUTH_LOCAL_FALLBACK:-true}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -37,4 +40,4 @@ services:
         condition: service_healthy
 
 volumes:
-  mongo_data_prod:
+  mongo_data_dev:

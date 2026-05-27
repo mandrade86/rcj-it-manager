@@ -1,14 +1,9 @@
+# LEGACY — usar deploy/nginx-portal.rcjcorp.hn.conf.example
 # Ejemplo: Nginx como proxy inverso en Ubuntu Server
-# 1. sudo apt install nginx
-# 2. sudo cp deploy/nginx-it-manager.conf.example /etc/nginx/sites-available/it-manager
-# 3. Edita server_name y rutas
-# 4. sudo ln -s /etc/nginx/sites-available/it-manager /etc/nginx/sites-enabled/
-# 5. sudo nginx -t && sudo systemctl reload nginx
-# 6. HTTPS: sudo apt install certbot python3-certbot-nginx && sudo certbot --nginx -d it.tu-dominio.local
 
 server {
     listen 80;
-    server_name it-manager.rcj.local;  # cambiar
+    server_name portal.rcjcorp.hn;
 
     client_max_body_size 12M;  # subida de certificados / adjuntos
 

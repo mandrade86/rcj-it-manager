@@ -1,216 +1,176 @@
-# RCJ IT Manager — Docker
+# RCJ IT Manager — Docker (desarrollo y producción)
 
-Despliegue con **MongoDB** + app en un puerto (API + frontend). Pensado para **Ubuntu Server** en red local; también funciona en Windows con Docker Desktop.
+| Ambiente | URL | Compose | Variables |
+|----------|-----|---------|-----------|
+| **Producción** | `https://portal.rcjcorp.hn` | `docker-compose.prod.yml` | `.env.production` |
+| **Desarrollo** | `http://portal-dev.rcjcorp.hn` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
+| **Código local** | `http://localhost:5173` | — (`npm run dev`) | `.env` |
+
+Bases MongoDB separadas: `rcj_it_manager` (prod) y `rcj_it_manager_dev` (dev).
 
 ---
 
-## Ubuntu Server (producción en red local)
+## Resumen rápido
 
-### Requisitos
-
-- Ubuntu Server **22.04** o **24.04** (LTS)
-- Acceso `sudo`
-- Puertos: **3001** (app) o **80/443** si usas Nginx
-- ~2 GB RAM, ~10 GB disco
-
-### 1. Instalar Docker
-
-Copia el proyecto al servidor (git, scp o rsync):
-
-```bash
-# En tu PC (ejemplo)
-scp -r rcj-it-manager usuario@IP_SERVIDOR:/opt/
-```
-
-En el servidor:
+### Producción (Ubuntu Server)
 
 ```bash
 cd /opt/rcj-it-manager
-sudo bash scripts/install-docker-ubuntu.sh
+git pull
+cp .env.production.example .env.production   # primera vez; edita JWT_SECRET
+bash scripts/deploy-ubuntu.sh
+# Configurar Nginx + DNS → portal.rcjcorp.hn
+```
 
-# Para no usar sudo en cada docker:
+### Desarrollo (servidor o PC con Docker)
+
+```bash
+cp .env.development.example .env.development
+docker compose -f docker-compose.dev.yml --env-file .env.development up -d --build
+# http://localhost:3002  o  portal-dev.rcjcorp.hn
+```
+
+### Desarrollo en tu PC (sin Docker, día a día)
+
+```bash
+npm run dev
+# Frontend :5173  |  API :3001  |  MongoDB local :27017
+```
+
+---
+
+## DNS (red interna RCJ)
+
+Registro en el DNS corporativo (o archivo hosts para pruebas):
+
+| Registro | Tipo | Destino |
+|----------|------|---------|
+| `portal.rcjcorp.hn` | A | IP del servidor Ubuntu (producción) |
+| `portal-dev.rcjcorp.hn` | A | Misma IP u otro servidor (desarrollo) |
+
+Prueba local en `C:\Windows\System32\drivers\etc\hosts`:
+
+```
+192.168.x.x   portal.rcjcorp.hn
+192.168.x.x   portal-dev.rcjcorp.hn
+```
+
+---
+
+## Producción — `portal.rcjcorp.hn`
+
+### 1. Instalar Docker (una vez)
+
+```bash
+sudo bash scripts/install-docker-ubuntu.sh
 sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-### 2. Desplegar la aplicación
+### 2. Variables
 
 ```bash
-cd /opt/rcj-it-manager
+cp .env.production.example .env.production
+nano .env.production   # JWT_SECRET obligatorio; AUTH_LOCAL_FALLBACK=false
+```
+
+### 3. Levantar contenedores
+
+```bash
 bash scripts/deploy-ubuntu.sh
+# o: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-El script crea `.env` (con `JWT_SECRET` aleatorio), carpetas en `data/` y ejecuta `docker compose up -d --build`.
+La app escucha solo en **127.0.0.1:3001** (no expuesta directamente a la red).
 
-Con datos iniciales del Plan IT 2026:
-
-```bash
-bash scripts/deploy-ubuntu.sh --seed
-```
-
-### 3. Acceder desde la red
-
-```bash
-hostname -I   # IP del servidor
-```
-
-Abre en el navegador: `http://IP_DEL_SERVIDOR:3001`
-
-### 4. Firewall (UFW)
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 3001/tcp comment 'RCJ IT Manager'
-sudo ufw enable
-sudo ufw status
-```
-
-Solo red interna (ejemplo):
-
-```bash
-sudo ufw allow from 192.168.0.0/16 to any port 3001 proto tcp
-```
-
-### 5. Nginx + nombre amigable (opcional)
-
-Si quieres `http://it-manager.rcj.local` en lugar del puerto 3001:
+### 4. Nginx + HTTPS
 
 ```bash
 sudo apt install -y nginx
-sudo cp deploy/nginx-it-manager.conf.example /etc/nginx/sites-available/it-manager
-sudo nano /etc/nginx/sites-available/it-manager   # ajusta server_name
-sudo ln -sf /etc/nginx/sites-available/it-manager /etc/nginx/sites-enabled/
+sudo cp deploy/nginx-portal.rcjcorp.hn.conf.example /etc/nginx/sites-available/portal.rcjcorp.hn
+sudo ln -sf /etc/nginx/sites-available/portal.rcjcorp.hn /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-```
 
-HTTPS con Let's Encrypt (solo si el servidor tiene dominio público):
-
-```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d it.tu-dominio.com
+sudo certbot --nginx -d portal.rcjcorp.hn
 ```
 
-### 6. Datos persistentes
-
-| Ruta en el servidor | Contenido |
-|---------------------|-----------|
-| `./data/gastos.xlsx` | Excel OPEX |
-| `./data/certificados/` | Diplomas subidos |
-| `./data/adjuntos-tareas/` | Adjuntos de tareas |
-| Volumen Docker `mongo_data` | Base MongoDB |
-
-Copiar Excel desde tu PC:
+### 5. Firewall
 
 ```bash
-scp gastos.xlsx usuario@IP_SERVIDOR:/opt/rcj-it-manager/data/
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'    # 80 y 443
+sudo ufw enable
 ```
 
-### 7. Actualizar versión
+No hace falta abrir el puerto 3001 al exterior si usas Nginx.
+
+### 6. Actualizar versión
 
 ```bash
-cd /opt/rcj-it-manager
-git pull   # si usas git
-docker compose up -d --build
-```
-
-### 8. Arranque automático
-
-Los servicios usan `restart: unless-stopped`. Tras reiniciar el servidor:
-
-```bash
-sudo systemctl enable docker
-docker compose -f /opt/rcj-it-manager/docker-compose.yml ps
-```
-
-### 9. Servicio systemd (opcional)
-
-Si prefieres un unit explícito:
-
-```bash
-sudo tee /etc/systemd/system/rcj-it-manager.service << 'EOF'
-[Unit]
-Description=RCJ IT Manager (Docker Compose)
-Requires=docker.service
-After=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=/opt/rcj-it-manager
-ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
-TimeoutStartSec=0
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable rcj-it-manager
+git pull
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
 ---
 
-## Windows / desarrollo local
+## Desarrollo — `portal-dev.rcjcorp.hn`
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+Puerto por defecto **3002** y MongoDB en **27018** (no choca con prod ni con `mongod` local).
 
-```powershell
-cp .env.docker.example .env
-# Edita JWT_SECRET
-mkdir -Force data\certificados, data\adjuntos-tareas
-docker compose up -d --build
-# http://localhost:3001
+```bash
+cp .env.development.example .env.development
+bash scripts/deploy-ubuntu.sh --dev
 ```
+
+Nginx opcional (bloque comentado en `deploy/nginx-portal.rcjcorp.hn.conf.example`).
+
+`AUTH_LOCAL_FALLBACK=true` en dev permite contraseña local en MongoDB además de Active Directory.
 
 ---
 
 ## Comandos útiles
 
-| Acción | Comando |
-|--------|---------|
-| Ver logs | `docker compose logs -f app` |
-| Parar | `docker compose down` |
-| Parar y borrar BD | `docker compose down -v` |
-| Rebuild | `docker compose up -d --build` |
-| Seed manual | `docker compose exec app npm run seed` |
-| Shell | `docker compose exec app sh` |
+| Acción | Producción | Desarrollo |
+|--------|------------|------------|
+| Levantar | `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build` | `docker compose -f docker-compose.dev.yml --env-file .env.development up -d --build` |
+| Logs | `docker compose -f docker-compose.prod.yml logs -f app` | `docker compose -f docker-compose.dev.yml logs -f app` |
+| Parar | `docker compose -f docker-compose.prod.yml down` | `docker compose -f docker-compose.dev.yml down` |
+| Seed | `docker compose -f docker-compose.prod.yml exec app npm run seed` | `...dev.yml...` |
 
 ---
 
-## Arquitectura
+## Datos persistentes
 
-- **mongo** — MongoDB 7 (solo red interna Docker, no expuesto al host)
-- **app** — Node 22: Express `:3001`, sirve `client/dist` + `/api/*`
-- **./data** — volumen montado en `/app/data`
+| Ruta | Contenido |
+|------|-----------|
+| `./data/gastos.xlsx` | Excel OPEX |
+| `./data/certificados/` | Diplomas |
+| `./data/adjuntos-tareas/` | Adjuntos |
+| Volumen `mongo_data_prod` | BD producción |
+| Volumen `mongo_data_dev` | BD desarrollo |
 
-## Variables (.env en la raíz)
-
-| Variable | Descripción |
-|----------|-------------|
-| `JWT_SECRET` | Obligatorio en producción |
-| `APP_PORT` | Puerto en el host (default `3001`) |
-| `ANTHROPIC_API_KEY` | Análisis OPEX con IA (opcional) |
-| `JIRA_*` | Tech Debt → Jira (opcional) |
-
-`MONGODB_URI` lo define `docker-compose.yml` (`mongodb://mongo:27017/rcj_it_manager`).
+Prod y dev pueden compartir la carpeta `./data` o usar carpetas distintas si lo prefieres.
 
 ---
 
-## Solución de problemas (Ubuntu)
+## Variables principales
+
+| Variable | Producción | Desarrollo |
+|----------|------------|------------|
+| `JWT_SECRET` | Obligatorio, único | Distinto al de prod |
+| `APP_PORT` | `3001` | `3002` |
+| `AUTH_LOCAL_FALLBACK` | `false` (solo AD) | `true` (AD + local) |
+| `AUTH_AD_ENABLED` | `true` | `true` |
+| `EHR_LOGIN_URL` | URL login EHR | Igual |
+
+---
+
+## Solución de problemas
 
 | Síntoma | Qué hacer |
 |---------|-----------|
-| `permission denied` en docker | `sudo usermod -aG docker $USER` y volver a iniciar sesión |
-| No abre desde otra PC | `sudo ufw status`, comprobar IP y puerto 3001 |
-| App reinicia en bucle | `docker compose logs app` — suele ser MongoDB aún no listo; espera 1–2 min |
-| Login falla | Revisa `JWT_SECRET` en `.env`; no cambies el secreto si ya hay usuarios creados |
-| Gastos vacíos | Sube `data/gastos.xlsx` y pulsa *Sincronizar* en la app |
-| Build lento | Primera vez descarga imágenes; en servidor sin internet fallará el build |
-
----
-
-## Desarrollo vs Docker
-
-- **Dev:** `npm run dev` — Vite `:5173` + API `:3001`
-- **Docker:** todo en un solo origen, p. ej. `http://servidor:3001`
+| 502 / ECONNREFUSED | API reiniciando; espera y reintenta |
+| `portal.rcjcorp.hn` no abre | DNS, Nginx (`nginx -t`), `curl http://127.0.0.1:3001/api/health` |
+| Login AD falla | Servidor debe alcanzar `ehr.rcjcorp.hn:8095`; usuario creado en Maestros → Usuarios |
+| Prod y dev mezclados | Revisa que uses el compose y `.env` correctos |
