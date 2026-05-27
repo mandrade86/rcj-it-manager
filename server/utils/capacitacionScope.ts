@@ -1,7 +1,14 @@
 import mongoose from 'mongoose'
 
 import { Departamento } from '../db/models/Departamento.js'
-import { isAdminProyectos, resolveDepartamentosUsuario } from './proyectoScope.js'
+import { resolveDepartamentosUsuario } from './proyectoScope.js'
+
+/** Catálogo completo de capacitaciones (sin filtro por departamento). */
+export function isAdminCapacitaciones(permisos: string[]): boolean {
+  if (permisos.includes('*') || permisos.includes('capacitaciones:ver-todos')) return true
+  // Jefe IT y roles equivalentes en BD sin el permiso explícito aún
+  return permisos.includes('capacitaciones:editar') && permisos.includes('usuarios:editar')
+}
 
 export type CapacitacionScope = {
   isGlobal: boolean
@@ -21,7 +28,7 @@ export async function resolveCapacitacionScope(
   userId: string,
   permisos: string[],
 ): Promise<CapacitacionScope> {
-  const isGlobal = isAdminProyectos(permisos)
+  const isGlobal = isAdminCapacitaciones(permisos)
   const departamentoIds = isGlobal ? [] : await resolveDepartamentosUsuario(userId)
   return {
     isGlobal,

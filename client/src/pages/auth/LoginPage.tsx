@@ -41,9 +41,14 @@ export function LoginPage() {
   if (token) return <Navigate to={from} replace />
 
   const adEnabled = authConfig?.activeDirectory !== false
-  const subtitle = adEnabled
-    ? `Inicia sesión con tus credenciales de ${authConfig?.providerLabel ?? 'Active Directory'}.`
-    : 'Inicia sesión con tu usuario y contraseña de IT Manager.'
+  const localFallback = authConfig?.localFallback === true
+  const subtitle =
+    authConfig?.helpText ??
+    (adEnabled && localFallback
+      ? 'Active Directory o contraseña local de IT Manager (según tu cuenta).'
+      : adEnabled
+        ? `Inicia sesión con tus credenciales de ${authConfig?.providerLabel ?? 'Active Directory'}.`
+        : 'Inicia sesión con tu usuario y contraseña de IT Manager.')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -117,7 +122,13 @@ export function LoginPage() {
                     type={showPwd ? 'text' : 'password'}
                     autoComplete="current-password"
                     required
-                    placeholder="Contraseña de Windows / dominio"
+                    placeholder={
+                      adEnabled && localFallback
+                        ? 'Contraseña de dominio o local'
+                        : adEnabled
+                          ? 'Contraseña de Windows / dominio'
+                          : 'Contraseña de IT Manager'
+                    }
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-9 pr-9"
@@ -143,10 +154,13 @@ export function LoginPage() {
               </Button>
             </form>
 
-            {adEnabled && (
+            {(adEnabled || localFallback) && (
               <p className="mt-4 text-center text-xs text-muted-foreground">
-                Autenticación unificada con Active Directory. Debes tener un usuario activo en IT
-                Manager (Maestros → Usuarios).
+                {adEnabled && localFallback
+                  ? 'Usuarios de dominio: credenciales de Active Directory. Usuarios locales: correo y contraseña definidos en Maestros → Usuarios.'
+                  : adEnabled
+                    ? 'Autenticación con Active Directory. Debes tener un usuario activo en IT Manager (Maestros → Usuarios).'
+                    : 'Usa el correo y contraseña configurados en Maestros → Usuarios.'}
               </p>
             )}
           </CardContent>

@@ -65,19 +65,16 @@ authRouter.post('/login', async (req, res, next) => {
     }
 
     if (!user) {
-      const email = loginId.toLowerCase()
-      user = await Usuario.findOne({ email, activo: true })
-        .populate<{ rol_id: { _id: string; nombre: string; permisos: string[] } }>(
-          'rol_id',
-          'nombre permisos',
-        )
-        .populate<{ empleado_id: { _id: string; codigo: string; nombre: string } | null }>(
-          'empleado_id',
-          'codigo nombre',
-        )
-        .populate<{
-          departamento_id: { _id: string; codigo: string; nombre: string; lleva_gastos?: boolean } | null
-        }>('departamento_id', 'codigo nombre lleva_gastos')
+      if (!isLocalPasswordFallbackEnabled()) {
+        res.status(401).json({
+          error: adValidated
+            ? 'Usuario sin acceso en IT Manager.'
+            : 'Credenciales incorrectas',
+        })
+        return
+      }
+
+      user = await findUsuarioByLoginId(loginId)
 
       if (!user) {
         res.status(401).json({

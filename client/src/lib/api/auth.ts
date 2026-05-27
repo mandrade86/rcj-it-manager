@@ -11,6 +11,8 @@ export type AuthLoginConfig = {
   usernameHint: string
   localFallback: boolean
   emailDomains: string[]
+  loginModes?: ('active_directory' | 'local')[]
+  helpText?: string
 }
 
 export async function fetchAuthLoginConfig(): Promise<AuthLoginConfig> {

@@ -19,9 +19,9 @@ services:
   app:
     build: .
     restart: unless-stopped
-    # Solo localhost: Nginx publica portal.rcjcorp.hn hacia este puerto
+    # APP_BIND=127.0.0.1 (default, solo Nginx en el host) o 0.0.0.0 (acceso LAN directo :3001)
     ports:
-      - '127.0.0.1:${APP_PORT:-3001}:3001'
+      - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3001}:3001'
     env_file:
       - .env.production
     environment:
@@ -31,6 +31,10 @@ services:
       MONGODB_URI: mongodb://mongo:27017/rcj_it_manager
       MONGODB_CONNECT_RETRIES: 30
       MONGODB_CONNECT_DELAY_MS: 2000
+      AUTH_AD_ENABLED: ${AUTH_AD_ENABLED:-true}
+      AUTH_LOCAL_FALLBACK: ${AUTH_LOCAL_FALLBACK:-true}
+      EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehr.rcjcorp.hn:8095/api/Login}
+      AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
     volumes:
       - ./data:/app/data
     depends_on:

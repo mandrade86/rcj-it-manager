@@ -55,6 +55,7 @@ import { sincronizarEmpleadosDepartamentoDesdeEhr } from './utils/sincronizarEmp
 
 const PORT = Number(process.env.PORT) || 3001
 const HOST = process.env.HOST ?? '0.0.0.0'
+const INIT_DATA_ON_START = process.env.INIT_DATA_ON_START === 'true'
 
 const app = express()
 app.use(cors())
@@ -152,11 +153,21 @@ async function runStartupTasks() {
 }
 
 async function main() {
-  await connectDb()
   app.listen(PORT, HOST, () => {
     console.log(`RCJ IT Manager — http://${HOST}:${PORT}`)
   })
-  void runStartupTasks()
+
+  void connectDb()
+    .then(() => {
+      if (INIT_DATA_ON_START) {
+        void runStartupTasks()
+      } else {
+        console.log('Carga de datos iniciales desactivada (INIT_DATA_ON_START=false).')
+      }
+    })
+    .catch((err) => {
+      console.error('No se pudo conectar a MongoDB:', err)
+    })
 }
 
 main().catch((err) => {

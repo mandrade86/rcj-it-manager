@@ -8,6 +8,7 @@ import {
   applyDepartamentosScopeToBody,
   buildCapacitacionAlcanceResponse,
   capVisibleEnScope,
+  isAdminCapacitaciones,
   mongoFilterCapacitacionesScope,
   resolveCapacitacionScope,
 } from '../utils/capacitacionScope.js'
@@ -234,8 +235,9 @@ capacitacionesRouter.post('/:id/asignar', async (req, res, next) => {
       }
     }
 
+    const permisos = req.user?.permisos ?? []
     const scope = await resolveVisibleEmpleadoIds(userId)
-    if (!scope.isAdmin) {
+    if (!isAdminCapacitaciones(permisos) && !scope.isAdmin) {
       const visiblesActivos = await Empleado.find(
         {
           _id: { $in: scope.visibleIds },

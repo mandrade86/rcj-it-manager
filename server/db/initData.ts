@@ -812,6 +812,7 @@ const ROLES_INICIALES = [
       'dashboard:ver', 'proyectos:ver', 'proyectos:editar',
       'equipo:ver', 'equipo:editar', 'capacitaciones:ver', 'capacitaciones:editar',
       'gastos:ver', 'kpis:ver', 'kpis:editar',
+      'capacitaciones:ver-todos',
       'maestros:ver', 'maestros:editar', 'empleados:ver', 'empleados:editar',
       'usuarios:ver', 'usuarios:editar', 'roles:ver', 'roles:editar',
       'it:arquitectura:ver', 'it:arquitectura:editar',

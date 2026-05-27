@@ -71,7 +71,7 @@ newgrp docker
 
 ```bash
 cp .env.production.example .env.production
-nano .env.production   # JWT_SECRET obligatorio; AUTH_LOCAL_FALLBACK=false
+nano .env.production   # JWT_SECRET obligatorio; AUTH_LOCAL_FALLBACK=true (AD + local)
 ```
 
 ### 3. Levantar contenedores
@@ -81,7 +81,8 @@ bash scripts/deploy-ubuntu.sh
 # o: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-La app escucha solo en **127.0.0.1:3001** (no expuesta directamente a la red).
+La app escucha en **127.0.0.1:3001** por defecto (`APP_BIND=127.0.0.1`; Nginx en el host).
+Para abrir por IP en la red interna (ej. `http://172.16.146.163:3001`), en `.env.production` pon `APP_BIND=0.0.0.0` y vuelve a levantar compose.
 
 ### 4. Nginx + HTTPS
 
@@ -160,7 +161,7 @@ Prod y dev pueden compartir la carpeta `./data` o usar carpetas distintas si lo 
 |----------|------------|------------|
 | `JWT_SECRET` | Obligatorio, único | Distinto al de prod |
 | `APP_PORT` | `3001` | `3002` |
-| `AUTH_LOCAL_FALLBACK` | `false` (solo AD) | `true` (AD + local) |
+| `AUTH_LOCAL_FALLBACK` | `true` (AD + local) | `true` (AD + local) |
 | `AUTH_AD_ENABLED` | `true` | `true` |
 | `EHR_LOGIN_URL` | URL login EHR | Igual |
 

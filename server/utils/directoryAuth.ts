@@ -103,11 +103,25 @@ export async function getAuthLoginConfig() {
     .filter(Boolean)
   const primaryDomain = domains[0] ?? 'rcjcorp.com'
 
+  const localFallback = isLocalPasswordFallbackEnabled()
+
   return {
     activeDirectory: adEnabled,
     providerLabel: 'Active Directory RCJ',
     usernameHint: `usuario@${primaryDomain}`,
-    localFallback: isLocalPasswordFallbackEnabled(),
+    localFallback,
     emailDomains: domains,
+    loginModes:
+      adEnabled && localFallback
+        ? (['active_directory', 'local'] as const)
+        : adEnabled
+          ? (['active_directory'] as const)
+          : (['local'] as const),
+    helpText:
+      adEnabled && localFallback
+        ? 'Puedes usar Active Directory o la contraseña local configurada en Maestros → Usuarios.'
+        : adEnabled
+          ? 'Autenticación con Active Directory. Debes tener usuario activo en IT Manager.'
+          : 'Inicia sesión con el correo y contraseña local de IT Manager.',
   }
 }
