@@ -1,9 +1,9 @@
-# LEGACY — usar deploy/nginx-portal.rcjcorp.hn.conf.example
+# LEGACY — usar deploy/nginx-portal.rcjcorporacion.com.conf.example
 # Ejemplo: Nginx como proxy inverso en Ubuntu Server
 
 server {
     listen 80;
-    server_name portal.rcjcorp.hn;
+    server_name portal.rcjcorporacion.com;
 
     client_max_body_size 12M;  # subida de certificados / adjuntos
 

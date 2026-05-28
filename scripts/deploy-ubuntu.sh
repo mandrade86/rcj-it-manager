@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Despliega RCJ IT Manager en Ubuntu Server (Docker)
 # Uso:
-#   bash scripts/deploy-ubuntu.sh              # producción (portal.rcjcorp.hn)
-#   bash scripts/deploy-ubuntu.sh --dev        # desarrollo (portal-dev.rcjcorp.hn)
+#   bash scripts/deploy-ubuntu.sh              # producción (portal.rcjcorporacion.com)
+#   bash scripts/deploy-ubuntu.sh --dev        # desarrollo (portal-dev.rcjcorporacion.com)
 #   bash scripts/deploy-ubuntu.sh --seed
 set -euo pipefail
 
@@ -17,8 +17,8 @@ for arg in "$@"; do
     --seed) SEED=true ;;
     -h|--help)
       echo "Uso: bash scripts/deploy-ubuntu.sh [--dev] [--seed]"
-      echo "  prod (default): docker-compose.prod.yml + .env.production → portal.rcjcorp.hn"
-      echo "  --dev:          docker-compose.dev.yml + .env.development → portal-dev.rcjcorp.hn"
+      echo "  prod (default): docker-compose.prod.yml + .env.production → portal.rcjcorporacion.com"
+      echo "  --dev:          docker-compose.dev.yml + .env.development → portal-dev.rcjcorporacion.com"
       exit 0
       ;;
   esac
@@ -39,13 +39,13 @@ if [[ "$ENV_TARGET" == "dev" ]]; then
   ENV_FILE=.env.development
   ENV_EXAMPLE=.env.development.example
   DEFAULT_PORT=3002
-  URL_HINT="http://portal-dev.rcjcorp.hn (o http://IP:${DEFAULT_PORT})"
+  URL_HINT="http://portal-dev.rcjcorporacion.com (o http://IP:${DEFAULT_PORT})"
 else
   COMPOSE_FILE=docker-compose.prod.yml
   ENV_FILE=.env.production
   ENV_EXAMPLE=.env.production.example
   DEFAULT_PORT=3001
-  URL_HINT="https://portal.rcjcorp.hn (tras configurar Nginx + DNS)"
+  URL_HINT="https://portal.rcjcorporacion.com (tras configurar Apache + DNS)"
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -92,5 +92,5 @@ echo "  Health:     http://127.0.0.1:${APP_PORT}/api/health"
 echo "  Logs:       docker compose -f ${COMPOSE_FILE} logs -f app"
 echo "  Parar:      docker compose -f ${COMPOSE_FILE} down"
 if [[ "$ENV_TARGET" == "prod" ]]; then
-  echo "  Nginx:      sudo cp deploy/nginx-portal.rcjcorp.hn.conf.example /etc/nginx/sites-available/portal.rcjcorp.hn"
+  echo "  Apache:     sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example /etc/apache2/sites-available/portal.rcjcorporacion.com.conf"
 fi

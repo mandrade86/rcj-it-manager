@@ -1,0 +1,41 @@
+# Apache VirtualHost — portal.rcjcorporacion.com → RCJ IT Manager (Docker prod en 127.0.0.1:3001)
+#
+# Requisitos:
+#   sudo a2enmod proxy proxy_http headers rewrite ssl
+#
+# Instalar sitio:
+#   sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example /etc/apache2/sites-available/portal.rcjcorporacion.com.conf
+#   sudo a2ensite portal.rcjcorporacion.com.conf
+#   sudo apachectl configtest && sudo systemctl reload apache2
+#
+# HTTPS (dominio público):
+#   sudo apt install -y certbot python3-certbot-apache
+#   sudo certbot --apache -d portal.rcjcorporacion.com
+#
+# HTTPS interno (sin internet): usar certificado de CA corporativa y habilitar VirtualHost :443.
+
+<VirtualHost *:80>
+    ServerName portal.rcjcorporacion.com
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "http"
+
+    ProxyPass / http://127.0.0.1:3001/
+    ProxyPassReverse / http://127.0.0.1:3001/
+
+    ErrorLog ${APACHE_LOG_DIR}/portal.rcjcorporacion.com-error.log
+    CustomLog ${APACHE_LOG_DIR}/portal.rcjcorporacion.com-access.log combined
+</VirtualHost>
+
+# Opcional — ambiente Docker de desarrollo (puerto 3002)
+# <VirtualHost *:80>
+#     ServerName portal-dev.rcjcorporacion.com
+#     ProxyPreserveHost On
+#     ProxyRequests Off
+#     RequestHeader set X-Forwarded-Proto "http"
+#     ProxyPass / http://127.0.0.1:3002/
+#     ProxyPassReverse / http://127.0.0.1:3002/
+#     ErrorLog ${APACHE_LOG_DIR}/portal-dev.rcjcorporacion.com-error.log
+#     CustomLog ${APACHE_LOG_DIR}/portal-dev.rcjcorporacion.com-access.log combined
+# </VirtualHost>

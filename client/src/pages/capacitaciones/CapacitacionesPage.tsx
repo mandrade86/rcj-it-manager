@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Award, Plus, Upload } from 'lucide-react'
+import { Award, ClipboardList, Plus, Trash2, Upload } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import { usePagination } from '@/hooks/usePagination'
 import {
   asignarCapacitacion,
   createCapacitacion,
+  deleteCapacitacion,
   fetchCapacitaciones,
   fetchCapacitacionesAlcance,
   updateAsignacionColaborador,
@@ -91,6 +92,7 @@ function colDepartamentoId(c: { departamento_id?: unknown }): string | null {
 }
 
 export function CapacitacionesPage() {
+  const puedeEditar = useAuthStore((s) => s.hasPermiso('capacitaciones:editar'))
   const [caps, setCaps] = useState<CapacitacionDoc[]>([])
   const [cols, setCols] = useState<Colaborador[]>([])
   const [proveedores, setProveedores] = useState<ProveedorCapacitacionDoc[]>([])
@@ -103,6 +105,7 @@ export function CapacitacionesPage() {
   const [assignPick, setAssignPick] = useState<Record<string, boolean>>({})
   const [assignBusy, setAssignBusy] = useState(false)
   const [alcance, setAlcance] = useState<CapacitacionesAlcance | null>(null)
+  const [avanceCol, setAvanceCol] = useState<Colaborador | null>(null)
 
   const reload = useCallback(async () => {
     setLoadErr(null)
@@ -205,6 +208,33 @@ export function CapacitacionesPage() {
   })
   const pageReporteRows = pagReporte.slice(reporteRows)
 
+  const departamentosFormulario = useMemo(() => {
+    if (!alcance || alcance.isGlobal) return departamentos
+    const allowed = new Set(alcance.departamentos.map((d) => d._id))
+    return departamentos.filter((d) => allowed.has(d._id))
+  }, [departamentos, alcance])
+
+  async function handleDeleteCap(cap: CapacitacionDoc) {
+    const n = cap.asignados.length
+    const msg =
+      n > 0
+        ? `¿Eliminar «${cap.nombre}»? Tiene ${n} asignación(es); se perderán del reporte.`
+        : `¿Eliminar la capacitación «${cap.nombre}»?`
+    if (!window.confirm(msg)) return
+    try {
+      const result = await deleteCapacitacion(cap._id)
+      setCaps((list) => list.filter((c) => c._id !== cap._id))
+      if (assignCapId === cap._id) {
+        setAssignCapId('')
+        setAssignPick({})
+      }
+      if (editCap?._id === cap._id) setEditCap(null)
+      if (result === 'already_gone') void reload()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'No se pudo eliminar')
+    }
+  }
+
   async function patchAsignacion(
     capId: string,
     colaborador_id: string,
@@ -265,7 +295,7 @@ export function CapacitacionesPage() {
         <div className="flex flex-wrap gap-2">
           <NuevaCapacitacionDialog
             proveedores={proveedores}
-            departamentos={departamentos}
+            departamentos={departamentosFormulario}
             alcance={alcance}
             onProveedorCreated={(p) => setProveedores((l) => [...l, p].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')))}
             onCreated={(doc) => {
@@ -345,6 +375,18 @@ export function CapacitacionesPage() {
                     <p className="text-xs text-muted-foreground">
                       {m.done} de {m.total} capacitaciones completadas
                     </p>
+                    {puedeEditar && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-full gap-1.5"
+                        onClick={() => setAvanceCol(c)}
+                      >
+                        <ClipboardList className="size-4" />
+                        Registrar avance
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               )
@@ -442,14 +484,28 @@ export function CapacitacionesPage() {
                         <TableCell className="text-xs">{cap.asignados.length}</TableCell>
                         <TableCell>{cap.estado}</TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditCap(cap)}
-                          >
-                            Editar
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditCap(cap)}
+                            >
+                              Editar
+                            </Button>
+                            {puedeEditar && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10"
+                                onClick={() => void handleDeleteCap(cap)}
+                                title="Eliminar capacitación"
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -692,16 +748,35 @@ export function CapacitacionesPage() {
         </TabsContent>
       </Tabs>
 
+      {avanceCol && (
+        <RegistrarAvanceColaboradorDialog
+          colaborador={avanceCol}
+          caps={caps}
+          open={!!avanceCol}
+          onOpenChange={(o) => !o && setAvanceCol(null)}
+          onUpdated={(doc) => setCaps((list) => mergeCap(list, doc))}
+        />
+      )}
+
       {editCap && (
         <EditarCapacitacionDialog
           cap={editCap}
           proveedores={proveedores}
-          departamentos={departamentos}
+          departamentos={departamentosFormulario}
+          puedeEliminar={puedeEditar}
           onProveedorCreated={(p) => setProveedores((l) => [...l, p].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')))}
           open={!!editCap}
           onOpenChange={(o) => !o && setEditCap(null)}
           onSaved={(doc) => {
             setCaps((list) => mergeCap(list, doc))
+            setEditCap(null)
+          }}
+          onDeleted={(id) => {
+            setCaps((list) => list.filter((c) => c._id !== id))
+            if (assignCapId === id) {
+              setAssignCapId('')
+              setAssignPick({})
+            }
             setEditCap(null)
           }}
         />
@@ -859,11 +934,39 @@ function DepartamentosMultiSelect({
   onChange: (v: string[]) => void
 }) {
   const set = new Set(value)
+  const allIds = departamentos.map((d) => d._id)
+  const todosMarcados =
+    departamentos.length > 0 && departamentos.every((d) => set.has(d._id))
+
   return (
     <div className="grid gap-2 max-h-48 overflow-y-auto rounded-md border border-border p-2">
       <p className="text-xs text-muted-foreground">
         Si no marcas ningún departamento, la capacitación queda <strong>abierta para todos</strong>.
       </p>
+      {departamentos.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={todosMarcados}
+            onClick={() => onChange(allIds)}
+          >
+            Seleccionar todos
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={value.length === 0}
+            onClick={() => onChange([])}
+          >
+            Abierta a todos
+          </Button>
+        </div>
+      )}
       <div className="grid gap-1 sm:grid-cols-2">
         {departamentos.map((d) => (
           <label key={d._id} className="flex cursor-pointer items-center gap-2 rounded p-1 text-xs hover:bg-muted">
@@ -886,6 +989,183 @@ function DepartamentosMultiSelect({
         ))}
       </div>
     </div>
+  )
+}
+
+type FilaAvanceCol = {
+  capId: string
+  capNombre: string
+  estado: EstadoCap
+  fecha_completado?: string | null
+  calificacion?: number | null
+}
+
+function filasAvanceColaborador(colaboradorId: string, caps: CapacitacionDoc[]): FilaAvanceCol[] {
+  const rows: FilaAvanceCol[] = []
+  for (const cap of caps) {
+    const asig = cap.asignados.find((a) => colaboradorIdFromAsignado(a) === colaboradorId)
+    if (!asig) continue
+    rows.push({
+      capId: cap._id,
+      capNombre: cap.nombre,
+      estado: (asig.estado ?? 'Pendiente') as EstadoCap,
+      fecha_completado: asig.fecha_completado,
+      calificacion: asig.calificacion ?? undefined,
+    })
+  }
+  return rows.sort((a, b) => a.capNombre.localeCompare(b.capNombre, 'es'))
+}
+
+function RegistrarAvanceColaboradorDialog({
+  colaborador,
+  caps,
+  open,
+  onOpenChange,
+  onUpdated,
+}: {
+  colaborador: Colaborador
+  caps: CapacitacionDoc[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onUpdated: (doc: CapacitacionDoc) => void
+}) {
+  const filas = useMemo(
+    () => filasAvanceColaborador(colaborador._id, caps),
+    [colaborador._id, caps],
+  )
+  const done = filas.filter((f) => f.estado === 'Completado').length
+  const pct = filas.length ? Math.round((done / filas.length) * 100) : 0
+
+  async function patch(
+    capId: string,
+    patch: Omit<Parameters<typeof updateAsignacionColaborador>[1], 'colaborador_id'>,
+  ) {
+    try {
+      const doc = await updateAsignacionColaborador(capId, {
+        colaborador_id: colaborador._id,
+        ...patch,
+      })
+      onUpdated(doc)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Error al guardar avance')
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Registrar avance — {colaborador.nombre}</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            {colaborador.puesto || 'Sin puesto definido'} · {colaborador.codigo}
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <div className="flex justify-between text-sm">
+            <span>Avance del plan</span>
+            <span className="font-medium">{pct}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-[var(--lime)] transition-[width]"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {done} de {filas.length} capacitaciones completadas
+          </p>
+        </div>
+
+        {filas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Este colaborador no tiene capacitaciones asignadas. Usa la pestaña «Asignación masiva».
+          </p>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Capacitación</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Fecha completado</TableHead>
+                  <TableHead className="text-right">Calificación</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filas.map((f) => (
+                  <TableRow key={`${f.capId}-${f.estado}-${f.fecha_completado ?? ''}-${f.calificacion ?? ''}`}>
+                    <TableCell className="max-w-[200px] text-sm font-medium">{f.capNombre}</TableCell>
+                    <TableCell>
+                      <select
+                        className={selectClass + ' min-w-[140px]'}
+                        value={f.estado}
+                        onChange={(e) => {
+                          const v = e.target.value as EstadoCap
+                          void patch(f.capId, { estado: v })
+                        }}
+                      >
+                        {ESTADOS.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="date"
+                        className="h-8 w-[140px]"
+                        defaultValue={
+                          f.fecha_completado ? f.fecha_completado.slice(0, 10) : ''
+                        }
+                        onBlur={(e) => {
+                          const v = e.target.value
+                          const prev = f.fecha_completado
+                            ? f.fecha_completado.slice(0, 10)
+                            : ''
+                          if (v === prev) return
+                          void patch(f.capId, {
+                            fecha_completado: v ? `${v}T12:00:00.000Z` : null,
+                          })
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className="ml-auto h-8 w-20 text-right"
+                        key={`cal-${f.capId}-${f.calificacion ?? ''}`}
+                        defaultValue={f.calificacion ?? ''}
+                        onBlur={(e) => {
+                          const raw = e.target.value
+                          const n = raw === '' ? null : Number(raw)
+                          if (raw !== '' && Number.isNaN(n)) return
+                          const prev =
+                            f.calificacion === undefined || f.calificacion === null
+                              ? ''
+                              : String(f.calificacion)
+                          if (raw === prev) return
+                          void patch(f.capId, { calificacion: n })
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1042,19 +1322,22 @@ function NuevaCapacitacionDialog({
 }
 
 function EditarCapacitacionDialog({
-  cap, proveedores, departamentos,
+  cap, proveedores, departamentos, puedeEliminar,
   onProveedorCreated,
-  open, onOpenChange, onSaved,
+  open, onOpenChange, onSaved, onDeleted,
 }: {
   cap: CapacitacionDoc
   proveedores: ProveedorCapacitacionDoc[]
   departamentos: DepartamentoDoc[]
+  puedeEliminar?: boolean
   onProveedorCreated: (p: ProveedorCapacitacionDoc) => void
   open: boolean
   onOpenChange: (o: boolean) => void
   onSaved: (doc: CapacitacionDoc) => void
+  onDeleted?: (id: string) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState<CapacitacionFormState>(() => formFromCap(cap))
 
   useEffect(() => { setForm(formFromCap(cap)) }, [cap])
@@ -1170,17 +1453,50 @@ function EditarCapacitacionDialog({
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cerrar
-            </Button>
-            <Button
-              type="submit"
-              disabled={busy}
-              className="bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
-            >
-              {busy ? 'Guardando…' : 'Guardar'}
-            </Button>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+            {puedeEliminar && onDeleted ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || deleting}
+                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 sm:mr-auto sm:w-auto"
+                onClick={async () => {
+                  const n = cap.asignados.length
+                  const msg =
+                    n > 0
+                      ? `¿Eliminar «${cap.nombre}»? Tiene ${n} asignación(es).`
+                      : `¿Eliminar «${cap.nombre}»?`
+                  if (!window.confirm(msg)) return
+                  setDeleting(true)
+                  try {
+                    await deleteCapacitacion(cap._id)
+                    onDeleted(cap._id)
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'No se pudo eliminar'
+                    window.alert(msg)
+                  } finally {
+                    setDeleting(false)
+                  }
+                }}
+              >
+                <Trash2 className="mr-1 size-4" />
+                {deleting ? 'Eliminando…' : 'Eliminar'}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cerrar
+              </Button>
+              <Button
+                type="submit"
+                disabled={busy || deleting}
+                className="bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
+              >
+                {busy ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

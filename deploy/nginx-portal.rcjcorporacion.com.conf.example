@@ -1,6 +1,3 @@
-# LEGACY domain template. Prefer:
-#   deploy/nginx-portal.rcjcorporacion.com.conf.example
-#
 # Nginx — portal.rcjcorporacion.com → RCJ IT Manager (Docker prod en 127.0.0.1:3001)
 #
 # sudo apt install -y nginx

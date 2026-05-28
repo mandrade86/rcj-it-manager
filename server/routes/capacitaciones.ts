@@ -339,6 +339,35 @@ capacitacionesRouter.put('/:id', async (req, res, next) => {
   }
 })
 
+capacitacionesRouter.delete('/:id', async (req, res, next) => {
+  try {
+    const userId = req.user?._id
+    if (!userId) {
+      res.status(401).json({ error: 'No autorizado' })
+      return
+    }
+    const { id } = req.params
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({ error: 'Identificador inválido' })
+      return
+    }
+    const existing = await Capacitacion.findById(id).lean()
+    if (!existing) {
+      res.status(404).json({ error: 'Capacitación no encontrada' })
+      return
+    }
+    const scope = await resolveCapacitacionScope(userId, req.user?.permisos ?? [])
+    if (!capVisibleEnScope(existing, scope)) {
+      res.status(403).json({ error: 'Capacitación fuera de tu alcance por departamento' })
+      return
+    }
+    await Capacitacion.findByIdAndDelete(id)
+    res.status(204).send()
+  } catch (err) {
+    next(err)
+  }
+})
+
 capacitacionesRouter.get('/:id', async (req, res, next) => {
   try {
     const userId = req.user?._id

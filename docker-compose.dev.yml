@@ -1,4 +1,4 @@
-# Desarrollo / staging — URL sugerida: http://portal-dev.rcjcorp.hn o http://IP:3002
+# Desarrollo / staging — URL sugerida: http://portal-dev.rcjcorporacion.com o http://IP:3002
 # Uso: docker compose -f docker-compose.dev.yml --env-file .env.development up -d --build
 
 name: rcj-it-manager-dev

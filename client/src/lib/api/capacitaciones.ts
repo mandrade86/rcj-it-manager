@@ -59,6 +59,23 @@ export async function updateCapacitacion(
   return res.json() as Promise<CapacitacionDoc>
 }
 
+/** Elimina una capacitación. Si ya no existe (404), no lanza error. */
+export async function deleteCapacitacion(id: string): Promise<'deleted' | 'already_gone'> {
+  const res = await fetch(`/api/capacitaciones/${id}`, { method: 'DELETE' })
+  if (res.status === 204 || res.status === 200) return 'deleted'
+  if (res.status === 404) {
+    const msg = await parseError(res)
+    if (/no encontrada/i.test(msg) || /not found/i.test(msg)) return 'already_gone'
+    throw new Error(
+      msg.includes('Cannot DELETE')
+        ? 'El servidor no tiene la ruta de eliminación. Reinicia con npm run dev (o escribe rs en la terminal del backend).'
+        : msg,
+    )
+  }
+  if (!res.ok) throw new Error(await parseError(res))
+  return 'deleted'
+}
+
 export async function asignarCapacitacion(
   capacitacionId: string,
   colaborador_ids: string[],
