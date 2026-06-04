@@ -19,7 +19,8 @@
     "seed": "tsx server/db/seed.ts",
     "clear:capacitaciones": "tsx server/db/clearCapacitaciones.ts",
     "normalize:certificados": "tsx server/db/normalizeCertificados.ts",
-    "proyectos:asignar-marcela": "tsx server/db/assignProjectsToMarcela.ts"
+    "proyectos:asignar-marcela": "tsx server/db/assignProjectsToMarcela.ts",
+    "admin:crear": "tsx server/scripts/crearAdministrador.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
