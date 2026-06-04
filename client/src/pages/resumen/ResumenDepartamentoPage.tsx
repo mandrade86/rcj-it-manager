@@ -290,11 +290,7 @@ export function ResumenDepartamentoPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
                     <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                    <Tooltip
-                      formatter={(value: number, name: string) =>
-                        name === 'avance' ? [`${value}%`, 'Avance prom.'] : [value, 'Proyectos']
-                      }
-                    />
+                    <Tooltip formatter={(v) => [`${Number(v ?? 0)}%`, 'Avance prom.']} />
                     <Bar dataKey="avance" name="avance" radius={[4, 4, 0, 0]}>
                       {faseChart.map((_, i) => (
                         <Cell key={i} fill={FASE_COLORS[i % FASE_COLORS.length]} />
