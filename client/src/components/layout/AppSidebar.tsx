@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import {
+  BarChart3,
   BookOpen,
   BookMarked,
   Building2,
@@ -57,6 +58,7 @@ const dashboardNav: NavItemDef = {
 }
 
 const operacionNav: NavItemDef[] = [
+  { to: '/resumen-departamento', label: 'Resumen metas y plan', icon: BarChart3 },
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
   { to: '/proyectos?vista=roadmap', label: 'Roadmap', icon: Map },
   { to: '/equipo', label: 'Equipo', icon: Users },

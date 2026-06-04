@@ -9,6 +9,7 @@ import {
   Proyecto,
   Tarea,
 } from './models/index.js'
+import { PROYECTO_ESTADOS } from './models/Proyecto.js'
 import { ensureSampleGastosXlsx } from '../utils/writeSampleGastosXlsx.js'
 
 const PUESTOS = [
@@ -198,7 +199,7 @@ const PROYECTOS_PLAN_2026: {
   fecha_inicio: Date
   fecha_fin: Date
   prioridad: 'Alta' | 'Media' | 'Baja'
-  estado: 'Planificado' | 'Activo' | 'Completado' | 'Bloqueado'
+  estado: (typeof PROYECTO_ESTADOS)[number]
   meta_kpi: string
   porcentaje_avance: number
 }[] = [
@@ -211,7 +212,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-03-03'),
     fecha_fin: new Date('2026-05-15'),
     prioridad: 'Alta',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: 'RPO/RTO validados en simulacro',
     porcentaje_avance: 25,
   },
@@ -224,7 +225,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-03-10'),
     fecha_fin: new Date('2026-06-30'),
     prioridad: 'Alta',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: 'Cobertura EDR ≥ 98%',
     porcentaje_avance: 35,
   },
@@ -237,7 +238,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-03-01'),
     fecha_fin: new Date('2026-04-30'),
     prioridad: 'Alta',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: '100% usuarios con MFA',
     porcentaje_avance: 55,
   },
@@ -263,7 +264,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-03-20'),
     fecha_fin: new Date('2026-07-15'),
     prioridad: 'Media',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: 'MTTFR P1 < 4h',
     porcentaje_avance: 20,
   },
@@ -276,7 +277,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-03-01'),
     fecha_fin: new Date('2026-08-31'),
     prioridad: 'Media',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: '100% proyectos con caso de negocio',
     porcentaje_avance: 40,
   },
@@ -289,7 +290,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-03-01'),
     fecha_fin: new Date('2026-08-15'),
     prioridad: 'Alta',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: '2 coordinadores contratados',
     porcentaje_avance: 15,
   },
@@ -393,7 +394,7 @@ const PROYECTOS_PLAN_2026: {
     fecha_inicio: new Date('2026-04-01'),
     fecha_fin: new Date('2026-08-31'),
     prioridad: 'Media',
-    estado: 'Activo',
+    estado: 'En progreso',
     meta_kpi: 'Checklist N2 ≥ 60% completado',
     porcentaje_avance: 30,
   },

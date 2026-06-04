@@ -270,10 +270,59 @@
   color: #6b7280;
 }
 
+/* Plan de carrera — tablas de impresión */
+.plan-carrera-print-section {
+  page-break-inside: auto;
+}
+
+.plan-carrera-print-table th.w-cod,
+.plan-carrera-print-table td:first-child {
+  width: 8%;
+}
+
+.plan-carrera-print-table th.w-tipo {
+  width: 12%;
+}
+
+.plan-carrera-print-table th.w-plazo {
+  width: 10%;
+}
+
+.plan-carrera-print-table th.w-recurso {
+  width: 14%;
+}
+
+.plan-carrera-print-table th.w-estado {
+  width: 11%;
+}
+
+.plan-carrera-print-table th.w-notas {
+  width: 16%;
+}
+
+.plan-carrera-print-done {
+  color: #6b7280;
+  text-decoration: line-through;
+}
+
 @media print {
   @page {
     size: A4 portrait;
     margin: 12mm 14mm;
+  }
+
+  body.resumen-depto-print-active aside,
+  body.resumen-depto-print-active header,
+  body.resumen-depto-print-active .resumen-depto-no-print {
+    display: none !important;
+  }
+
+  body.resumen-depto-print-active main {
+    padding: 0 !important;
+  }
+
+  body.resumen-depto-print-active .resumen-depto-page {
+    break-inside: avoid;
   }
 
   body.descriptor-print-active > *:not(.descriptor-print-host) {

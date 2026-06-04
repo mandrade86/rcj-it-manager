@@ -45,7 +45,7 @@ else
   ENV_FILE=.env.production
   ENV_EXAMPLE=.env.production.example
   DEFAULT_PORT=3001
-  URL_HINT="https://portal.rcjcorporacion.com (tras configurar Apache + DNS)"
+  URL_HINT="https://portal.rcjcorp.hn (tras configurar Apache + DNS)"
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -92,5 +92,6 @@ echo "  Health:     http://127.0.0.1:${APP_PORT}/api/health"
 echo "  Logs:       docker compose -f ${COMPOSE_FILE} logs -f app"
 echo "  Parar:      docker compose -f ${COMPOSE_FILE} down"
 if [[ "$ENV_TARGET" == "prod" ]]; then
-  echo "  Apache:     sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example /etc/apache2/sites-available/portal.rcjcorporacion.com.conf"
+  echo "  Apache:     sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf"
+  echo "              sudo a2ensite portal.rcjcorp.hn.conf && sudo apachectl configtest && sudo systemctl reload apache2"
 fi

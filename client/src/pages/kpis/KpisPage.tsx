@@ -71,7 +71,7 @@ import {
 import {
   labelTipoCalculoKpi,
   pctCumplimientoKpi,
-  pctMetaEstrategica,
+  pctMetaFromKpiList,
   ultimoRegistro,
 } from '@/lib/kpiAvance'
 import type { DepartamentoDoc } from '@/types/departamento'
@@ -86,6 +86,7 @@ import {
 } from '@/types/kpi'
 import type { MetaEstrategicaDepto } from '@/types/departamento'
 import type { Proyecto } from '@/types/proyecto'
+import { mergeKpiInList, normalizeKpiFromApi, notifyKpiDataChanged } from '@/lib/kpiSync'
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -181,27 +182,35 @@ export function KpisPage() {
   const reload = useCallback(async () => {
     setErr(null)
     try {
-        const [k, d, ejes] = await Promise.all([
-          fetchKpis(
-            filtroDepto === 'all'
-              ? undefined
-              : { departamento_id: filtroDepto === 'none' ? 'none' : filtroDepto },
-          ),
-          fetchDepartamentos(),
-          fetchEjesProyecto({ activo: true }).catch(() => []),
-        ])
-        setKpis(k)
-        setDepartamentos(d.filter((x) => x.activo !== false))
-        setEjesMaestro(
-          ejes
-            .filter((e) => e.activo !== false)
-            .map((e) => e.nombre.trim())
-            .filter(Boolean),
-        )
+      const [k, d, ejes] = await Promise.all([
+        fetchKpis(
+          filtroDepto === 'all'
+            ? undefined
+            : { departamento_id: filtroDepto === 'none' ? 'none' : filtroDepto },
+        ),
+        fetchDepartamentos(),
+        fetchEjesProyecto({ activo: true }).catch(() => []),
+      ])
+      setKpis(k)
+      setDepartamentos(d.filter((x) => x.activo !== false))
+      setEjesMaestro(
+        ejes
+          .filter((e) => e.activo !== false)
+          .map((e) => e.nombre.trim())
+          .filter(Boolean),
+      )
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error')
     }
   }, [filtroDepto])
+
+  const applyKpiUpdate = useCallback(
+    (updated: KpiDoc) => {
+      setKpis((prev) => mergeKpiInList(prev, normalizeKpiFromApi(updated)))
+      notifyKpiDataChanged()
+    },
+    [],
+  )
 
   useEffect(() => {
     void reload()
@@ -419,7 +428,8 @@ export function KpisPage() {
         )
       }
       setEditorOpen(false)
-      await reload()
+      applyKpiUpdate(saved)
+      void reload()
     } catch (er) {
       window.alert(er instanceof Error ? er.message : 'Error al guardar KPI')
     } finally {
@@ -443,6 +453,7 @@ export function KpisPage() {
         return next
       })
       if (trendKpiId === k._id) setTrendKpiId('')
+      notifyKpiDataChanged()
       await reload()
     } catch (er) {
       window.alert(er instanceof Error ? er.message : 'Error al eliminar')
@@ -484,6 +495,7 @@ export function KpisPage() {
       window.alert(msg)
       if (r.ids.includes(trendKpiId)) setTrendKpiId('')
       setSelectedIds(new Set())
+      notifyKpiDataChanged()
       await reload()
     } catch (er) {
       window.alert(er instanceof Error ? er.message : 'No se pudo eliminar el lote')
@@ -513,6 +525,7 @@ export function KpisPage() {
         prev.map((d) => (d._id === updated._id ? { ...d, ...updated } : d)),
       )
       setMetasDirty(false)
+      notifyKpiDataChanged()
       window.alert('Metas del departamento guardadas.')
     } catch (er) {
       window.alert(er instanceof Error ? er.message : 'No se pudieron guardar las metas')
@@ -573,6 +586,7 @@ export function KpisPage() {
         `Sugerencias aplicadas: ${r.creados} creados, ${r.omitidos} ya existían.`,
       )
       setSugOpen(false)
+      notifyKpiDataChanged()
       await reload()
     } catch (er) {
       window.alert(er instanceof Error ? er.message : 'Error al aplicar sugerencias')
@@ -633,13 +647,25 @@ export function KpisPage() {
                   }
                   setSaving(true)
                   try {
-                    await postKpiRegistro({
+                    const updated = await postKpiRegistro({
                       kpi_id: formKpiId,
                       fecha: `${formFecha}T12:00:00.000Z`,
                       valor: formValor === '' ? undefined : Number(formValor),
                       notas: formNotas.trim() || undefined,
                     })
-                    await reload()
+                    applyKpiUpdate(updated)
+                    if (formKpiId === trendKpiId) {
+                      setTrendRows((prev) => {
+                        if (formValor === '') return prev
+                        const v = Number(formValor)
+                        if (Number.isNaN(v)) return prev
+                        return [
+                          ...prev,
+                          { fecha: formatDateDMY(`${formFecha}T12:00:00.000Z`), valor: v },
+                        ]
+                      })
+                    }
+                    void reload()
                     setModalOpen(false)
                     setFormNotas('')
                     setFormValor('')
@@ -888,7 +914,7 @@ export function KpisPage() {
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {metasParaCards.filter((m) => m.activa !== false).map((me) => {
             const list = porMeta.get(me.id) ?? []
-            const pct = pctMetaEstrategica(kpis, list.map((k) => k._id), me)
+            const pct = pctMetaFromKpiList(list, me)
             return (
               <Card key={me.id}>
                 <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-2">
@@ -908,11 +934,19 @@ export function KpisPage() {
                   <ul className="max-h-40 space-y-1.5 overflow-y-auto">
                     {list.map((k) => {
                       const ur = ultimoRegistro(k)
+                      const kpiPct = pctCumplimientoKpi(k)
                       return (
                         <li key={k._id} className="flex justify-between gap-2 text-muted-foreground">
                           <span className="min-w-0 truncate text-foreground">{k.nombre}</span>
-                          <span className="shrink-0 tabular-nums text-[11px]">
-                            {ur ? fmtValor(ur.valor ?? null, k.unidad) : 'Sin dato'}
+                          <span className="shrink-0 text-right tabular-nums text-[11px]">
+                            <span className="font-medium text-[var(--navy)]">{kpiPct}%</span>
+                            {ur ? (
+                              <span className="block text-muted-foreground">
+                                {fmtValor(ur.valor ?? null, k.unidad)}
+                              </span>
+                            ) : (
+                              <span className="block">Sin dato</span>
+                            )}
                           </span>
                         </li>
                       )

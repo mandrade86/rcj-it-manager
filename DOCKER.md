@@ -2,7 +2,7 @@
 
 | Ambiente | URL | Compose | Variables |
 |----------|-----|---------|-----------|
-| **Producción** | `https://portal.rcjcorporacion.com` | `docker-compose.prod.yml` | `.env.production` |
+| **Producción** | `https://portal.rcjcorp.hn` (Apache) | `docker-compose.prod.yml` | `.env.production` |
 | **Desarrollo** | `http://portal-dev.rcjcorporacion.com` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
 | **Código local** | `http://localhost:5173` | — (`npm run dev`) | `.env` |
 
@@ -19,7 +19,7 @@ cd /opt/rcj-it-manager
 git pull
 cp .env.production.example .env.production   # primera vez; edita JWT_SECRET
 bash scripts/deploy-ubuntu.sh
-# Configurar Apache + DNS → portal.rcjcorporacion.com
+# Configurar Apache + DNS → portal.rcjcorp.hn
 ```
 
 ### Desarrollo (servidor o PC con Docker)
@@ -39,25 +39,176 @@ npm run dev
 
 ---
 
+## Despliegue por SSH (Apache + Docker, desde cero)
+
+### A. Conectar desde tu PC (Windows)
+
+Abre **PowerShell** o **Terminal** y entra al servidor:
+
+```powershell
+ssh administrador@172.16.146.103
+```
+
+Si el hostname resuelve en tu red:
+
+```powershell
+ssh administrador@intranet
+```
+
+La primera vez pedirá confirmar la huella (`yes`). Te pedirá la contraseña del usuario `administrador`.
+
+> Si SSH no conecta: verifica VPN/red interna, que el puerto 22 esté abierto en el firewall del servidor y que uses la IP correcta.
+
+---
+
+### B. En el servidor — limpiar despliegue anterior (opcional)
+
+```bash
+cd /opt/rcj-it-manager
+docker compose -f docker-compose.prod.yml --env-file .env.production down 2>/dev/null || true
+```
+
+Solo si quieres **base de datos vacía** (borra usuarios y datos):
+
+```bash
+docker volume rm rcj-it-manager-prod_mongo_data_prod
+```
+
+---
+
+### C. Código y variables
+
+```bash
+cd /opt/rcj-it-manager
+git pull
+
+cp .env.production.example .env.production
+nano .env.production
+```
+
+Ejemplo para **Apache delante + acceso por IP** `172.16.146.103`:
+
+```env
+APP_PORT=3001
+APP_BIND=127.0.0.1
+APP_PUBLIC_URL=http://172.16.146.103
+
+JWT_SECRET=<salida de: openssl rand -hex 32>
+
+AUTH_AD_ENABLED=true
+AUTH_LOCAL_FALLBACK=true
+EHR_LOGIN_URL=http://ehr.fucasa.hn/auth-api/login
+AD_EMAIL_DOMAINS=rcjcorp.com,grupoc.com
+```
+
+Guardar en nano: `Ctrl+O`, Enter, `Ctrl+X`.
+
+---
+
+### D. Docker (app en 127.0.0.1:3001)
+
+```bash
+mkdir -p data/certificados data/adjuntos-tareas
+bash scripts/deploy-ubuntu.sh --seed
+curl -s http://127.0.0.1:3001/api/health
+```
+
+Debe responder JSON con estado OK.
+
+---
+
+### E. Apache (proxy inverso — obligatorio para entrar por :80)
+
+```bash
+sudo apt install -y apache2
+sudo a2enmod proxy proxy_http headers rewrite ssl
+
+# Por IP:
+sudo cp deploy/apache-portal.ip.conf.example /etc/apache2/sites-available/portal-it-manager.conf
+# Ajusta la IP en el archivo si no es 172.16.146.103:
+# sudo nano /etc/apache2/sites-available/portal-it-manager.conf
+
+# O por dominio portal.rcjcorp.hn:
+# sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf
+# sudo a2ensite portal.rcjcorp.hn.conf
+
+sudo a2ensite portal-it-manager.conf
+sudo a2dissite 000-default.conf 2>/dev/null || true
+sudo apachectl configtest
+sudo systemctl reload apache2
+```
+
+Firewall (solo Apache al exterior; **no** hace falta abrir 3001):
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Apache Full'
+sudo ufw enable
+```
+
+HTTPS con dominio (cuando el DNS apunte al servidor):
+
+```bash
+sudo apt install -y certbot python3-certbot-apache
+sudo certbot --apache -d portal.rcjcorp.hn
+```
+
+---
+
+### F. Probar
+
+En el servidor:
+
+```bash
+curl -s http://127.0.0.1:3001/api/health
+curl -I http://127.0.0.1/
+```
+
+Desde tu PC (navegador):
+
+- Por IP: `http://172.16.146.103`
+- Por dominio: `http://portal.rcjcorp.hn` (si DNS o archivo `hosts` apunta a esa IP)
+
+---
+
+### G. Comandos que usarás después
+
+```bash
+# Ver logs de la app
+docker compose -f docker-compose.prod.yml logs -f app
+
+# Ver logs de Apache
+sudo tail -f /var/log/apache2/portal-it-manager-error.log
+
+# Actualizar versión
+cd /opt/rcj-it-manager && git pull
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+# Salir de SSH
+exit
+```
+
+---
+
 ## DNS (red interna RCJ)
 
 Registro en el DNS corporativo (o archivo hosts para pruebas):
 
 | Registro | Tipo | Destino |
 |----------|------|---------|
-| `portal.rcjcorporacion.com` | A | IP del servidor Ubuntu (producción) |
+| `portal.rcjcorp.hn` | A | IP del servidor Ubuntu (producción) |
 | `portal-dev.rcjcorporacion.com` | A | Misma IP u otro servidor (desarrollo) |
 
 Prueba local en `C:\Windows\System32\drivers\etc\hosts`:
 
 ```
-192.168.x.x   portal.rcjcorporacion.com
+192.168.x.x   portal.rcjcorp.hn
 192.168.x.x   portal-dev.rcjcorporacion.com
 ```
 
 ---
 
-## Producción — `portal.rcjcorporacion.com`
+## Producción — `portal.rcjcorp.hn` (Apache)
 
 ### 1. Instalar Docker (una vez)
 
@@ -89,12 +240,12 @@ Para abrir por IP en la red interna (ej. `http://172.16.146.163:3001`), en `.env
 ```bash
 sudo apt install -y apache2
 sudo a2enmod proxy proxy_http headers rewrite ssl
-sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example /etc/apache2/sites-available/portal.rcjcorporacion.com.conf
-sudo a2ensite portal.rcjcorporacion.com.conf
+sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf
+sudo a2ensite portal.rcjcorp.hn.conf
 sudo apachectl configtest && sudo systemctl reload apache2
 
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d portal.rcjcorporacion.com
+sudo certbot --apache -d portal.rcjcorp.hn
 ```
 
 ### 5. Firewall
@@ -173,6 +324,6 @@ Prod y dev pueden compartir la carpeta `./data` o usar carpetas distintas si lo 
 | Síntoma | Qué hacer |
 |---------|-----------|
 | 502 / ECONNREFUSED | API reiniciando; espera y reintenta |
-| `portal.rcjcorporacion.com` no abre | DNS, Apache (`apachectl configtest`), `curl http://127.0.0.1:3001/api/health` |
+| `portal.rcjcorp.hn` no abre | DNS, Apache (`apachectl configtest`), `curl http://127.0.0.1:3001/api/health` |
 | Login AD falla | Servidor debe alcanzar `ehr.rcjcorp.hn:8095`; usuario creado en Maestros → Usuarios |
 | Prod y dev mezclados | Revisa que uses el compose y `.env` correctos |

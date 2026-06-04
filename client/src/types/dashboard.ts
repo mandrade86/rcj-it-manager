@@ -1,3 +1,4 @@
+import type { MetaEstrategicaDepto } from './departamento'
 import type { KpiDoc } from './kpi'
 
 export type DashboardAlcanceTipo = 'global' | 'departamentos' | 'equipo' | 'personal'
@@ -27,4 +28,6 @@ export type DashboardResumen = {
     estado: string
   }[]
   kpis: KpiDoc[]
+  /** Metas del departamento visibles en el alcance (configuración en KPIs → Registrar metas). */
+  metas_estrategicas?: MetaEstrategicaDepto[]
 }

@@ -24,15 +24,27 @@ function valoresNumericos(regs: KpiRegistro[]): number[] {
     .map(Number)
 }
 
+function pctAvanceProyecto(p: { porcentaje_avance?: number | null; estado?: string | null }): number {
+  if (p.estado === 'Completado') return 100
+  const v = p.porcentaje_avance
+  return typeof v === 'number' && Number.isFinite(v)
+    ? Math.max(0, Math.min(100, Math.round(v)))
+    : 0
+}
+
 function avancesProyectosVinculados(k: KpiDoc): number[] {
   const raw = k.proyecto_ids ?? []
   return raw
     .map((p) => {
       if (typeof p === 'string') return null
-      const v = p.porcentaje_avance
-      return typeof v === 'number' && Number.isFinite(v) ? v : null
+      return pctAvanceProyecto(p)
     })
     .filter((v): v is number => v != null)
+}
+
+function promedioAvancesProyectos(av: number[]): number {
+  if (!av.length) return 0
+  return Math.round(av.reduce((a, n) => a + Math.max(0, Math.min(100, n)), 0) / av.length)
 }
 
 function calcPct(
@@ -93,34 +105,57 @@ export function pctCumplimientoKpi(k: KpiDoc): number {
   const regs = k.registros ?? []
 
   if (tipo === 'proyectos_vinculados') {
-    const av = avancesProyectosVinculados(k)
-    if (!av.length) return 0
-    const sum = av.reduce((a, n) => a + Math.max(0, Math.min(100, n)), 0)
-    return Math.round(sum / av.length)
+    return promedioAvancesProyectos(avancesProyectosVinculados(k))
   }
+
+  const avancesProy = avancesProyectosVinculados(k)
 
   if (tipo === 'promedio_registros') {
     const vals = valoresNumericos(regs)
-    if (!vals.length) return 0
+    if (!vals.length) return promedioAvancesProyectos(avancesProy)
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length
     return calcPct(avg, k.meta, k.unidad, k.nombre)
   }
 
   if (tipo === 'max_registro') {
     const vals = valoresNumericos(regs)
-    if (!vals.length) return 0
+    if (!vals.length) return promedioAvancesProyectos(avancesProy)
     return calcPct(Math.max(...vals), k.meta, k.unidad, k.nombre)
   }
 
   if (tipo === 'min_registro') {
     const vals = valoresNumericos(regs)
-    if (!vals.length) return 0
+    if (!vals.length) return promedioAvancesProyectos(avancesProy)
     return calcPct(Math.min(...vals), k.meta, k.unidad, k.nombre)
   }
 
   const ultimo = ultimoValor(regs)
-  if (ultimo == null) return 0
-  return calcPct(ultimo, k.meta, k.unidad, k.nombre)
+  if (ultimo != null) {
+    return calcPct(ultimo, k.meta, k.unidad, k.nombre)
+  }
+
+  return promedioAvancesProyectos(avancesProy)
+}
+
+function aggregateMetaPct(pcts: number[], meta?: MetaEstrategicaDepto | null): number {
+  if (!pcts.length) return 0
+  const tipo = (meta?.tipo_calculo ?? 'promedio_kpis') as MetaTipoCalculo
+  if (tipo === 'min_kpis') return Math.min(...pcts)
+  if (tipo === 'max_kpis') return Math.max(...pcts)
+  const sum = pcts.reduce((a, n) => a + n, 0)
+  return Math.round(sum / pcts.length)
+}
+
+/** Avance de una meta a partir de los KPIs ya agrupados. */
+export function pctMetaFromKpiList(
+  kpis: KpiDoc[],
+  meta?: MetaEstrategicaDepto | null,
+): number {
+  if (!kpis.length) return 0
+  return aggregateMetaPct(
+    kpis.map((k) => pctCumplimientoKpi(k)),
+    meta,
+  )
 }
 
 export function pctMetaEstrategica(
@@ -129,13 +164,7 @@ export function pctMetaEstrategica(
   meta?: MetaEstrategicaDepto | null,
 ): number {
   const subset = kpis.filter((k) => ids.includes(k._id))
-  if (!subset.length) return 0
-  const pcts = subset.map((k) => pctCumplimientoKpi(k))
-  const tipo = (meta?.tipo_calculo ?? 'promedio_kpis') as MetaTipoCalculo
-  if (tipo === 'min_kpis') return Math.min(...pcts)
-  if (tipo === 'max_kpis') return Math.max(...pcts)
-  const sum = pcts.reduce((a, n) => a + n, 0)
-  return Math.round(sum / pcts.length)
+  return pctMetaFromKpiList(subset, meta)
 }
 
 /** Etiqueta corta del tipo de cálculo para tablas. */

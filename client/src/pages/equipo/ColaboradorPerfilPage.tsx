@@ -27,6 +27,7 @@ import { fetchPlantillasCarrera, asignarPlantillaAColaborador } from '@/lib/api/
 import type { PlantillaCarreraDoc } from '@/types/plantillaCarrera'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDateDMY, formatLps } from '@/lib/format'
+import { ColaboradorFichaResumen } from '@/components/equipo/ColaboradorFichaResumen'
 import { PlanCarreraChecklist } from '@/pages/equipo/PlanCarreraChecklist'
 import type { Colaborador } from '@/types/colaborador'
 import { perfilFromColaborador, perfilIdFromColaborador } from '@/types/colaborador'
@@ -874,7 +875,14 @@ export function ColaboradorPerfilPage() {
             </div>
           )}
           {!planLoading && !planErr && planDoc !== null && (
-            <PlanCarreraChecklist plan={planDoc} onUpdated={setPlanDoc} colaboradorId={id} />
+            <PlanCarreraChecklist
+              plan={planDoc}
+              onUpdated={setPlanDoc}
+              colaboradorId={id}
+              colaboradorNombre={c.nombre}
+              colaboradorCodigo={c.codigo}
+              colaboradorPuesto={c.puesto}
+            />
           )}
         </TabsContent>
 
@@ -1020,6 +1028,19 @@ export function ColaboradorPerfilPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <ColaboradorFichaResumen
+        colaborador={c}
+        planDoc={planDoc}
+        planLoading={planLoading}
+        evaluaciones={evaluaciones}
+        evaluacionesKpi={evaluacionesKpi}
+        evalLoading={evalLoading}
+        capTotal={capTotal}
+        capDone={capDone}
+        capPct={capPct}
+        capLoading={capLoading}
+      />
     </div>
   )
 }

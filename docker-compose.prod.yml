@@ -1,4 +1,4 @@
-# Producción — URL: https://portal.rcjcorporacion.com (Nginx en el host → app:3001)
+# Producción — URL: https://portal.rcjcorp.hn (Apache en el host → app:3001)
 # Uso: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
 name: rcj-it-manager-prod
@@ -19,7 +19,7 @@ services:
   app:
     build: .
     restart: unless-stopped
-    # APP_BIND=127.0.0.1 (default, solo Nginx en el host) o 0.0.0.0 (acceso LAN directo :3001)
+    # APP_BIND=127.0.0.1 (default, solo Apache en el host) o 0.0.0.0 (acceso LAN directo :3001)
     ports:
       - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3001}:3001'
     env_file:

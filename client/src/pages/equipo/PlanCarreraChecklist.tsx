@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Circle, RefreshCw } from 'lucide-react'
+import { CheckCircle2, Circle, Printer, RefreshCw } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ import {
   updatePlanCarreraItem,
 } from '@/lib/api/planCarrera'
 import { fetchCapacitaciones } from '@/lib/api/capacitaciones'
+import { printPlanCarrera } from '@/lib/printPlanCarrera'
+import { planCarreraTipoLabel } from '@/lib/planCarreraLabels'
 import { cn } from '@/lib/utils'
 import { colaboradorIdFromAsignado } from '@/types/capacitacion'
 
@@ -36,19 +38,6 @@ const ESTADO_LABELS: Record<string, string> = {
   Pendiente: '⬜ Pendiente',
   'En progreso': '🔄 En progreso',
   Completado: '✅ Completado',
-}
-
-function tipoLabel(tipo: PlanCarreraDoc['tipo']): string {
-  switch (tipo) {
-    case 'N2_a_Coord':
-      return 'N2 → Coordinador de Infraestructura'
-    case 'Jr_a_Mid':
-      return 'Programador Junior → Mid-Senior'
-    case 'Mid_a_Senior':
-      return 'Programador Mid-Senior → Senior'
-    default:
-      return tipo
-  }
 }
 
 function EstadoIcon({ estado }: { estado?: PlanCarreraItem['estado'] }) {
@@ -94,9 +83,19 @@ type Props = {
   plan: PlanCarreraDoc
   onUpdated: (doc: PlanCarreraDoc) => void
   colaboradorId?: string
+  colaboradorNombre?: string
+  colaboradorCodigo?: string
+  colaboradorPuesto?: string
 }
 
-export function PlanCarreraChecklist({ plan, onUpdated, colaboradorId }: Props) {
+export function PlanCarreraChecklist({
+  plan,
+  onUpdated,
+  colaboradorId,
+  colaboradorNombre,
+  colaboradorCodigo,
+  colaboradorPuesto,
+}: Props) {
   const [sub, setSub] = useState<'checklist' | 'cap'>('checklist')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [capRows, setCapRows] = useState<
@@ -169,7 +168,31 @@ export function PlanCarreraChecklist({ plan, onUpdated, colaboradorId }: Props) 
       {/* Header card with progress */}
       <Card>
         <CardHeader className="space-y-1">
-          <CardTitle className="text-base">{tipoLabel(plan.tipo)}</CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <CardTitle className="text-base">{planCarreraTipoLabel(plan.tipo)}</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 shrink-0"
+              onClick={() =>
+                printPlanCarrera({
+                  titulo: planCarreraTipoLabel(plan.tipo),
+                  colaboradorNombre,
+                  colaboradorCodigo,
+                  colaboradorPuesto,
+                  periodo_estimado: plan.periodo_estimado,
+                  responsable_seguimiento: plan.responsable_seguimiento,
+                  fecha_inicio: plan.fecha_inicio,
+                  items: plan.items,
+                  modo: 'asignado',
+                })
+              }
+            >
+              <Printer className="size-3.5" />
+              Imprimir plan
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {plan.periodo_estimado && <span>Periodo estimado: {plan.periodo_estimado}</span>}
             {plan.responsable_seguimiento && (

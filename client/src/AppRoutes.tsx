@@ -10,6 +10,7 @@ import { EvaluacionKpiPage } from '@/pages/equipo/EvaluacionKpiPage'
 import { EquipoPage } from '@/pages/equipo/EquipoPage'
 import { MiEvaluacionPage } from '@/pages/equipo/MiEvaluacionPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { ResumenDepartamentoPage } from '@/pages/resumen/ResumenDepartamentoPage'
 import { GastosPage } from '@/pages/gastos/GastosPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
@@ -38,6 +39,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
           <Route index element={<DashboardPage />} />
+          <Route path="resumen-departamento" element={<ResumenDepartamentoPage />} />
           <Route path="proyectos/nuevo" element={<ProyectoFormPage />} />
           <Route path="proyectos/:id/editar" element={<ProyectoFormPage />} />
           <Route path="proyectos/:id" element={<ProyectoDetailPage />} />

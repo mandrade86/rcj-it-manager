@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import * as api from '@/lib/api/proyectos'
+import { notifyKpiDataChanged } from '@/lib/kpiSync'
 import type { EliminarProyectosLoteResponse } from '@/lib/api/proyectos'
 import type { Proyecto } from '@/types/proyecto'
 
@@ -97,6 +98,7 @@ export const useProyectosStore = create<ProyectosState>((set, get) => ({
   update: async (id, body) => {
     const doc = await api.updateProyecto(id, body)
     await get().load()
+    notifyKpiDataChanged()
     return doc
   },
   remove: async (id) => {
@@ -111,6 +113,7 @@ export const useProyectosStore = create<ProyectosState>((set, get) => ({
   transicionar: async (id, a, comentario) => {
     const doc = await api.transicionarProyecto(id, a, comentario)
     await get().load()
+    notifyKpiDataChanged()
     return doc
   },
 }))

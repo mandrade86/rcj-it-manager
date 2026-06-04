@@ -1,3 +1,4 @@
+import { notifyKpiDataChanged } from '@/lib/kpiSync'
 import type { Proyecto } from '@/types/proyecto'
 
 async function parseError(res: Response): Promise<string> {
@@ -77,7 +78,9 @@ export async function transicionarProyecto(
     body: JSON.stringify({ a, comentario }),
   })
   if (!res.ok) throw new Error(await parseError(res))
-  return res.json() as Promise<Proyecto>
+  const doc = (await res.json()) as Proyecto
+  notifyKpiDataChanged()
+  return doc
 }
 
 export async function fetchProyecto(id: string): Promise<Proyecto> {
@@ -108,7 +111,9 @@ export async function updateProyecto(
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(await parseError(res))
-  return res.json() as Promise<Proyecto>
+  const doc = (await res.json()) as Proyecto
+  notifyKpiDataChanged()
+  return doc
 }
 
 export type ImportProyectosResult = {

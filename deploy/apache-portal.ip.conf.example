@@ -1,0 +1,21 @@
+# Apache VirtualHost — acceso por IP (sin DNS)
+# Sustituye 172.16.146.103 por la IP real del servidor.
+#
+#   sudo cp deploy/apache-portal.ip.conf.example /etc/apache2/sites-available/portal-it-manager.conf
+#   sudo sed -i 's/172.16.146.103/TU_IP/g' /etc/apache2/sites-available/portal-it-manager.conf
+#   sudo a2ensite portal-it-manager.conf
+#   sudo apachectl configtest && sudo systemctl reload apache2
+
+<VirtualHost *:80>
+    ServerName 172.16.146.103
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "http"
+
+    ProxyPass / http://127.0.0.1:3001/
+    ProxyPassReverse / http://127.0.0.1:3001/
+
+    ErrorLog ${APACHE_LOG_DIR}/portal-it-manager-error.log
+    CustomLog ${APACHE_LOG_DIR}/portal-it-manager-access.log combined
+</VirtualHost>

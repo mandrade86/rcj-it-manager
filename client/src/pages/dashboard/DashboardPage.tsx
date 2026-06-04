@@ -27,14 +27,10 @@ import { PaginationBar } from '@/components/ui/PaginationBar'
 import { usePagination } from '@/hooks/usePagination'
 import { fetchDashboardResumen } from '@/lib/api/dashboard'
 import { formatDateDMY } from '@/lib/format'
-import {
-  isMetaEstrategicaId,
-  metaEstrategicaDeKpi,
-  METAS_ESTRATEGICAS,
-  type KpiDoc,
-  type MetaEstrategicaId,
-} from '@/types/kpi'
-import { pctMetaEstrategica, ultimoRegistro } from '@/lib/kpiAvance'
+import { metaEstrategicaDeKpi, type KpiDoc } from '@/types/kpi'
+import { pctMetaFromKpiList, pctCumplimientoKpi, ultimoRegistro } from '@/lib/kpiAvance'
+import { subscribeKpiDataChanged } from '@/lib/kpiSync'
+import type { MetaEstrategicaDepto } from '@/types/departamento'
 import type { DashboardAlcanceTipo, DashboardResumen } from '@/types/dashboard'
 
 import { DashboardPersonalTodos } from './DashboardPersonalTodos'
@@ -119,18 +115,27 @@ export function DashboardPage() {
     void reload()
   }, [reload])
 
+  useEffect(() => subscribeKpiDataChanged(() => void reload()), [reload])
+
   const kpis = useMemo(() => normalizeKpis(data?.kpis), [data?.kpis])
 
+  const metasDepartamento = useMemo((): MetaEstrategicaDepto[] => {
+    const fromApi = data?.metas_estrategicas?.filter((m) => m.activa !== false) ?? []
+    if (fromApi.length) return fromApi
+    return []
+  }, [data?.metas_estrategicas])
+
   const porMeta = useMemo(() => {
-    const m = new Map<MetaEstrategicaId, KpiDoc[]>()
-    for (const me of METAS_ESTRATEGICAS) m.set(me.id, [])
+    const m = new Map<string, KpiDoc[]>()
+    for (const me of metasDepartamento) m.set(me.id, [])
     for (const k of kpis) {
       const id = metaEstrategicaDeKpi(k)
-      if (!isMetaEstrategicaId(id)) continue
+      if (id === 'sin_meta') continue
+      if (!m.has(id)) m.set(id, [])
       m.get(id)!.push(k)
     }
     return m
-  }, [kpis])
+  }, [kpis, metasDepartamento])
 
   const faseChartData = useMemo(
     () =>
@@ -158,10 +163,11 @@ export function DashboardPage() {
         ? 'Mi panel de inicio'
         : 'Panel de gestión'
 
-  const metasConDatos = useMemo(
-    () => METAS_ESTRATEGICAS.filter((me) => (porMeta.get(me.id) ?? []).length > 0),
-    [porMeta],
-  )
+  const metasConDatos = useMemo(() => {
+    const conKpis = metasDepartamento.filter((me) => (porMeta.get(me.id) ?? []).length > 0)
+    if (conKpis.length) return conKpis
+    return metasDepartamento
+  }, [metasDepartamento, porMeta])
 
   return (
     <div className="space-y-8">
@@ -384,7 +390,7 @@ export function DashboardPage() {
             <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
               {metasConDatos.map((me) => {
                 const list = porMeta.get(me.id) ?? []
-                const pct = pctMetaEstrategica(kpis, list.map((k) => k._id))
+                const pct = pctMetaFromKpiList(list, me)
                 return (
                   <Card key={me.id} className="shadow-sm">
                     <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
@@ -392,18 +398,36 @@ export function DashboardPage() {
                       <div className="min-w-0 space-y-1">
                         <CardTitle className="text-sm leading-tight">{me.titulo}</CardTitle>
                         <p className="text-[11px] text-muted-foreground">{me.objetivo}</p>
+                        {me.valor_objetivo ? (
+                          <p className="text-[11px] font-medium text-[var(--navy)]">
+                            Meta: {me.valor_objetivo}
+                          </p>
+                        ) : null}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2 border-t border-border pt-3 text-xs">
-                      <p className="font-medium text-muted-foreground">KPIs y último registro</p>
+                      <p className="font-medium text-muted-foreground">
+                        KPIs ({list.length}) · cumplimiento por indicador
+                      </p>
                       <ul className="max-h-36 space-y-1 overflow-y-auto">
+                        {list.length === 0 && (
+                          <li className="text-muted-foreground">Sin KPIs vinculados a esta meta.</li>
+                        )}
                         {list.map((k) => {
                           const ur = ultimoRegistro(k)
+                          const kpiPct = pctCumplimientoKpi(k)
                           return (
                             <li key={k._id} className="flex justify-between gap-2 text-muted-foreground">
                               <span className="min-w-0 truncate text-foreground">{k.nombre}</span>
-                              <span className="shrink-0 tabular-nums text-[11px]">
-                                {ur ? fmtValor(ur.valor ?? null, k.unidad) : 'Sin dato'}
+                              <span className="shrink-0 text-right text-[11px] tabular-nums">
+                                <span className="font-medium text-[var(--navy)]">{kpiPct}%</span>
+                                {ur ? (
+                                  <span className="block text-muted-foreground">
+                                    {fmtValor(ur.valor ?? null, k.unidad)}
+                                  </span>
+                                ) : (
+                                  <span className="block">Sin dato</span>
+                                )}
                               </span>
                             </li>
                           )

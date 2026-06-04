@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/authStore'
 
 const titles: Record<string, string> = {
   '/': 'Dashboard',
+  '/resumen-departamento': 'Resumen metas y plan',
   '/proyectos': 'Proyectos',
   '/proyectos/roadmap': 'Roadmap de proyectos',
   '/equipo': 'Equipo',

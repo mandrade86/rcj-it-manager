@@ -1,4 +1,7 @@
-# Nginx — portal.rcjcorporacion.com → RCJ IT Manager (Docker prod en 127.0.0.1:3001)
+# LEGACY — no usar Nginx. Usar Apache:
+#   deploy/apache-portal.rcjcorporacion.com.conf.example
+#
+# (plantilla Nginx antigua — portal.rcjcorporacion.com)
 #
 # sudo apt install -y nginx
 # sudo cp deploy/nginx-portal.rcjcorporacion.com.conf.example /etc/nginx/sites-available/portal.rcjcorporacion.com

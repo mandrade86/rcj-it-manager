@@ -6,12 +6,19 @@ export type KpiRegistroLean = {
   notas?: string | null
 }
 
+export type ProyectoAvanceLean = {
+  porcentaje_avance?: number | null
+  estado?: string | null
+}
+
 export type KpiLean = {
   _id: unknown
   meta?: string | null
   unidad?: string | null
   nombre?: string | null
+  tipo_calculo?: string | null
   registros?: KpiRegistroLean[]
+  proyecto_ids?: (string | ProyectoAvanceLean)[] | null
 }
 
 export function ultimoRegistro(k: KpiLean): KpiRegistroLean | null {
@@ -20,6 +27,56 @@ export function ultimoRegistro(k: KpiLean): KpiRegistroLean | null {
   return [...r].sort(
     (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
   )[0]
+}
+
+function ultimoValor(regs: KpiRegistroLean[]): number | null {
+  const u = [...regs].sort(
+    (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+  )[0]
+  if (u?.valor == null || Number.isNaN(Number(u.valor))) return null
+  return Number(u.valor)
+}
+
+function valoresNumericos(regs: KpiRegistroLean[]): number[] {
+  return regs
+    .map((r) => r.valor)
+    .filter((v): v is number => v != null && !Number.isNaN(Number(v)))
+    .map(Number)
+}
+
+function pctAvanceProyecto(p: ProyectoAvanceLean): number {
+  if (p.estado === 'Completado') return 100
+  const v = p.porcentaje_avance
+  return typeof v === 'number' && Number.isFinite(v)
+    ? Math.max(0, Math.min(100, Math.round(v)))
+    : 0
+}
+
+/** Avances 0–100 de proyectos vinculados al KPI (lista en KPI + extras por kpi_id en Proyecto). */
+export function avancesProyectosVinculados(
+  k: KpiLean,
+  extraProyectos: ProyectoAvanceLean[] = [],
+): number[] {
+  const seen = new Set<string>()
+  const out: number[] = []
+
+  const push = (p: ProyectoAvanceLean, key: string) => {
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(pctAvanceProyecto(p))
+  }
+
+  for (const raw of k.proyecto_ids ?? []) {
+    if (typeof raw === 'string') continue
+    const id = '_id' in raw && raw._id != null ? String((raw as { _id: unknown })._id) : JSON.stringify(raw)
+    push(raw, id)
+  }
+
+  for (const p of extraProyectos) {
+    push(p, JSON.stringify(p))
+  }
+
+  return out
 }
 
 export function calcPct(
@@ -74,14 +131,58 @@ export function calcPct(
   return Math.min(100, Math.max(0, Math.round(valor)))
 }
 
-export function pctCumplimientoKpi(k: KpiLean): number {
-  const u = ultimoRegistro(k)
-  if (u?.valor == null || Number.isNaN(Number(u.valor))) return 0
-  return calcPct(Number(u.valor), k.meta, k.unidad, k.nombre)
+function promedioAvances(av: number[]): number {
+  if (!av.length) return 0
+  return Math.round(av.reduce((a, n) => a + n, 0) / av.length)
 }
 
-export function kpiPromedioGlobal(kpis: KpiLean[]): number {
+export function pctCumplimientoKpi(
+  k: KpiLean,
+  extraProyectos: ProyectoAvanceLean[] = [],
+): number {
+  const tipo = (k.tipo_calculo ?? 'auto_meta').trim()
+  const regs = k.registros ?? []
+  const avances = avancesProyectosVinculados(k, extraProyectos)
+
+  if (tipo === 'proyectos_vinculados') {
+    return promedioAvances(avances)
+  }
+
+  if (tipo === 'promedio_registros') {
+    const vals = valoresNumericos(regs)
+    if (!vals.length) return promedioAvances(avances)
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+    return calcPct(avg, k.meta, k.unidad, k.nombre)
+  }
+
+  if (tipo === 'max_registro') {
+    const vals = valoresNumericos(regs)
+    if (!vals.length) return promedioAvances(avances)
+    return calcPct(Math.max(...vals), k.meta, k.unidad, k.nombre)
+  }
+
+  if (tipo === 'min_registro') {
+    const vals = valoresNumericos(regs)
+    if (!vals.length) return promedioAvances(avances)
+    return calcPct(Math.min(...vals), k.meta, k.unidad, k.nombre)
+  }
+
+  const ultimo = ultimoValor(regs)
+  if (ultimo != null) {
+    return calcPct(ultimo, k.meta, k.unidad, k.nombre)
+  }
+
+  return promedioAvances(avances)
+}
+
+export function kpiPromedioGlobal(
+  kpis: KpiLean[],
+  extraPorKpiId?: Map<string, ProyectoAvanceLean[]>,
+): number {
   if (!kpis.length) return 0
-  const sum = kpis.reduce((a, k) => a + pctCumplimientoKpi(k), 0)
+  const sum = kpis.reduce((a, k) => {
+    const extras = extraPorKpiId?.get(String(k._id)) ?? []
+    return a + pctCumplimientoKpi(k, extras)
+  }, 0)
   return Math.round(sum / kpis.length)
 }

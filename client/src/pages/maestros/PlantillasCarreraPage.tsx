@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Edit2, Plus, Trash2, Save, X, PlusCircle } from 'lucide-react'
+import { ChevronRight, Edit2, Plus, Printer, Trash2, Save, X, PlusCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,8 @@ import { fetchDepartamentos } from '@/lib/api/departamentos'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { PlantillaCarreraDoc, PlantillaItem } from '@/types/plantillaCarrera'
 import { deptFromPlantilla } from '@/types/plantillaCarrera'
+import { printPlanCarrera } from '@/lib/printPlanCarrera'
+import { planCarreraTipoLabel } from '@/lib/planCarreraLabels'
 import { cn } from '@/lib/utils'
 
 import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
@@ -473,7 +475,28 @@ export function PlantillasCarreraPage() {
                         </Badge>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={selected.items.length === 0}
+                        onClick={() =>
+                          printPlanCarrera({
+                            titulo: selected.nombre,
+                            subtitulo: selected.descripcion,
+                            periodo_estimado: planCarreraTipoLabel(selected.tipo_ruta),
+                            items: selected.items.map((it) => ({
+                              ...it,
+                              requisito: it.requisito,
+                              estado: 'Pendiente',
+                            })),
+                            modo: 'plantilla',
+                          })
+                        }
+                      >
+                        <Printer className="size-3.5" /> Imprimir
+                      </Button>
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openEditForm(selected)}>
                         <Edit2 className="size-3.5" /> Editar info
                       </Button>
