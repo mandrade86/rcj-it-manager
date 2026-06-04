@@ -25,7 +25,7 @@ export function parseLoginIdentifier(raw: string): LoginIdentifier {
     }
   }
 
-  const username = trimmed.replace(/^RCJ\\/i, '').replace(/^rcj\\//i, '')
+  const username = trimmed.replace(/^(?:RCJ\\|rcj\\)/i, '')
   const emails = domains.map((d) => `${username.toLowerCase()}@${d}`)
   return {
     raw: trimmed,
