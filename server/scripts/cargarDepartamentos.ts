@@ -1,6 +1,9 @@
 /**
  * Carga el catálogo de empresas y departamentos EHR (mismo que entorno local / INIT_DATA).
- * Fuente: server/db/data/departamentosEhrCatalog.ts → ensureDepartamentos()
+ * Fuente: server/db/data/departamentosEhrCatalog.ts → ensureDepartamentos() (82 deptos EHR).
+ * Si tu local tiene más (metas, ejes, ajustes manuales), exporta e importa:
+ *   npm run departamentos:exportar   → data/departamentos-export.json
+ *   npm run departamentos:importar   (en servidor, con el mismo archivo)
  *
  * Uso local:
  *   npx tsx server/scripts/cargarDepartamentos.ts

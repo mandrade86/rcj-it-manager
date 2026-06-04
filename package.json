@@ -21,7 +21,10 @@
     "normalize:certificados": "tsx server/db/normalizeCertificados.ts",
     "proyectos:asignar-marcela": "tsx server/db/assignProjectsToMarcela.ts",
     "admin:crear": "tsx server/scripts/crearAdministrador.ts",
-    "departamentos:cargar": "tsx server/scripts/cargarDepartamentos.ts"
+    "departamentos:cargar": "tsx server/scripts/cargarDepartamentos.ts",
+    "departamentos:exportar": "tsx server/scripts/exportarDepartamentos.ts",
+    "departamentos:importar": "tsx server/scripts/importarDepartamentos.ts",
+    "departamentos:diagnostico": "tsx server/scripts/listarDepartamentos.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
