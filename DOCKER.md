@@ -146,11 +146,11 @@ sudo ufw allow 'Apache Full'
 sudo ufw enable
 ```
 
-HTTPS con dominio (cuando el DNS apunte al servidor):
+HTTPS con dominio (cuando el DNS apunte al servidor): ver **`deploy/HTTPS-APACHE.md`**.
 
 ```bash
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d portal.rcjcorp.hn
+sudo certbot --apache -d portal.rcjcorporacion.com
 ```
 
 ---
@@ -237,15 +237,31 @@ Para abrir por IP en la red interna (ej. `http://172.16.146.163:3001`), en `.env
 
 ### 4. Apache + HTTPS
 
+Guía detallada: **`deploy/HTTPS-APACHE.md`**.
+
 ```bash
 sudo apt install -y apache2
 sudo a2enmod proxy proxy_http headers rewrite ssl
-sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf
-sudo a2ensite portal.rcjcorp.hn.conf
+
+# Dominio público/intranet (ej. portal.rcjcorporacion.com):
+sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example \
+  /etc/apache2/sites-available/portal.rcjcorporacion.com.conf
+sudo a2ensite portal.rcjcorporacion.com.conf
+
+# O dominio interno portal.rcjcorp.hn:
+# sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf
+# sudo a2ensite portal.rcjcorp.hn.conf
+
 sudo apachectl configtest && sudo systemctl reload apache2
 
+# Certificado TLS (Let's Encrypt)
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d portal.rcjcorp.hn
+sudo certbot --apache -d portal.rcjcorporacion.com
+# sudo certbot --apache -d portal.rcjcorp.hn
+
+# .env.production en el servidor:
+# APP_PUBLIC_URL=https://portal.rcjcorporacion.com
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
 ### 5. Firewall
