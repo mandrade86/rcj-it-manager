@@ -20,7 +20,8 @@
     "clear:capacitaciones": "tsx server/db/clearCapacitaciones.ts",
     "normalize:certificados": "tsx server/db/normalizeCertificados.ts",
     "proyectos:asignar-marcela": "tsx server/db/assignProjectsToMarcela.ts",
-    "admin:crear": "tsx server/scripts/crearAdministrador.ts"
+    "admin:crear": "tsx server/scripts/crearAdministrador.ts",
+    "departamentos:cargar": "tsx server/scripts/cargarDepartamentos.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
