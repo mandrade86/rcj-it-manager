@@ -230,7 +230,7 @@ export function ProyectoFormDialog({
         (editing.participantes ?? []).map((p, i) => ({
           key: p._id ?? `p-${i}`,
           usuario_id: participanteUsuarioId(p) ?? '',
-          rol: p.rol === 'editor' ? 'editor' : 'lectura',
+          rol: p.rol ?? 'lectura',
         })).filter((p) => p.usuario_id),
       )
     } else {

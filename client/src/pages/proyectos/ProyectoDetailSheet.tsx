@@ -8,7 +8,6 @@ import {
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
