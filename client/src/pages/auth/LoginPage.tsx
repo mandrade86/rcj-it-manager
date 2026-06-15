@@ -43,7 +43,6 @@ export function LoginPage() {
 
   if (token) return <Navigate to={from} replace />
 
-  const adEnabled = authConfig?.activeDirectory === true
   const subtitle =
     authConfig?.helpText ??
     'Inicia sesión con el correo y contraseña de tu cuenta en IT Manager.'
@@ -58,15 +57,11 @@ export function LoginPage() {
     const passwordVal = String(fd.get('password') ?? password)
 
     if (!usuarioVal) {
-      setErr(
-        adEnabled
-          ? 'Indica tu usuario de Windows (ej. RCJ\\nombre.apellido o nombre.apellido@rcjcorp.com).'
-          : 'Indica tu correo electrónico registrado en IT Manager.',
-      )
+      setErr('Indica tu correo electrónico registrado en IT Manager.')
       return
     }
     if (!passwordVal) {
-      setErr(adEnabled ? 'Indica tu contraseña de Windows / dominio.' : 'Indica tu contraseña.')
+      setErr('Indica tu contraseña.')
       return
     }
 
@@ -117,15 +112,13 @@ export function LoginPage() {
 
             <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4" noValidate>
               <div className="grid gap-2">
-                <Label htmlFor="usuario">
-                  {adEnabled ? 'Usuario de Windows / dominio' : 'Correo electrónico'}
-                </Label>
+                <Label htmlFor="usuario">Correo electrónico</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="usuario"
                     name="username"
-                    type={adEnabled ? 'text' : 'email'}
+                    type="email"
                     autoComplete="username"
                     placeholder={authConfig?.usernameHint ?? 'nombre.apellido@rcjcorp.com'}
                     value={usuario}
@@ -133,21 +126,13 @@ export function LoginPage() {
                     className="pl-9 text-sm"
                   />
                 </div>
-                {adEnabled ? (
-                  <p className="text-xs text-muted-foreground">
-                    Usa las mismas credenciales con las que entras a Windows.
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Usa el correo con el que te dieron de alta en Maestros → Usuarios.
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Usa el correo con el que te dieron de alta en Maestros → Usuarios.
+                </p>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="password">
-                  {adEnabled ? 'Contraseña de Windows' : 'Contraseña'}
-                </Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -155,7 +140,7 @@ export function LoginPage() {
                     name="password"
                     type={showPwd ? 'text' : 'password'}
                     autoComplete="current-password"
-                    placeholder={adEnabled ? 'Contraseña de dominio' : 'Contraseña de IT Manager'}
+                    placeholder="Contraseña de IT Manager"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-9 pr-9"
@@ -181,11 +166,9 @@ export function LoginPage() {
               </Button>
             </form>
 
-            {!adEnabled && (
-              <p className="mt-4 text-center text-xs text-muted-foreground">
-                Si no tienes acceso, solicita tu usuario al área de IT.
-              </p>
-            )}
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              Si no tienes acceso, solicita tu usuario al área de IT.
+            </p>
           </CardContent>
         </Card>
 

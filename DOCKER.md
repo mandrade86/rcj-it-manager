@@ -95,7 +95,7 @@ APP_PUBLIC_URL=http://172.16.146.103
 
 JWT_SECRET=<salida de: openssl rand -hex 32>
 
-AUTH_AD_ENABLED=true
+AUTH_AD_ENABLED=false
 AUTH_LOCAL_FALLBACK=false
 AD_DOMAIN=RCJ
 AD_EMAIL_DOMAINS=rcjcorp.com,grupoc.com
@@ -295,7 +295,7 @@ bash scripts/deploy-ubuntu.sh --dev
 
 Apache opcional (bloque comentado en `deploy/apache-portal.rcjcorporacion.com.conf.example`).
 
-Login con **Active Directory** (validación vía API EHR). Opcional: contraseña local de respaldo si `AUTH_LOCAL_FALLBACK=true`.
+Login con **correo y contraseña IT Manager** (Maestros → Usuarios).
 
 ---
 
@@ -330,8 +330,8 @@ Prod y dev pueden compartir la carpeta `./data` o usar carpetas distintas si lo 
 |----------|------------|------------|
 | `JWT_SECRET` | Obligatorio, único | Distinto al de prod |
 | `APP_PORT` | `3001` | `3002` |
-| `AUTH_AD_ENABLED` | `true` | Validar credenciales contra AD (EHR) |
-| `AUTH_LOCAL_FALLBACK` | `false` | `true` solo emergencia; login normal = Windows/AD |
+| `AUTH_AD_ENABLED` | `false` (desactivado) | Igual — login IT Manager |
+| `AUTH_LOCAL_FALLBACK` | `false` | No aplica (AD off) |
 | `AD_DOMAIN` | `RCJ` | Dominio Windows (ej. `RCJ\usuario`) |
 | `AD_EMAIL_DOMAINS` | `rcjcorp.com,grupoc.com` | Dominios al resolver usuario sin @ |
 | `EHR_LOGIN_URL` | URL login EHR | Igual |

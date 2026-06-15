@@ -149,8 +149,9 @@ async function persistToken(token: string, expiresInSec?: number): Promise<void>
   }
 }
 
+/** Login Windows/AD desactivado — solo correo + contraseña IT Manager. */
 export function isAdLoginEnabled(): boolean {
-  return process.env.AUTH_AD_ENABLED === 'true'
+  return false
 }
 
 function parseEhrErrorBody(json: unknown, text: string, status: number): string {

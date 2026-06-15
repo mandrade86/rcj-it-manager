@@ -148,9 +148,6 @@ export function isLocalPasswordFallbackEnabled(): boolean {
 }
 
 export async function getAuthLoginConfig() {
-  const adEnabled = isAdLoginEnabled()
-  const localFallback = isLocalPasswordFallbackEnabled()
-  const platformLogin = isPlatformLoginEnabled()
   const domains = (process.env.AD_EMAIL_DOMAINS ?? 'rcjcorp.com,grupoc.com')
     .split(',')
     .map((d) => d.trim())
@@ -158,19 +155,14 @@ export async function getAuthLoginConfig() {
   const primaryDomain = domains[0] ?? 'rcjcorp.com'
 
   return {
-    activeDirectory: adEnabled,
-    platformLogin,
-    providerLabel: platformLogin ? 'IT Manager' : 'Active Directory RCJ',
-    usernameHint: platformLogin
-      ? `correo@${primaryDomain}`
-      : `RCJ\\usuario o usuario@${primaryDomain}`,
+    activeDirectory: false,
+    platformLogin: true,
+    providerLabel: 'IT Manager',
+    usernameHint: `correo@${primaryDomain}`,
     adDomain: (process.env.AD_DOMAIN ?? 'RCJ').trim(),
-    localFallback: platformLogin || localFallback,
+    localFallback: true,
     emailDomains: domains,
-    helpText: platformLogin
-      ? 'Inicia sesión con el correo y contraseña asignados a tu usuario en IT Manager (Maestros → Usuarios).'
-      : adEnabled
-        ? 'Inicia sesión con tu usuario y contraseña de Windows (Active Directory). Debes tener un usuario activo en IT Manager.'
-        : 'Autenticación no configurada. Contacta a IT.',
+    helpText:
+      'Inicia sesión con el correo y contraseña asignados a tu usuario en IT Manager (Maestros → Usuarios).',
   }
 }

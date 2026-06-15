@@ -25,7 +25,6 @@ import { usePagination } from '@/hooks/usePagination'
 import { useMaestroList } from '@/hooks/useMaestroList'
 import { compareStrings, type MaestroSortDir } from '@/lib/maestroList'
 import { isApiRequestError } from '@/lib/api/errors'
-import { fetchAuthLoginConfig } from '@/lib/api/auth'
 import {
   createUsuario, deleteUsuario, fetchUsuarios, resetPasswordUsuario, updateUsuario,
 } from '@/lib/api/usuarios'
@@ -92,7 +91,6 @@ function validateUsuarioForm(
   form: FormState,
   editing: boolean,
   empleadosTaken?: Map<string, string>,
-  platformLogin = true,
 ): FormErrors {
   const errors: FormErrors = {}
   if (!form.nombre.trim()) errors.nombre = 'Indica el nombre completo del usuario.'
@@ -115,10 +113,8 @@ function validateUsuarioForm(
       }
     }
     const pwd = form.password.trim()
-    if (platformLogin && !form.es_usuario_dominio && pwd.length < 8) {
+    if (pwd.length < 8) {
       errors.password = 'La contraseña es obligatoria (mínimo 8 caracteres).'
-    } else if (pwd.length > 0 && pwd.length < 8) {
-      errors.password = 'La contraseña debe tener al menos 8 caracteres.'
     }
   }
 
@@ -376,7 +372,6 @@ export function UsuariosPage() {
   const [deleteTarget, setDeleteTarget] = useState<UsuarioDoc | null>(null)
   const [resetTarget, setResetTarget] = useState<UsuarioDoc | null>(null)
   const [newPwd, setNewPwd] = useState('')
-  const [platformLogin, setPlatformLogin] = useState(true)
   const reload = useCallback(async () => {
     setLoading(true); setErr(null)
     try {
@@ -392,12 +387,6 @@ export function UsuariosPage() {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
-
-  useEffect(() => {
-    void fetchAuthLoginConfig()
-      .then((c) => setPlatformLogin(c.platformLogin !== false && c.activeDirectory !== true))
-      .catch(() => setPlatformLogin(true))
-  }, [])
 
   const maestro = useMaestroList({
     items: list,
@@ -457,7 +446,7 @@ export function UsuariosPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    const localErrors = validateUsuarioForm(form, Boolean(editing), empleadosTakenByOther, platformLogin)
+    const localErrors = validateUsuarioForm(form, Boolean(editing), empleadosTakenByOther)
     if (Object.keys(localErrors).length > 0) {
       setFormErrors(localErrors)
       return
@@ -745,17 +734,8 @@ export function UsuariosPage() {
             )}
             {!editing && (
               <div className="rounded-md border border-[var(--lime)]/50 bg-[var(--lime-lt)] p-4 text-xs text-muted-foreground">
-                {platformLogin ? (
-                  <>
-                    El <strong>correo</strong> y la <strong>contraseña</strong> (mín. 8 caracteres) son
-                    obligatorios para el acceso al portal IT Manager.
-                  </>
-                ) : (
-                  <>
-                    El <strong>correo</strong> siempre es obligatorio. Marca <strong>Usuario de dominio</strong> si el
-                    login de AD es distinto. La contraseña local es opcional si usan Active Directory.
-                  </>
-                )}
+                El <strong>correo</strong> y la <strong>contraseña</strong> (mín. 8 caracteres) son
+                obligatorios para el acceso al portal IT Manager.
               </div>
             )}
 
@@ -770,24 +750,6 @@ export function UsuariosPage() {
                 />
                 <FieldError message={formErrors.nombre} />
               </div>
-              {!editing && !platformLogin && (
-                <div className="flex items-center gap-2 sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    id="us-dominio"
-                    className="size-4 accent-[var(--lime)]"
-                    checked={form.es_usuario_dominio}
-                    onChange={(e) => {
-                      const checked = e.target.checked
-                      setF('es_usuario_dominio', checked)
-                      if (checked && !form.login_dominio.trim() && form.email.includes('@')) {
-                        setF('login_dominio', form.email.split('@')[0] ?? '')
-                      }
-                    }}
-                  />
-                  <Label htmlFor="us-dominio">Usuario de dominio (login AD sin @)</Label>
-                </div>
-              )}
               <div className="grid gap-2 sm:col-span-2">
                 <Label>Correo electrónico <span className="text-destructive">*</span></Label>
                 <Input
@@ -831,15 +793,13 @@ export function UsuariosPage() {
                 <div className="grid gap-2 sm:col-span-2">
                   <Label>
                     Contraseña
-                    {platformLogin && !form.es_usuario_dominio && (
-                      <span className="text-destructive"> *</span>
-                    )}
+                    <span className="text-destructive"> *</span>
                   </Label>
                   <Input
                     type="password"
                     value={form.password}
                     onChange={(e) => setF('password', e.target.value)}
-                    placeholder={platformLogin ? 'Mínimo 8 caracteres' : 'Opcional si usa Active Directory'}
+                    placeholder="Mínimo 8 caracteres"
                     autoComplete="new-password"
                     className={cn(formErrors.password && 'border-destructive')}
                     aria-invalid={Boolean(formErrors.password)}

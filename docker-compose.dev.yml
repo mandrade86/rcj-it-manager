@@ -32,8 +32,8 @@ services:
       MONGODB_URI: mongodb://mongo:27017/rcj_it_manager_dev
       MONGODB_CONNECT_RETRIES: 30
       MONGODB_CONNECT_DELAY_MS: 2000
-      AUTH_AD_ENABLED: ${AUTH_AD_ENABLED:-false}
-      AUTH_LOCAL_FALLBACK: ${AUTH_LOCAL_FALLBACK:-false}
+      AUTH_AD_ENABLED: 'false'
+      AUTH_LOCAL_FALLBACK: 'false'
       AD_DOMAIN: ${AD_DOMAIN:-RCJ}
       AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
       EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehr.rcjcorp.hn:8095/api/Login}
