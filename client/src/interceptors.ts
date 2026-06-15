@@ -20,7 +20,7 @@ export function setupFetchInterceptor() {
 
     const res = await originalFetch(input, init)
 
-    if (res.status === 401 && isApi && !url.includes('/api/auth/')) {
+    if (res.status === 401 && isApi && !url.includes('/api/auth/login')) {
       localStorage.removeItem('rcj_token')
       localStorage.removeItem('rcj_user')
       window.location.href = '/login'

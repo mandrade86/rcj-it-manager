@@ -12,7 +12,7 @@ import type { Proyecto } from '@/types/proyecto'
  *  - 'depto': proyectos de su departamento.
  *  - 'todos': todo lo que el backend permita (admins ven la organización).
  */
-export type ProyectoAlcance = 'mis' | 'equipo' | 'depto' | 'todos'
+export type ProyectoAlcance = 'mis' | 'equipo' | 'depto' | 'participo' | 'todos'
 
 type Filters = {
   fase: string
@@ -74,6 +74,7 @@ export const useProyectosStore = create<ProyectosState>((set, get) => ({
       if (filtroEmp) params.empresa_id = filtroEmp
       if (s.alcance === 'mis' && s.miUsuarioId) params.usuario_id = s.miUsuarioId
       if (s.alcance === 'equipo') params.scope = 'equipo'
+      if (s.alcance === 'participo') params.scope = 'participo'
       if (s.alcance === 'depto' && s.miDepartamentoId) {
         params.departamento_id = s.miDepartamentoId
       } else if (s.alcance === 'todos' && filtroDept) {

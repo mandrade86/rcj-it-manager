@@ -7,11 +7,12 @@ async function parseError(res: Response): Promise<string> {
 
 export type AuthLoginConfig = {
   activeDirectory: boolean
+  platformLogin?: boolean
   providerLabel: string
   usernameHint: string
-  localFallback: boolean
-  emailDomains: string[]
-  loginModes?: ('active_directory' | 'local')[]
+  adDomain?: string
+  localFallback?: boolean
+  emailDomains?: string[]
   helpText?: string
 }
 
@@ -22,10 +23,11 @@ export async function fetchAuthLoginConfig(): Promise<AuthLoginConfig> {
 }
 
 export async function loginApi(usuario: string, password: string): Promise<{ token: string; user: AuthUser }> {
+  const loginId = usuario.trim()
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario, password }),
+    body: JSON.stringify({ usuario: loginId, email: loginId, password }),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<{ token: string; user: AuthUser }>
@@ -37,7 +39,6 @@ export async function getMeApi(): Promise<AuthUser> {
   return res.json() as Promise<AuthUser>
 }
 
-/** Devuelve los datos planos del usuario (shape compatible con AuthUser). */
 export async function getSesionApi(): Promise<AuthUser> {
   const res = await fetch('/api/auth/sesion')
   if (!res.ok) throw new Error(await parseError(res))

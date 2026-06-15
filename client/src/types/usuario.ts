@@ -13,6 +13,9 @@ export type UsuarioDoc = {
   _id: string
   nombre: string
   email: string
+  /** Usuario AD sin @dominio. */
+  login_dominio?: string
+  es_usuario_dominio?: boolean
   rol_id?: string | RolDoc | null
   /** Identidad del usuario en el maestro de empleados (su número de empleado). */
   empleado_id?: string | EmpleadoMini | null
@@ -20,6 +23,7 @@ export type UsuarioDoc = {
   empleados_ids?: Array<string | EmpleadoMini>
   departamento_id?: string | DepartamentoDoc | null
   activo?: boolean
+  mfa_enabled?: boolean
   ultimo_acceso?: string | null
   createdAt?: string
   updatedAt?: string
@@ -52,6 +56,10 @@ export function empleadoIdFromUsuario(u: UsuarioDoc): string | null {
 export function empleadosFromUsuario(u: UsuarioDoc): EmpleadoMini[] {
   const arr = u.empleados_ids ?? []
   return arr.filter((e): e is EmpleadoMini => typeof e !== 'string' && e != null)
+}
+
+export function loginDisplayFromUsuario(u: UsuarioDoc): string {
+  return u.email
 }
 
 export function empleadoIdsFromUsuario(u: UsuarioDoc): string[] {

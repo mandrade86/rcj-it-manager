@@ -130,7 +130,7 @@ Crea usuario Administrador en MongoDB.
 
   npx tsx server/scripts/crearAdministrador.ts \\
     --email usuario@grupoc.com \\
-    --password "clave-min-6" \\
+    --password "clave-min-8" \\
     --nombre "Nombre Apellido"
 
 O con variables: ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NOMBRE
@@ -146,8 +146,8 @@ O con variables: ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NOMBRE
     console.error('Error: indica --email o ADMIN_EMAIL (correo válido).')
     process.exit(1)
   }
-  if (password.length < 6) {
-    console.error('Error: la contraseña debe tener al menos 6 caracteres.')
+  if (password.length < 8) {
+    console.error('Error: la contraseña debe tener al menos 8 caracteres.')
     process.exit(1)
   }
 

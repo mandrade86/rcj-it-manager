@@ -527,6 +527,7 @@ function buildEjesProyectoSeed(): Array<{
   orden: number
 }> {
   const colorPorNombre: Record<string, string> = {
+    General: '#6B7280',
     Infraestructura: '#1F4E79',
     Seguridad: '#C00000',
     Red: '#375623',

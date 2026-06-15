@@ -16,6 +16,19 @@ export const PROYECTO_ESTADOS = [
 /**
  * Cambio en el flujo del proyecto. Se guarda como historial inmutable.
  */
+const ProyectoParticipanteSchema = new Schema(
+  {
+    usuario_id: { type: Schema.Types.ObjectId, ref: 'Usuario', required: true },
+    rol: {
+      type: String,
+      enum: ['editor', 'lectura'],
+      default: 'lectura',
+    },
+    agregado_en: { type: Date, default: Date.now },
+  },
+  { _id: true },
+)
+
 const ProyectoCambioSchema = new Schema(
   {
     fecha: { type: Date, default: Date.now },
@@ -76,6 +89,11 @@ const ProyectoSchema = new Schema(
     porcentaje_avance: { type: Number, default: 0 },
     notas: { type: String },
     historial: { type: [ProyectoCambioSchema], default: [] },
+    /**
+     * Miembros adicionales del proyecto (p. ej. categoría General).
+     * `lectura`: solo consulta; `editor`: puede editar proyecto y tareas.
+     */
+    participantes: { type: [ProyectoParticipanteSchema], default: [] },
   },
   { timestamps: true },
 )

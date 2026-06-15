@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Lock, LogIn, User } from 'lucide-react'
+import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,37 +29,61 @@ export function LoginPage() {
       .then(setAuthConfig)
       .catch(() =>
         setAuthConfig({
-          activeDirectory: true,
-          providerLabel: 'Active Directory RCJ',
-          usernameHint: 'usuario@rcjcorp.com',
-          localFallback: false,
+          activeDirectory: false,
+          platformLogin: true,
+          providerLabel: 'IT Manager',
+          usernameHint: 'nombre.apellido@rcjcorp.com',
+          localFallback: true,
           emailDomains: ['rcjcorp.com'],
+          helpText:
+            'Inicia sesión con el correo y contraseña asignados a tu usuario en IT Manager.',
         }),
       )
   }, [])
 
   if (token) return <Navigate to={from} replace />
 
-  const adEnabled = authConfig?.activeDirectory !== false
-  const localFallback = authConfig?.localFallback === true
+  const adEnabled = authConfig?.activeDirectory === true
   const subtitle =
     authConfig?.helpText ??
-    (adEnabled && localFallback
-      ? 'Active Directory o contraseña local de IT Manager (según tu cuenta).'
-      : adEnabled
-        ? `Inicia sesión con tus credenciales de ${authConfig?.providerLabel ?? 'Active Directory'}.`
-        : 'Inicia sesión con tu usuario y contraseña de IT Manager.')
+    'Inicia sesión con el correo y contraseña de tu cuenta en IT Manager.'
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setErr(null)
+
+    const formEl = e.currentTarget
+    const fd = new FormData(formEl)
+    const usuarioVal = String(fd.get('username') ?? usuario).trim()
+    const passwordVal = String(fd.get('password') ?? password)
+
+    if (!usuarioVal) {
+      setErr(
+        adEnabled
+          ? 'Indica tu usuario de Windows (ej. RCJ\\nombre.apellido o nombre.apellido@rcjcorp.com).'
+          : 'Indica tu correo electrónico registrado en IT Manager.',
+      )
+      return
+    }
+    if (!passwordVal) {
+      setErr(adEnabled ? 'Indica tu contraseña de Windows / dominio.' : 'Indica tu contraseña.')
+      return
+    }
+
+    setUsuario(usuarioVal)
+    setPassword(passwordVal)
     setLoading(true)
     try {
-      const { token: tok, user } = await loginApi(usuario.trim(), password)
+      const { token: tok, user } = await loginApi(usuarioVal, passwordVal)
       setAuth(tok, user)
       navigate(from, { replace: true })
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : 'No se pudo iniciar sesión')
+      const msg = ex instanceof Error ? ex.message : 'No se pudo iniciar sesión'
+      if (msg.includes('502') || msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')) {
+        setErr('No se pudo contactar al servidor. Reinicia con Ctrl+C y npm run dev, espera a ver "API lista" y vuelve a intentar.')
+      } else {
+        setErr(msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -91,29 +115,39 @@ export function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+            <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4" noValidate>
               <div className="grid gap-2">
                 <Label htmlFor="usuario">
-                  {adEnabled ? 'Usuario corporativo' : 'Correo electrónico'}
+                  {adEnabled ? 'Usuario de Windows / dominio' : 'Correo electrónico'}
                 </Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="usuario"
                     name="username"
-                    type="text"
+                    type={adEnabled ? 'text' : 'email'}
                     autoComplete="username"
-                    required
-                    placeholder={authConfig?.usernameHint ?? 'usuario@rcjcorp.com'}
+                    placeholder={authConfig?.usernameHint ?? 'nombre.apellido@rcjcorp.com'}
                     value={usuario}
                     onChange={(e) => setUsuario(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 text-sm"
                   />
                 </div>
+                {adEnabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    Usa las mismas credenciales con las que entras a Windows.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Usa el correo con el que te dieron de alta en Maestros → Usuarios.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <Label htmlFor="password">
+                  {adEnabled ? 'Contraseña de Windows' : 'Contraseña'}
+                </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -121,14 +155,7 @@ export function LoginPage() {
                     name="password"
                     type={showPwd ? 'text' : 'password'}
                     autoComplete="current-password"
-                    required
-                    placeholder={
-                      adEnabled && localFallback
-                        ? 'Contraseña de dominio o local'
-                        : adEnabled
-                          ? 'Contraseña de Windows / dominio'
-                          : 'Contraseña de IT Manager'
-                    }
+                    placeholder={adEnabled ? 'Contraseña de dominio' : 'Contraseña de IT Manager'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-9 pr-9"
@@ -150,17 +177,13 @@ export function LoginPage() {
                 className="w-full gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
               >
                 <LogIn className="size-4" />
-                {loading ? 'Validando…' : 'Iniciar sesión'}
+                {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
               </Button>
             </form>
 
-            {(adEnabled || localFallback) && (
+            {!adEnabled && (
               <p className="mt-4 text-center text-xs text-muted-foreground">
-                {adEnabled && localFallback
-                  ? 'Usuarios de dominio: credenciales de Active Directory. Usuarios locales: correo y contraseña definidos en Maestros → Usuarios.'
-                  : adEnabled
-                    ? 'Autenticación con Active Directory. Debes tener un usuario activo en IT Manager (Maestros → Usuarios).'
-                    : 'Usa el correo y contraseña configurados en Maestros → Usuarios.'}
+                Si no tienes acceso, solicita tu usuario al área de IT.
               </p>
             )}
           </CardContent>

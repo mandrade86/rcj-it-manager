@@ -96,9 +96,10 @@ APP_PUBLIC_URL=http://172.16.146.103
 JWT_SECRET=<salida de: openssl rand -hex 32>
 
 AUTH_AD_ENABLED=true
-AUTH_LOCAL_FALLBACK=true
-EHR_LOGIN_URL=http://ehr.fucasa.hn/auth-api/login
+AUTH_LOCAL_FALLBACK=false
+AD_DOMAIN=RCJ
 AD_EMAIL_DOMAINS=rcjcorp.com,grupoc.com
+EHR_LOGIN_URL=https://ehr.rcjcorp.hn:8095/api/Login
 ```
 
 Guardar en nano: `Ctrl+O`, Enter, `Ctrl+X`.
@@ -222,7 +223,7 @@ newgrp docker
 
 ```bash
 cp .env.production.example .env.production
-nano .env.production   # JWT_SECRET obligatorio; AUTH_LOCAL_FALLBACK=true (AD + local)
+nano .env.production   # JWT_SECRET obligatorio; usuarios con correo + contraseña en MongoDB
 ```
 
 ### 3. Levantar contenedores
@@ -294,7 +295,7 @@ bash scripts/deploy-ubuntu.sh --dev
 
 Apache opcional (bloque comentado en `deploy/apache-portal.rcjcorporacion.com.conf.example`).
 
-`AUTH_LOCAL_FALLBACK=true` en dev permite contraseña local en MongoDB además de Active Directory.
+Login con **Active Directory** (validación vía API EHR). Opcional: contraseña local de respaldo si `AUTH_LOCAL_FALLBACK=true`.
 
 ---
 
@@ -329,8 +330,10 @@ Prod y dev pueden compartir la carpeta `./data` o usar carpetas distintas si lo 
 |----------|------------|------------|
 | `JWT_SECRET` | Obligatorio, único | Distinto al de prod |
 | `APP_PORT` | `3001` | `3002` |
-| `AUTH_LOCAL_FALLBACK` | `true` (AD + local) | `true` (AD + local) |
-| `AUTH_AD_ENABLED` | `true` | `true` |
+| `AUTH_AD_ENABLED` | `true` | Validar credenciales contra AD (EHR) |
+| `AUTH_LOCAL_FALLBACK` | `false` | `true` solo emergencia; login normal = Windows/AD |
+| `AD_DOMAIN` | `RCJ` | Dominio Windows (ej. `RCJ\usuario`) |
+| `AD_EMAIL_DOMAINS` | `rcjcorp.com,grupoc.com` | Dominios al resolver usuario sin @ |
 | `EHR_LOGIN_URL` | URL login EHR | Igual |
 
 ---

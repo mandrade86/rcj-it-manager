@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ArrowRight, Building2, Download, Factory, FileUp, GitBranch, History,
-  LayoutGrid, List, Lock, Paperclip, Pencil, Plus, Trash2, User,
+  LayoutGrid, List, Lock, Paperclip, Pencil, Plus, Trash2, User, Users,
 } from 'lucide-react'
 
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
@@ -46,13 +46,14 @@ import { cn } from '@/lib/utils'
 import { useMaestroSeleccion } from '@/hooks/useMaestroSeleccion'
 import { TareaDetalleSheet } from '@/pages/proyectos/TareaDetalleSheet'
 import { TareaFormDialog } from '@/pages/proyectos/TareaFormDialog'
+import { ProyectoParticipantesPanel } from '@/pages/proyectos/ProyectoParticipantesPanel'
 import { TareasPanel } from '@/pages/proyectos/TareasPanel'
 import { useAuthStore } from '@/store/authStore'
 import { useProyectosStore } from '@/store/proyectosStore'
 import type { Proyecto, ProyectoEstado } from '@/types/proyecto'
 import {
   estadoColor, proyectoDeptDoc, proyectoEmpresasDocs, proyectoKpiDoc, proyectoOwnerName,
-  PROYECTO_ESTADOS, TRANSICIONES_SUGERIDAS,
+  proyectoPuedeEditar, PROYECTO_ESTADOS, TRANSICIONES_SUGERIDAS,
 } from '@/types/proyecto'
 import type { Tarea, TareaAdjunto } from '@/types/tarea'
 
@@ -80,12 +81,14 @@ export function ProyectoDetailView({
   const [deletingProyecto, setDeletingProyecto] = useState(false)
   const [bulkDeletingTareas, setBulkDeletingTareas] = useState(false)
   const [tareaDetalle, setTareaDetalle] = useState<Tarea | null>(null)
+  const [seccion, setSeccion] = useState<'resumen' | 'participantes' | 'tareas'>('resumen')
 
   const tareaIds = useMemo(() => tareas.map((t) => t._id), [tareas])
   const mapaTareasProyecto = useMemo(() => mapaTareas(tareas), [tareas])
   const seleccionTareas = useMaestroSeleccion(tareaIds)
 
   const puedeEliminarProyecto = useAuthStore((s) => s.hasPermiso('proyectos:editar'))
+  const puedeEditarProyecto = proyecto ? proyectoPuedeEditar(proyecto) : false
 
   const reload = useCallback(async () => {
     if (!proyectoId) return
@@ -257,14 +260,22 @@ export function ProyectoDetailView({
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(`/proyectos/${encodeURIComponent(proyecto._id)}/editar`)}
-                >
-                  Editar proyecto
-                </Button>
+                {proyecto.acceso?.rol_participante === 'lectura' && (
+                  <Badge variant="outline" className="gap-1 text-[10px]">
+                    <Lock className="size-3" />
+                    Participante · solo lectura
+                  </Badge>
+                )}
+                {puedeEditarProyecto && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/proyectos/${encodeURIComponent(proyecto._id)}/editar`)}
+                  >
+                    Editar proyecto
+                  </Button>
+                )}
                 {puedeEliminarProyecto && (
                   <Button
                     type="button"
@@ -284,6 +295,22 @@ export function ProyectoDetailView({
 
         {proyecto && (
           <div className="space-y-6">
+            <Tabs value={seccion} onValueChange={(v) => setSeccion(v as typeof seccion)} className="w-full">
+              <TabsList className="mb-2">
+                <TabsTrigger value="resumen">Resumen</TabsTrigger>
+                <TabsTrigger value="participantes" className="gap-1.5">
+                  <Users className="size-3.5" />
+                  Participantes
+                  {(proyecto.participantes?.length ?? 0) > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                      {proyecto.participantes!.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="tareas">Tareas</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="resumen" className="mt-0 space-y-6">
                   <section className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-sm sm:grid-cols-2">
                     <div>
                       <p className="text-xs text-muted-foreground">Propietario</p>
@@ -360,6 +387,7 @@ export function ProyectoDetailView({
                     </div>
                     <FlujoEstado
                       estadoActual={proyecto.estado}
+                      soloLectura={!puedeEditarProyecto}
                       onTransicionar={async (a, comentario) => {
                         try {
                           const doc = await transicionarProyecto(proyecto._id, a, comentario)
@@ -422,11 +450,61 @@ export function ProyectoDetailView({
                     )}
                   </section>
 
-                  <Separator />
+                  <section>
+                    <div className="mb-2 flex items-center gap-2">
+                      <History className="size-4 text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">Historial de estado</h3>
+                    </div>
+                    <ul className="space-y-2">
+                      {(proyecto.historial ?? []).slice().reverse().map((h, idx) => (
+                        <li key={idx} className="rounded-md border border-border bg-muted/10 p-2 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="inline-flex items-center gap-1.5">
+                              {h.de ? (
+                                <>
+                                  <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.de as ProyectoEstado))}>{h.de}</Badge>
+                                  <ArrowRight className="size-3 text-muted-foreground" />
+                                </>
+                              ) : <Badge variant="outline" className="text-[10px]">Creación</Badge>}
+                              <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.a as ProyectoEstado))}>{h.a}</Badge>
+                            </div>
+                            <span className="text-muted-foreground">
+                              {formatDateDMY(h.fecha)}
+                            </span>
+                          </div>
+                          {h.usuario_nombre && (
+                            <p className="mt-1 text-muted-foreground">
+                              por <strong>{h.usuario_nombre}</strong>
+                            </p>
+                          )}
+                          {h.comentario && (
+                            <p className="mt-1 italic text-muted-foreground">«{h.comentario}»</p>
+                          )}
+                        </li>
+                      ))}
+                      {(!proyecto.historial || proyecto.historial.length === 0) && (
+                        <li className="text-xs text-muted-foreground">Sin historial registrado.</li>
+                      )}
+                    </ul>
+                  </section>
 
+              </TabsContent>
+
+              <TabsContent value="participantes" className="mt-0">
+                <ProyectoParticipantesPanel
+                  proyecto={proyecto}
+                  onUpdated={(doc) => {
+                    setProyecto(doc)
+                    onProyectoUpdated()
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="tareas" className="mt-0 space-y-6">
                   <section>
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold">Tareas</h3>
+                      {puedeEditarProyecto && (
                       <div className="flex flex-wrap gap-2">
                         <input
                           ref={tareasFileRef}
@@ -475,6 +553,7 @@ export function ProyectoDetailView({
                           Agregar tarea
                         </Button>
                       </div>
+                      )}
                     </div>
                     <p className="mb-3 text-xs text-muted-foreground">
                       El <strong>KPI / meta</strong> del proyecto está arriba en «KPI / Meta»; no se repite por tarea.
@@ -495,7 +574,7 @@ export function ProyectoDetailView({
                       </TabsList>
 
                       <TabsContent value="lista" className="mt-0">
-                    {tareas.length > 0 && (
+                    {tareas.length > 0 && puedeEditarProyecto && (
                       <MaestroBulkDeleteBar
                         seleccionCount={seleccionTareas.seleccionCount}
                         bulkDeleting={bulkDeletingTareas}
@@ -503,7 +582,7 @@ export function ProyectoDetailView({
                         onEliminar={() => void handleEliminarTareasSeleccionadas()}
                       />
                     )}
-                    {tareas.length > 0 && (
+                    {tareas.length > 0 && puedeEditarProyecto && (
                       <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
                         <input
                           type="checkbox"
@@ -612,6 +691,8 @@ export function ProyectoDetailView({
                             >
                               <Paperclip className="size-4" />
                             </Button>
+                            {puedeEditarProyecto && (
+                            <>
                             <Button
                               type="button"
                               variant="ghost"
@@ -635,6 +716,8 @@ export function ProyectoDetailView({
                             >
                               <Trash2 className="size-4" />
                             </Button>
+                            </>
+                            )}
                           </div>
                         </li>
                         )
@@ -656,47 +739,9 @@ export function ProyectoDetailView({
                       </TabsContent>
                     </Tabs>
                   </section>
-
-                  <Separator />
-
-                  <section>
-                    <div className="mb-2 flex items-center gap-2">
-                      <History className="size-4 text-muted-foreground" />
-                      <h3 className="text-sm font-semibold">Historial de estado</h3>
-                    </div>
-                    <ul className="space-y-2">
-                      {(proyecto.historial ?? []).slice().reverse().map((h, idx) => (
-                        <li key={idx} className="rounded-md border border-border bg-muted/10 p-2 text-xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="inline-flex items-center gap-1.5">
-                              {h.de ? (
-                                <>
-                                  <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.de as ProyectoEstado))}>{h.de}</Badge>
-                                  <ArrowRight className="size-3 text-muted-foreground" />
-                                </>
-                              ) : <Badge variant="outline" className="text-[10px]">Creación</Badge>}
-                              <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.a as ProyectoEstado))}>{h.a}</Badge>
-                            </div>
-                            <span className="text-muted-foreground">
-                              {formatDateDMY(h.fecha)}
-                            </span>
-                          </div>
-                          {h.usuario_nombre && (
-                            <p className="mt-1 text-muted-foreground">
-                              por <strong>{h.usuario_nombre}</strong>
-                            </p>
-                          )}
-                          {h.comentario && (
-                            <p className="mt-1 italic text-muted-foreground">«{h.comentario}»</p>
-                          )}
-                        </li>
-                      ))}
-                      {(!proyecto.historial || proyecto.historial.length === 0) && (
-                        <li className="text-xs text-muted-foreground">Sin historial registrado.</li>
-                      )}
-                    </ul>
-                  </section>
-                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
         )}
       </div>
 
@@ -896,10 +941,11 @@ function TareaAdjuntosDialog({
  * comentario opcional.
  */
 function FlujoEstado({
-  estadoActual, onTransicionar,
+  estadoActual, onTransicionar, soloLectura = false,
 }: {
   estadoActual: ProyectoEstado
   onTransicionar: (a: ProyectoEstado, comentario?: string) => Promise<void>
+  soloLectura?: boolean
 }) {
   const [comentario, setComentario] = useState('')
   const [pendiente, setPendiente] = useState<ProyectoEstado | null>(null)
@@ -923,7 +969,12 @@ function FlujoEstado({
           {estadoActual}
         </Badge>
       </div>
-      {sugeridas.length === 0 ? (
+      {soloLectura ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Lock className="size-3.5" />
+          Solo lectura: no puedes cambiar el estado de este proyecto.
+        </p>
+      ) : sugeridas.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           Este es un estado terminal del flujo. Usa el selector de abajo para forzar otro estado si es necesario.
         </p>
@@ -945,6 +996,7 @@ function FlujoEstado({
           ))}
         </div>
       )}
+      {!soloLectura && (
       <div className="flex flex-wrap items-end gap-2">
         <div className="grid flex-1 min-w-[180px] gap-1">
           <label className="text-[10px] text-muted-foreground">Forzar a otro estado</label>
@@ -977,6 +1029,7 @@ function FlujoEstado({
           />
         </div>
       </div>
+      )}
     </div>
   )
 }

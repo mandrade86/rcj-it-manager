@@ -141,6 +141,7 @@ export const EHR_DEPARTAMENTOS_LLEVA_GASTOS_DEFAULT = new Set<number>([8, 9, 31]
 
 /** Ejes de proyecto por defecto sólo para el departamento corporativo de TI (Depto #8). */
 export const EJES_PROYECTO_IT_DEFAULT = [
+  'General',
   'Infraestructura',
   'Seguridad',
   'Red',
@@ -151,6 +152,7 @@ export const EJES_PROYECTO_IT_DEFAULT = [
 
 /** Semilla de nombres de eje para el catálogo global (antes derivado del maestro departamentos reducido). */
 export const EJES_CATALOGO_SEMILLA_NOMBRES: string[] = [
+  'General',
   ...EJES_PROYECTO_IT_DEFAULT,
   'Clima organizacional',
   'Capacitación',

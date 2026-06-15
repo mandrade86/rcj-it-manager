@@ -12,8 +12,10 @@ import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import { fetchKpis } from '@/lib/api/kpis'
+import { updateProyectoParticipantes } from '@/lib/api/proyectos'
 import { kpiMatchesProyectoEje } from '@/lib/kpiProyectoVinculo'
 import { fetchUsuarios } from '@/lib/api/usuarios'
+import { ProyectoParticipantesEditor, type ParticipanteDraft } from '@/pages/proyectos/ProyectoParticipantesEditor'
 import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { EjeProyectoDoc } from '@/types/ejeProyecto'
@@ -24,8 +26,11 @@ import type {
   Proyecto, ProyectoEstado, ProyectoFase, ProyectoPrioridad, ProyectoTipo,
 } from '@/types/proyecto'
 import {
-  PROYECTO_ESTADOS, proyectoDeptId, proyectoEmpresaIdList, proyectoKpiId, proyectoOwnerId,
+  PROYECTO_ESTADOS, participanteUsuarioId, proyectoDeptId, proyectoEmpresaIdList,
+  proyectoKpiId, proyectoOwnerId, proyectoPuedeGestionarParticipantes,
 } from '@/types/proyecto'
+
+const EJE_GENERAL = 'General'
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -53,12 +58,13 @@ type FormState = {
 function emptyForm(defaults: {
   usuario_id?: string | null
   departamento_id?: string | null
+  eje?: string
 }): FormState {
   return {
     _id: '',
     nombre: '',
     descripcion: '',
-    eje: '',
+    eje: defaults.eje ?? EJE_GENERAL,
     fase: '',
     tipo: 'individual',
     usuario_id: defaults.usuario_id ?? '',
@@ -159,8 +165,13 @@ export function ProyectoFormDialog({
   const [form, setForm] = useState<FormState>(() =>
     editing
       ? fromProyecto(editing)
-      : emptyForm({ usuario_id: user?._id, departamento_id: null }),
+      : emptyForm({
+        usuario_id: user?._id,
+        departamento_id: user?.departamento_id ?? null,
+        eje: EJE_GENERAL,
+      }),
   )
+  const [participantesDraft, setParticipantesDraft] = useState<ParticipanteDraft[]>([])
   const [saving, setSaving] = useState(false)
   const isEdit = Boolean(editing)
 
@@ -213,12 +224,24 @@ export function ProyectoFormDialog({
 
   useEffect(() => {
     if (!active) return
-    setForm(
-      editing
-        ? fromProyecto(editing)
-        : emptyForm({ usuario_id: user?._id, departamento_id: null }),
-    )
-  }, [active, editing, user?._id])
+    if (editing) {
+      setForm(fromProyecto(editing))
+      setParticipantesDraft(
+        (editing.participantes ?? []).map((p, i) => ({
+          key: p._id ?? `p-${i}`,
+          usuario_id: participanteUsuarioId(p) ?? '',
+          rol: p.rol === 'editor' ? 'editor' : 'lectura',
+        })).filter((p) => p.usuario_id),
+      )
+    } else {
+      setForm(emptyForm({
+        usuario_id: user?._id,
+        departamento_id: user?.departamento_id ?? null,
+        eje: EJE_GENERAL,
+      }))
+      setParticipantesDraft([])
+    }
+  }, [active, editing, user?._id, user?.departamento_id])
 
   const propietarioDefault = useMemo(() => {
     if (editing) return null
@@ -251,7 +274,14 @@ export function ProyectoFormDialog({
       for (const d of deptEjes) {
         if (!pool.includes(d)) pool.push(d)
       }
-      pool.sort((a, b) => a.localeCompare(b))
+      if (nombresMaestro.includes(EJE_GENERAL) && !pool.includes(EJE_GENERAL)) {
+        pool.unshift(EJE_GENERAL)
+      }
+      pool.sort((a, b) => {
+        if (a === EJE_GENERAL) return -1
+        if (b === EJE_GENERAL) return 1
+        return a.localeCompare(b)
+      })
       if (form.eje && !pool.includes(form.eje)) pool = [form.eje, ...pool]
       return pool
     }
@@ -269,6 +299,10 @@ export function ProyectoFormDialog({
   const kpiIdsEnLista = useMemo(() => new Set(kpisPorTipo.map((k) => k._id)), [kpisPorTipo])
   const kpiHuerfano = Boolean(form.kpi_id && !kpiIdsEnLista.has(form.kpi_id))
 
+  const puedeGestionarParticipantes = editing
+    ? proyectoPuedeGestionarParticipantes(editing)
+    : true
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form._id.trim() || !form.nombre.trim()) return
@@ -281,6 +315,13 @@ export function ProyectoFormDialog({
       }
       await onSave(payload)
       const pid = isEdit ? editing!._id : form._id.trim()
+      const participantesPayload = participantesDraft.map((p) => ({
+        usuario_id: p.usuario_id,
+        rol: p.rol,
+      }))
+      if (isEdit || participantesPayload.length > 0) {
+        await updateProyectoParticipantes(pid, participantesPayload)
+      }
       if (variant === 'page') {
         onPageSaved?.(pid)
       } else {
@@ -614,6 +655,15 @@ export function ProyectoFormDialog({
               </p>
             )}
           </div>
+
+          <ProyectoParticipantesEditor
+            ownerId={form.usuario_id || null}
+            draft={participantesDraft}
+            onChange={setParticipantesDraft}
+            usuarios={usuarios}
+            puedeGestionar={puedeGestionarParticipantes}
+          />
+
           <div className="grid gap-2">
             <Label htmlFor="p-notas">Notas</Label>
             <Textarea

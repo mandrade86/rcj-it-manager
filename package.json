@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
-    "dev:client": "npm run dev --prefix client",
-    "dev:server": "nodemon --watch server --ext ts --delay 1500 --exec tsx server/index.ts",
+    "dev": "node scripts/dev-clean-ports.mjs && concurrently -k -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:clean": "node scripts/dev-clean-ports.mjs",
+    "dev:client": "node scripts/wait-for-api.mjs && npm run dev --prefix client",
+    "dev:server": "nodemon --watch server --ext ts --legacy-watch --delay 500 --exec tsx server/index.ts",
     "build": "npm run build --prefix client",
     "start": "tsx server/index.ts",
     "docker:up": "docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build",

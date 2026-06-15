@@ -24,6 +24,22 @@ export type ProyectoEstado = (typeof PROYECTO_ESTADOS)[number]
 
 export type ProyectoTipo = 'individual' | 'departamental'
 
+export type ProyectoParticipanteRol = 'editor' | 'lectura'
+
+export type ProyectoParticipante = {
+  _id?: string
+  usuario_id: string | UsuarioMini
+  rol: ProyectoParticipanteRol
+  agregado_en?: string
+}
+
+export type ProyectoAcceso = {
+  puede_editar: boolean
+  puede_gestionar_participantes: boolean
+  rol_participante?: ProyectoParticipanteRol | null
+  es_propietario?: boolean
+}
+
 export type UsuarioMini = {
   _id: string
   nombre: string
@@ -65,6 +81,8 @@ export type Proyecto = {
   porcentaje_avance: number
   notas?: string | null
   historial?: ProyectoCambio[]
+  participantes?: ProyectoParticipante[]
+  acceso?: ProyectoAcceso
   createdAt?: string
   updatedAt?: string
   riesgo?: RiesgoProyecto
@@ -75,6 +93,31 @@ export function proyectoOwnerId(p: Proyecto): string | null {
   if (!u) return null
   if (typeof u === 'string') return u
   return u._id
+}
+
+export function participanteUsuarioId(p: ProyectoParticipante): string | null {
+  const u = p.usuario_id
+  if (!u) return null
+  if (typeof u === 'string') return u
+  return u._id
+}
+
+export function participanteUsuarioNombre(p: ProyectoParticipante): string {
+  const u = p.usuario_id
+  if (!u || typeof u === 'string') return ''
+  return u.nombre
+}
+
+export function proyectoPuedeEditar(p: Proyecto): boolean {
+  return p.acceso?.puede_editar ?? false
+}
+
+export function proyectoPuedeGestionarParticipantes(p: Proyecto): boolean {
+  return p.acceso?.puede_gestionar_participantes ?? false
+}
+
+export function rolParticipanteLabel(rol: ProyectoParticipanteRol): string {
+  return rol === 'editor' ? 'Editor' : 'Solo lectura'
 }
 
 export function proyectoOwnerName(p: Proyecto): string {

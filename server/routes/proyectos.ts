@@ -11,10 +11,16 @@ import { Tarea } from '../db/models/Tarea.js'
 import { Usuario } from '../db/models/Usuario.js'
 import {
   buildProyectoEquipoFilter,
+  buildProyectoParticipoFilter,
   buildProyectoScopeFilter,
   isAdminProyectos,
   resolveDepartamentosUsuario,
 } from '../utils/proyectoScope.js'
+import {
+  enrichProyectoAcceso,
+  usuarioPuedeEditarProyecto,
+  usuarioPuedeGestionarParticipantes,
+} from '../utils/proyectoPermisos.js'
 import { ADJUNTOS_TAREAS_DIR } from '../utils/multerAdjuntosTareas.js'
 import { calcularRiesgo } from '../utils/proyectoRiesgo.js'
 import {
@@ -43,6 +49,7 @@ const POPULATE_FIELDS = [
   { path: 'departamento_id', select: 'codigo nombre color' },
   { path: 'empresa_ids', select: 'codigo nombre color activo' },
   { path: 'kpi_id', select: 'nombre eje meta unidad frecuencia descripcion' },
+  { path: 'participantes.usuario_id', select: 'nombre email activo' },
 ] as const
 
 /** Construye el filtro Mongo basado en el scope del usuario actual. */
@@ -165,6 +172,11 @@ proyectosRouter.get('/plantilla-excel', async (req, res, next) => {
     if (req.query.scope === 'equipo' || req.query.alcance === 'equipo') {
       const equipoFilter = await buildEquipoFilter(req)
       if (equipoFilter) Object.assign(filter, equipoFilter)
+    }
+    if (req.query.scope === 'participo' || req.query.alcance === 'participo') {
+      const u = req.user
+      if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+      Object.assign(filter, buildProyectoParticipoFilter(u._id))
     }
     if (req.query.fase != null && req.query.fase !== '') {
       const n = Number(req.query.fase)
@@ -415,6 +427,12 @@ proyectosRouter.get('/', async (req, res, next) => {
       if (equipoFilter === null) { res.status(401).json({ error: 'No autenticado' }); return }
       Object.assign(filter, equipoFilter)
     }
+    if (req.query.scope === 'participo' || req.query.alcance === 'participo') {
+      const u = req.user
+      if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+      delete filter.$or
+      Object.assign(filter, buildProyectoParticipoFilter(u._id))
+    }
 
     if (req.query.fase != null && req.query.fase !== '') {
       const n = Number(req.query.fase)
@@ -469,7 +487,7 @@ proyectosRouter.get('/', async (req, res, next) => {
     }
 
     const enriched = rows.map((p) => ({
-      ...p,
+      ...enrichProyectoAcceso(p as Record<string, unknown>, req.user!._id, req.user!.permisos ?? []),
       riesgo: calcularRiesgo(
         {
           estado: String(p.estado),
@@ -498,7 +516,75 @@ proyectosRouter.get('/:id', async (req, res, next) => {
       res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
       return
     }
-    res.json(doc)
+    res.json(enrichProyectoAcceso(doc as Record<string, unknown>, req.user!._id, req.user!.permisos ?? []))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * Actualiza la lista de participantes del proyecto.
+ * PUT /api/proyectos/:id/participantes  { participantes: [{ usuario_id, rol }] }
+ */
+proyectosRouter.put('/:id/participantes', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const exists = await Proyecto.findOne({ _id: req.params.id, ...scope })
+      .select('usuario_id participantes')
+      .lean() as { usuario_id?: mongoose.Types.ObjectId; participantes?: unknown[] } | null
+    if (!exists) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+
+    if (!usuarioPuedeGestionarParticipantes(u._id, u.permisos ?? [], exists)) {
+      res.status(403).json({ error: 'No tienes permiso para gestionar participantes de este proyecto' })
+      return
+    }
+
+    const raw = (req.body as { participantes?: unknown }).participantes
+    if (!Array.isArray(raw)) {
+      res.status(400).json({ error: 'Envía participantes como arreglo de { usuario_id, rol }' })
+      return
+    }
+
+    const ownerId = exists.usuario_id ? String(exists.usuario_id) : null
+    const seen = new Set<string>()
+    const participantes: Array<{
+      usuario_id: mongoose.Types.ObjectId
+      rol: 'editor' | 'lectura'
+      agregado_en: Date
+    }> = []
+
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue
+      const uid = String((item as { usuario_id?: unknown }).usuario_id ?? '').trim()
+      if (!mongoose.isValidObjectId(uid) || seen.has(uid)) continue
+      if (ownerId && uid === ownerId) continue
+      seen.add(uid)
+      const rolRaw = String((item as { rol?: unknown }).rol ?? 'lectura')
+      const rol: 'editor' | 'lectura' = rolRaw === 'editor' ? 'editor' : 'lectura'
+      const usuarioOk = await Usuario.findById(uid).select('_id activo').lean()
+      if (!usuarioOk || usuarioOk.activo === false) continue
+      participantes.push({
+        usuario_id: new mongoose.Types.ObjectId(uid),
+        rol,
+        agregado_en: new Date(),
+      })
+    }
+
+    const doc = await Proyecto.findByIdAndUpdate(
+      req.params.id,
+      { participantes },
+      { new: true, runValidators: true },
+    ).populate(POPULATE_FIELDS).lean()
+
+    res.json(enrichProyectoAcceso(doc as Record<string, unknown>, u._id, u.permisos ?? []))
   } catch (err) {
     next(err)
   }
@@ -560,9 +646,13 @@ proyectosRouter.put('/:id', async (req, res, next) => {
 
     const scope = await buildScopeFilter(req)
     if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
-    const exists = await Proyecto.findOne({ _id: id, ...scope }).select('_id estado').lean()
+    const exists = await Proyecto.findOne({ _id: id, ...scope }).select('_id estado usuario_id participantes').lean()
     if (!exists) {
       res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], exists)) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
       return
     }
     if (req.body?._id != null && String(req.body._id) !== id) {
@@ -586,7 +676,7 @@ proyectosRouter.put('/:id', async (req, res, next) => {
     const doc = await Proyecto.findByIdAndUpdate(id, patch, {
       new: true, runValidators: true,
     }).populate(POPULATE_FIELDS).lean()
-    res.json(doc)
+    res.json(enrichProyectoAcceso(doc as Record<string, unknown>, u._id, u.permisos ?? []))
   } catch (err) {
     next(err)
   }
@@ -636,8 +726,13 @@ proyectosRouter.post('/:id/transicion', async (req, res, next) => {
     const scope = await buildScopeFilter(req)
     if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
     const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
+      .select('estado usuario_id participantes')
     if (!doc) {
       res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], doc)) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
       return
     }
 
@@ -660,7 +755,7 @@ proyectosRouter.post('/:id/transicion', async (req, res, next) => {
     })
     await doc.save()
     const full = await Proyecto.findById(doc._id).populate(POPULATE_FIELDS).lean()
-    res.json(full)
+    res.json(enrichProyectoAcceso(full as Record<string, unknown>, u._id, u.permisos ?? []))
   } catch (err) {
     next(err)
   }

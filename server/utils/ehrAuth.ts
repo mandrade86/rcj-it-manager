@@ -150,7 +150,7 @@ async function persistToken(token: string, expiresInSec?: number): Promise<void>
 }
 
 export function isAdLoginEnabled(): boolean {
-  return process.env.AUTH_AD_ENABLED !== 'false'
+  return process.env.AUTH_AD_ENABLED === 'true'
 }
 
 function parseEhrErrorBody(json: unknown, text: string, status: number): string {
@@ -162,15 +162,19 @@ function parseEhrErrorBody(json: unknown, text: string, status: number): string 
     }
   }
   const t = text?.trim()
+  if (t && /usuario no encontrado|credenciales|contraseña|password/i.test(t)) {
+    return 'Usuario o contraseña de Windows incorrectos.'
+  }
   if (t && t.length < 240 && !t.startsWith('{')) return t
-  if (status === 401 || status === 403) return 'Usuario o contraseña incorrectos.'
-  return `No se pudo validar credenciales (${status}).`
+  if (status === 401 || status === 403) return 'Usuario o contraseña de Windows incorrectos.'
+  return `No se pudo validar con Active Directory (${status}).`
 }
 
 function buildEhrLoginAttempts(
   loginUrl: string,
   username: string,
   password: string,
+  timeoutMs = 25_000,
 ): Array<{ run: () => Promise<{ token: string; expiresInSec?: number } | null> }> {
   const isTokenEndpoint = /\/token\/?$/i.test(loginUrl)
   const attempts: Array<{ run: () => Promise<{ token: string; expiresInSec?: number } | null> }> = []
@@ -183,11 +187,15 @@ function buildEhrLoginAttempts(
     })
     attempts.push({
       run: () =>
-        tryLoginRequest(loginUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        }),
+        tryLoginRequest(
+          loginUrl,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+          },
+          timeoutMs,
+        ),
     })
   } else {
     const jsonBodies: Record<string, unknown>[] = [
@@ -198,11 +206,15 @@ function buildEhrLoginAttempts(
     for (const payload of jsonBodies) {
       attempts.push({
         run: () =>
-          tryLoginRequest(loginUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify(payload),
-          }),
+          tryLoginRequest(
+            loginUrl,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(payload),
+            },
+            timeoutMs,
+          ),
       })
     }
   }
@@ -213,9 +225,36 @@ function buildEhrLoginAttempts(
  * Valida credenciales de un usuario contra el login EHR (Active Directory corporativo).
  * No guarda token en Config (no interfiere con la cuenta de servicio de sincronización).
  */
-export async function authenticateUserViaEhr(username: string, password: string): Promise<void> {
+export type EhrUserLoginOptions = {
+  /** Timeout por intento (login de usuario en pantalla). */
+  timeoutMs?: number
+  /** Solo formato EHR RCJ (UserName/Password) — más rápido en login. */
+  singleFormat?: boolean
+}
+
+export async function authenticateUserViaEhr(
+  username: string,
+  password: string,
+  opts?: EhrUserLoginOptions,
+): Promise<void> {
   const loginUrl = await resolveEhrLoginUrl()
-  const attempts = buildEhrLoginAttempts(loginUrl, username, password)
+  const timeoutMs = opts?.timeoutMs ?? 25_000
+  const attempts = opts?.singleFormat
+    ? [
+        {
+          run: () =>
+            tryLoginRequest(
+              loginUrl,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ UserName: username, Password: password }),
+              },
+              timeoutMs,
+            ),
+        },
+      ]
+    : buildEhrLoginAttempts(loginUrl, username, password, timeoutMs)
   let lastErr: Error | null = null
 
   for (const att of attempts) {
@@ -233,9 +272,10 @@ export async function authenticateUserViaEhr(username: string, password: string)
 async function tryLoginRequest(
   url: string,
   init: RequestInit,
+  timeoutMs = 25_000,
 ): Promise<{ token: string; expiresInSec?: number } | null> {
   const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 25_000)
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const r = await fetch(url, { ...init, signal: ctrl.signal })
     const text = await r.text()
@@ -266,6 +306,11 @@ async function tryLoginRequest(
       }
     }
     throw new Error('La respuesta de login no incluyó un token reconocible.')
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Active Directory no respondió a tiempo. Intenta de nuevo.')
+    }
+    throw e
   } finally {
     clearTimeout(t)
   }

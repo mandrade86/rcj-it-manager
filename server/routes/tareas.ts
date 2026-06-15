@@ -14,7 +14,7 @@ import {
   estadoDesdeColumnaKanban,
   porcentajeParaColumnaKanban,
 } from '../utils/tareaKanban.js'
-import { usuarioPuedeMoverTarea } from '../utils/tareaPermisos.js'
+import { usuarioPuedeMoverTarea, usuarioPuedeEditarTareasProyecto } from '../utils/tareaPermisos.js'
 import {
   limpiarDependenciasRotas,
   validarDependenciasTarea,
@@ -163,6 +163,10 @@ tareasRouter.post('/', async (req, res, next) => {
       res.status(400).json({ error: 'proyecto_id es obligatorio' })
       return
     }
+    if (!(await usuarioPuedeEditarTareasProyecto(req, req.body.proyecto_id))) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+      return
+    }
     const body = { ...req.body } as Record<string, unknown>
     // KPI/fuente_medicion ya no aplican a nivel de tarea
     delete body.kpi
@@ -215,6 +219,10 @@ tareasRouter.post('/importar-excel', (req, res, next) => {
       } | null
       if (!proyecto) {
         res.status(404).json({ error: 'Proyecto no encontrado' })
+        return
+      }
+      if (!(await usuarioPuedeEditarTareasProyecto(req, proyectoId))) {
+        res.status(403).json({ error: 'Solo lectura en este proyecto' })
         return
       }
 
@@ -460,6 +468,14 @@ tareasRouter.post('/eliminar-lote', async (req, res, next) => {
     const eliminarIds = tareas.map((t) => String(t._id))
     const omitidos = ids.filter((id) => !eliminarIds.includes(id))
 
+    const proyectosAfectados = [...new Set(tareas.map((t) => t.proyecto_id))]
+    for (const pid of proyectosAfectados) {
+      if (!(await usuarioPuedeEditarTareasProyecto(req, pid))) {
+        res.status(403).json({ error: 'Solo lectura en uno o más proyectos del lote' })
+        return
+      }
+    }
+
     for (const t of tareas) {
       eliminarAdjuntosFisicos(t.adjuntos)
     }
@@ -467,7 +483,6 @@ tareasRouter.post('/eliminar-lote', async (req, res, next) => {
       await Tarea.deleteMany({ _id: { $in: eliminarIds } })
     }
 
-    const proyectosAfectados = [...new Set(tareas.map((t) => t.proyecto_id))]
     for (const pid of proyectosAfectados) {
       await limpiarDependenciasRotas(pid, eliminarIds)
       await recalcularAvanceProyecto(pid)
@@ -549,6 +564,10 @@ tareasRouter.put('/:id', async (req, res, next) => {
       res.status(404).json({ error: 'Tarea no encontrada' })
       return
     }
+    if (!(await usuarioPuedeEditarTareasProyecto(req, prev.proyecto_id))) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+      return
+    }
     const {
       __v, createdAt, updatedAt, _id,
       kpi: _kpi, fuente_medicion: _fuenteMed,
@@ -596,6 +615,10 @@ tareasRouter.delete('/:id', async (req, res, next) => {
     } | null
     if (!prev) {
       res.status(404).json({ error: 'Tarea no encontrada' })
+      return
+    }
+    if (!(await usuarioPuedeEditarTareasProyecto(req, prev.proyecto_id))) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
       return
     }
     eliminarAdjuntosFisicos(prev.adjuntos)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, Edit2, Key, Plus, Search, Shield, Trash2, User as UserIcon, X } from 'lucide-react'
+import { BadgeCheck, Edit2, Key, Plus, Search, Trash2, User as UserIcon, X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,8 @@ import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
 import { usePagination } from '@/hooks/usePagination'
 import { useMaestroList } from '@/hooks/useMaestroList'
 import { compareStrings, type MaestroSortDir } from '@/lib/maestroList'
-import { fetchAuthLoginConfig, type AuthLoginConfig } from '@/lib/api/auth'
+import { isApiRequestError } from '@/lib/api/errors'
+import { fetchAuthLoginConfig } from '@/lib/api/auth'
 import {
   createUsuario, deleteUsuario, fetchUsuarios, resetPasswordUsuario, updateUsuario,
 } from '@/lib/api/usuarios'
@@ -36,7 +37,7 @@ import type { RolDoc } from '@/types/rol'
 import type { UsuarioDoc } from '@/types/usuario'
 import {
   deptFromUsuario, empleadoFromUsuario, empleadoIdFromUsuario,
-  empleadoIdsFromUsuario, empleadosFromUsuario, rolFromUsuario,
+  empleadoIdsFromUsuario, empleadosFromUsuario, loginDisplayFromUsuario, rolFromUsuario,
 } from '@/types/usuario'
 
 const selectClass =
@@ -45,6 +46,8 @@ const selectClass =
 type FormState = {
   nombre: string
   email: string
+  login_dominio: string
+  es_usuario_dominio: boolean
   password: string
   rol_id: string
   empleado_id: string
@@ -55,7 +58,7 @@ type FormState = {
 
 function emptyForm(): FormState {
   return {
-    nombre: '', email: '', password: '', rol_id: '',
+    nombre: '', email: '', login_dominio: '', es_usuario_dominio: false, password: '', rol_id: '',
     empleado_id: '', departamento_id: '', empleados_ids: [], activo: true,
   }
 }
@@ -63,9 +66,12 @@ function emptyForm(): FormState {
 function fromDoc(u: UsuarioDoc): FormState {
   const rol = rolFromUsuario(u)
   const dept = deptFromUsuario(u)
+  const esDominio = Boolean(u.es_usuario_dominio)
   return {
     nombre: u.nombre,
     email: u.email,
+    login_dominio: esDominio ? (u.login_dominio || u.email.split('@')[0] || '') : '',
+    es_usuario_dominio: esDominio,
     password: '',
     rol_id: rol?._id ?? (typeof u.rol_id === 'string' ? u.rol_id : ''),
     empleado_id: empleadoIdFromUsuario(u) ?? '',
@@ -73,6 +79,59 @@ function fromDoc(u: UsuarioDoc): FormState {
     empleados_ids: empleadoIdsFromUsuario(u),
     activo: u.activo ?? true,
   }
+}
+
+type FormField = 'nombre' | 'email' | 'login_dominio' | 'password' | 'rol_id' | 'empleado_id' | '_form'
+type FormErrors = Partial<Record<FormField, string>>
+
+function normalizeDomainInput(raw: string): string {
+  return raw.trim().replace(/^(?:RCJ\\|rcj\\)/i, '').split('@')[0]?.trim() ?? ''
+}
+
+function validateUsuarioForm(
+  form: FormState,
+  editing: boolean,
+  empleadosTaken?: Map<string, string>,
+  platformLogin = true,
+): FormErrors {
+  const errors: FormErrors = {}
+  if (!form.nombre.trim()) errors.nombre = 'Indica el nombre completo del usuario.'
+  if (!form.rol_id) errors.rol_id = 'Selecciona un rol para el usuario.'
+
+  if (!editing) {
+    const email = form.email.trim().toLowerCase()
+    if (!email) errors.email = 'Indica el correo electrónico corporativo.'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Formato inválido (ej. nombre.apellido@rcjcorp.com).'
+    }
+    if (form.es_usuario_dominio) {
+      const login = normalizeDomainInput(form.login_dominio).toLowerCase()
+      if (!login) {
+        errors.login_dominio = 'Escribe el usuario de dominio (ej. nombre.apellido).'
+      } else if (login.includes('@')) {
+        errors.login_dominio = 'Quita el @ y el dominio; solo el nombre de usuario.'
+      } else if (!/^[a-z0-9._-]+$/.test(login)) {
+        errors.login_dominio = 'Solo letras, números, punto, guion o guion bajo.'
+      }
+    }
+    const pwd = form.password.trim()
+    if (platformLogin && !form.es_usuario_dominio && pwd.length < 8) {
+      errors.password = 'La contraseña es obligatoria (mínimo 8 caracteres).'
+    } else if (pwd.length > 0 && pwd.length < 8) {
+      errors.password = 'La contraseña debe tener al menos 8 caracteres.'
+    }
+  }
+
+  if (form.empleado_id && empleadosTaken?.has(form.empleado_id)) {
+    errors.empleado_id = `Ese empleado ya está vinculado al usuario «${empleadosTaken.get(form.empleado_id)}».`
+  }
+
+  return errors
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null
+  return <p className="text-xs text-destructive">{message}</p>
 }
 
 // ─── Selector único de empleado (identidad del usuario) ────────────────────
@@ -291,7 +350,7 @@ function compareUsuarios(a: UsuarioDoc, b: UsuarioDoc, sortKey: string, dir: Mae
   const deptB = deptFromUsuario(b)?.nombre ?? ''
   switch (sortKey) {
     case 'email':
-      return compareStrings(a.email, b.email, dir)
+      return compareStrings(loginDisplayFromUsuario(a), loginDisplayFromUsuario(b), dir)
     case 'rol':
       return compareStrings(rolA, rolB, dir)
     case 'departamento':
@@ -313,11 +372,11 @@ export function UsuariosPage() {
   const [editing, setEditing] = useState<UsuarioDoc | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
+  const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [deleteTarget, setDeleteTarget] = useState<UsuarioDoc | null>(null)
   const [resetTarget, setResetTarget] = useState<UsuarioDoc | null>(null)
   const [newPwd, setNewPwd] = useState('')
-  const [authConfig, setAuthConfig] = useState<AuthLoginConfig | null>(null)
-
+  const [platformLogin, setPlatformLogin] = useState(true)
   const reload = useCallback(async () => {
     setLoading(true); setErr(null)
     try {
@@ -335,7 +394,9 @@ export function UsuariosPage() {
   useEffect(() => { void reload() }, [reload])
 
   useEffect(() => {
-    fetchAuthLoginConfig().then(setAuthConfig).catch(() => null)
+    void fetchAuthLoginConfig()
+      .then((c) => setPlatformLogin(c.platformLogin !== false && c.activeDirectory !== true))
+      .catch(() => setPlatformLogin(true))
   }, [])
 
   const maestro = useMaestroList({
@@ -346,7 +407,7 @@ export function UsuariosPage() {
       const rol = rolFromUsuario(u)
       const dept = deptFromUsuario(u)
       const emp = empleadoFromUsuario(u)
-      return [u.nombre, u.email, rol?.nombre, dept?.nombre, emp?.codigo, emp?.nombre]
+      return [u.nombre, u.email, u.login_dominio, loginDisplayFromUsuario(u), rol?.nombre, dept?.nombre, emp?.codigo, emp?.nombre]
     },
     compare: compareUsuarios,
   })
@@ -366,27 +427,46 @@ export function UsuariosPage() {
     onAfterDelete: reload,
   })
 
-  function openNew() { setEditing(null); setForm(emptyForm()); setOpen(true) }
-  function openEdit(d: UsuarioDoc) { setEditing(d); setForm(fromDoc(d)); setOpen(true) }
+  function openNew() { setEditing(null); setForm(emptyForm()); setFormErrors({}); setOpen(true) }
+  function openEdit(d: UsuarioDoc) { setEditing(d); setForm(fromDoc(d)); setFormErrors({}); setOpen(true) }
   function setF<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }))
+    setFormErrors((errs) => {
+      const field = k as FormField
+      if (!errs[field] && !errs._form) return errs
+      const next = { ...errs }
+      delete next[field]
+      delete next._form
+      return next
+    })
   }
 
   useEffect(() => {
     if (editing || !form.empleado_id) return
     const emp = empleados.find((e) => e._id === form.empleado_id)
     const mail = emp?.email?.trim().toLowerCase()
-    if (mail) {
-      setForm((f) => (f.email.toLowerCase() === mail ? f : { ...f, email: mail }))
-    }
-  }, [form.empleado_id, empleados, editing])
+    if (!mail) return
+    const userDom = mail.split('@')[0] ?? ''
+    setForm((f) => {
+      const next = { ...f, email: mail }
+      if (f.es_usuario_dominio && userDom) next.login_dominio = userDom
+      if (f.email === mail && (!f.es_usuario_dominio || f.login_dominio === userDom)) return f
+      return next
+    })
+  }, [form.empleado_id, empleados, editing, form.es_usuario_dominio])
 
   async function handleSave(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true)
+    e.preventDefault()
+    const localErrors = validateUsuarioForm(form, Boolean(editing), empleadosTakenByOther, platformLogin)
+    if (Object.keys(localErrors).length > 0) {
+      setFormErrors(localErrors)
+      return
+    }
+    setFormErrors({})
+    setSaving(true)
     try {
       const payload = {
-        nombre: form.nombre,
-        email: form.email,
+        nombre: form.nombre.trim(),
         rol_id: form.rol_id,
         empleado_id: form.empleado_id || null,
         departamento_id: form.departamento_id || null,
@@ -396,22 +476,43 @@ export function UsuariosPage() {
       if (editing) {
         await updateUsuario(editing._id, payload)
       } else {
-        if (form.password.length > 0 && form.password.length < 6) {
-          throw new Error('Si defines contraseña local, debe tener al menos 6 caracteres')
+        const pwd = form.password.trim()
+        const email = form.email.trim().toLowerCase()
+        if (form.es_usuario_dominio) {
+          const login = normalizeDomainInput(form.login_dominio).toLowerCase()
+          await createUsuario({
+            ...payload,
+            email,
+            es_usuario_dominio: true,
+            login_dominio: login,
+            ...(pwd ? { password: pwd } : {}),
+          })
+        } else {
+          await createUsuario({
+            ...payload,
+            email,
+            ...(pwd ? { password: pwd } : {}),
+          })
         }
-        await createUsuario({
-          ...payload,
-          ...(form.password.trim() ? { password: form.password } : {}),
-        })
       }
       setOpen(false)
       await reload()
     } catch (ex) {
-      const msg = ex instanceof Error ? ex.message : 'Error'
-      if (msg.includes('502') || msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED')) {
-        window.alert('No se pudo contactar al servidor. Espera unos segundos (reinicio del API) e intenta de nuevo.')
+      if (isApiRequestError(ex)) {
+        if (ex.field && ex.field in { nombre: 1, email: 1, login_dominio: 1, password: 1, rol_id: 1, empleado_id: 1 }) {
+          setFormErrors({ [ex.field as FormField]: ex.message })
+        } else {
+          setFormErrors({ _form: ex.message })
+        }
       } else {
-        window.alert(msg)
+        const msg = ex instanceof Error ? ex.message : 'No se pudo guardar el usuario.'
+        if (msg.includes('502') || msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED')) {
+          setFormErrors({
+            _form: 'No se pudo contactar al servidor. Espera unos segundos (reinicio del API) e intenta de nuevo.',
+          })
+        } else {
+          setFormErrors({ _form: msg })
+        }
       }
     }
     finally { setSaving(false) }
@@ -438,7 +539,7 @@ export function UsuariosPage() {
 
   async function handleResetPwd() {
     if (!resetTarget) return
-    if (newPwd.length < 6) { window.alert('La contraseña debe tener al menos 6 caracteres'); return }
+    if (newPwd.length < 8) { window.alert('La contraseña debe tener al menos 8 caracteres'); return }
     try {
       await resetPasswordUsuario(resetTarget._id, newPwd)
       setResetTarget(null); setNewPwd('')
@@ -505,7 +606,7 @@ export function UsuariosPage() {
                   />
                   <TableHead className="w-8" />
                   <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="email" label="Email" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                  <MaestroSortableHead column="email" label="Login / Email" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                   <MaestroSortableHead column="rol" label="Rol" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                   <TableHead>Empleado</TableHead>
                   <MaestroSortableHead column="departamento" label="Departamento" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -531,7 +632,17 @@ export function UsuariosPage() {
                       />
                       <TableCell><UserIcon className="size-4 text-muted-foreground" /></TableCell>
                       <TableCell className="font-medium">{u.nombre}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <span>{u.email}</span>
+                        {u.es_usuario_dominio && u.login_dominio && (
+                          <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground/80">
+                            AD: {u.login_dominio}
+                          </span>
+                        )}
+                        {u.es_usuario_dominio && (
+                          <Badge variant="outline" className="ml-1.5 text-[10px]">Dominio</Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{rol ? <Badge variant="secondary">{rol.nombre}</Badge> : '—'}</TableCell>
                       <TableCell>
                         {empSelf ? (
@@ -572,9 +683,11 @@ export function UsuariosPage() {
                         {u.ultimo_acceso ? formatDateDMY(u.ultimo_acceso) : 'Nunca'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={u.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                          {u.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary" className={u.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
+                            {u.activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -619,71 +732,133 @@ export function UsuariosPage() {
           <form
             onSubmit={(e) => void handleSave(e)}
             className="space-y-4"
+            noValidate
             autoComplete="off"
             data-1p-ignore
             data-lpignore="true"
             data-bwignore
           >
-            {!editing && authConfig?.activeDirectory !== false && (
-              <div className="rounded-md border border-[var(--lime)]/50 bg-[var(--lime-lt)] p-4">
-                <div className="mb-2 flex items-center gap-2 text-[var(--navy)]">
-                  <Shield className="size-4 shrink-0" />
-                  <span className="text-sm font-semibold">Acceso con Active Directory</span>
-                </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  El usuario iniciará sesión con su <strong>usuario y contraseña de dominio</strong>{' '}
-                  ({authConfig?.providerLabel ?? 'Active Directory RCJ'}). El correo debe ser el mismo
-                  que en AD, por ejemplo <code className="rounded bg-white/80 px-1">{authConfig?.usernameHint ?? 'usuario@rcjcorp.com'}</code>.
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  La contraseña local es <strong>opcional</strong>: déjala vacía para que solo use AD.
-                </p>
+            {formErrors._form && (
+              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {formErrors._form}
+              </div>
+            )}
+            {!editing && (
+              <div className="rounded-md border border-[var(--lime)]/50 bg-[var(--lime-lt)] p-4 text-xs text-muted-foreground">
+                {platformLogin ? (
+                  <>
+                    El <strong>correo</strong> y la <strong>contraseña</strong> (mín. 8 caracteres) son
+                    obligatorios para el acceso al portal IT Manager.
+                  </>
+                ) : (
+                  <>
+                    El <strong>correo</strong> siempre es obligatorio. Marca <strong>Usuario de dominio</strong> si el
+                    login de AD es distinto. La contraseña local es opcional si usan Active Directory.
+                  </>
+                )}
               </div>
             )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2 sm:col-span-2">
                 <Label>Nombre completo <span className="text-destructive">*</span></Label>
-                <Input required value={form.nombre} onChange={(e) => setF('nombre', e.target.value)} />
-              </div>
-              <div className="grid gap-2 sm:col-span-2">
-                <Label>Correo (usuario Active Directory) <span className="text-destructive">*</span></Label>
                 <Input
-                  required
+                  value={form.nombre}
+                  onChange={(e) => setF('nombre', e.target.value)}
+                  className={cn(formErrors.nombre && 'border-destructive')}
+                  aria-invalid={Boolean(formErrors.nombre)}
+                />
+                <FieldError message={formErrors.nombre} />
+              </div>
+              {!editing && !platformLogin && (
+                <div className="flex items-center gap-2 sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    id="us-dominio"
+                    className="size-4 accent-[var(--lime)]"
+                    checked={form.es_usuario_dominio}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setF('es_usuario_dominio', checked)
+                      if (checked && !form.login_dominio.trim() && form.email.includes('@')) {
+                        setF('login_dominio', form.email.split('@')[0] ?? '')
+                      }
+                    }}
+                  />
+                  <Label htmlFor="us-dominio">Usuario de dominio (login AD sin @)</Label>
+                </div>
+              )}
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Correo electrónico <span className="text-destructive">*</span></Label>
+                <Input
                   type="email"
                   value={form.email}
                   onChange={(e) => setF('email', e.target.value)}
                   disabled={Boolean(editing)}
-                  placeholder={authConfig?.usernameHint ?? 'nombre.apellido@rcjcorp.com'}
+                  placeholder="nombre.apellido@grupoc.com"
+                  className={cn(formErrors.email && 'border-destructive')}
+                  aria-invalid={Boolean(formErrors.email)}
                 />
+                <FieldError message={formErrors.email} />
                 {!editing && (
                   <p className="text-xs text-muted-foreground">
-                    Se completa automáticamente al vincular un empleado con correo en el maestro.
+                    Correo con el que el usuario iniciará sesión en IT Manager.
                   </p>
                 )}
               </div>
+              {form.es_usuario_dominio && (
+                <div className="grid gap-2 sm:col-span-2">
+                  <Label>Usuario de dominio <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="text"
+                    value={form.login_dominio}
+                    onChange={(e) => setF('login_dominio', e.target.value)}
+                    disabled={Boolean(editing)}
+                    placeholder="nombre.apellido"
+                    className={cn('font-mono', formErrors.login_dominio && 'border-destructive')}
+                    autoComplete="off"
+                    aria-invalid={Boolean(formErrors.login_dominio)}
+                  />
+                  <FieldError message={formErrors.login_dominio} />
+                  <p className="text-xs text-muted-foreground">
+                    {editing
+                      ? 'El login de dominio no se puede cambiar después de crear el usuario.'
+                      : <>Solo el nombre de usuario, sin <code>@rcjcorp.com</code>. También acepta <code>RCJ\usuario</code>.</>}
+                  </p>
+                </div>
+              )}
               {!editing && (
                 <div className="grid gap-2 sm:col-span-2">
-                  <Label>Contraseña local (opcional)</Label>
+                  <Label>
+                    Contraseña
+                    {platformLogin && !form.es_usuario_dominio && (
+                      <span className="text-destructive"> *</span>
+                    )}
+                  </Label>
                   <Input
                     type="password"
-                    minLength={form.password ? 6 : undefined}
                     value={form.password}
                     onChange={(e) => setF('password', e.target.value)}
-                    placeholder="Vacío = solo Active Directory"
+                    placeholder={platformLogin ? 'Mínimo 8 caracteres' : 'Opcional si usa Active Directory'}
                     autoComplete="new-password"
+                    className={cn(formErrors.password && 'border-destructive')}
+                    aria-invalid={Boolean(formErrors.password)}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Solo si necesitas acceso de respaldo sin AD. En producción normalmente se deja vacío.
-                  </p>
+                  <FieldError message={formErrors.password} />
                 </div>
               )}
               <div className="grid gap-2">
                 <Label>Rol <span className="text-destructive">*</span></Label>
-                <select required className={selectClass} value={form.rol_id} onChange={(e) => setF('rol_id', e.target.value)}>
+                <select
+                  className={cn(selectClass, formErrors.rol_id && 'border-destructive')}
+                  value={form.rol_id}
+                  onChange={(e) => setF('rol_id', e.target.value)}
+                  aria-invalid={Boolean(formErrors.rol_id)}
+                >
                   <option value="">— Selecciona un rol —</option>
                   {roles.filter((r) => r.activo).map((r) => <option key={r._id} value={r._id}>{r.nombre}</option>)}
                 </select>
+                <FieldError message={formErrors.rol_id} />
               </div>
               <div className="grid gap-2">
                 <Label>Departamento</Label>
@@ -718,6 +893,7 @@ export function UsuariosPage() {
                 onChange={(v) => setF('empleado_id', v)}
                 takenByOther={empleadosTakenByOther}
               />
+              <FieldError message={formErrors.empleado_id} />
             </div>
 
             <div className="grid gap-2 border-t pt-4">
@@ -753,7 +929,7 @@ export function UsuariosPage() {
           </p>
           <div className="grid gap-2">
             <Label>Nueva contraseña</Label>
-            <Input type="password" minLength={6} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="Mínimo 6 caracteres" />
+            <Input type="password" minLength={8} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="Mínimo 8 caracteres" />
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => { setResetTarget(null); setNewPwd('') }}>Cancelar</Button>

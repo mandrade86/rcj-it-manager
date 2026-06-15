@@ -319,7 +319,7 @@ Luego entrega un informe estructurado (ver formato abajo).
 
 - API: `http://localhost:3001` (dev) o URL del portal corporativo
 - MongoDB en Docker: `mongodb://mongo:27017/rcj_it_manager` (contenedor)
-- Auth: AD/EHR según `.env.production` (`AUTH_AD_ENABLED`, `EHR_LOGIN_URL`)
+- Auth: correo + contraseña local; MFA TOTP opcional (`MFA_ISSUER`). EHR solo para sync empleados (`EHR_LOGIN_URL`).
 
 ---
 

@@ -1,4 +1,4 @@
-import { Building2, Globe, User, UsersRound } from 'lucide-react'
+import { Building2, Globe, User, UserCheck, UsersRound } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -7,7 +7,7 @@ import type { ProyectoAlcance } from '@/store/proyectosStore'
 type Props = {
   alcance: ProyectoAlcance
   onAlcanceChange: (v: ProyectoAlcance) => void
-  cuentas: { mias: number; equipo: number; depto: number; total: number }
+  cuentas: { mias: number; equipo: number; depto: number; participo: number; total: number }
   puedeVerTodos: boolean
   miDepartamentoId: string | null
   contextLine: React.ReactNode
@@ -22,6 +22,12 @@ const items: {
 }[] = [
   { id: 'mis', label: 'Mis proyectos', icon: User, countKey: 'mias' },
   { id: 'equipo', label: 'Mi equipo', icon: UsersRound, countKey: 'equipo' },
+  {
+    id: 'participo',
+    label: 'Donde participo',
+    icon: UserCheck,
+    countKey: 'participo',
+  },
   {
     id: 'depto',
     label: 'Mi departamento',

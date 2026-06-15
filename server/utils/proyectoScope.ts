@@ -78,7 +78,14 @@ export async function buildProyectoScopeFilter(
     orConds.push({ departamento_id: { $in: deptIds } })
   }
 
+  orConds.push({ 'participantes.usuario_id': new mongoose.Types.ObjectId(userId) })
+
   return { $or: orConds }
+}
+
+/** Proyectos donde el usuario figura explícitamente como participante. */
+export function buildProyectoParticipoFilter(userId: string): Record<string, unknown> {
+  return { 'participantes.usuario_id': new mongoose.Types.ObjectId(userId) }
 }
 
 /** Proyectos del equipo (sin el propio usuario). */

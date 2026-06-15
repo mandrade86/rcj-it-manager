@@ -31,6 +31,7 @@ import type { DepartamentoDoc } from '@/types/departamento'
 import type { EjeProyectoDoc } from '@/types/ejeProyecto'
 import type { EmpresaDoc } from '@/types/empresa'
 import type { Proyecto } from '@/types/proyecto'
+import { participanteUsuarioId } from '@/types/proyecto'
 import { deptFromUsuario } from '@/types/usuario'
 
 export function ProyectosPage() {
@@ -240,7 +241,12 @@ export function ProyectosPage() {
       return typeof d === 'object' && d != null && d._id === miDepartamentoId
     }).length
     const equipo = alcance === 'equipo' ? list.length : 0
-    return { mias, equipo, depto, total: list.length }
+    const participo = alcance === 'participo'
+      ? list.length
+      : list.filter((p) =>
+        (p.participantes ?? []).some((part) => participanteUsuarioId(part) === user?._id),
+      ).length
+    return { mias, equipo, depto, participo, total: list.length }
   }, [list, user?._id, miDepartamentoId, alcance])
 
   const plantillaQuery = useMemo(() => {
@@ -357,6 +363,9 @@ export function ProyectosPage() {
     }
     if (alcance === 'equipo') {
       return <>Proyectos de tu equipo (subalternos directos e indirectos).</>
+    }
+    if (alcance === 'participo') {
+      return <>Proyectos donde estás incluido como participante (lectura o editor).</>
     }
     if (alcance === 'depto' && !departamentoNombre) {
       return <>Sin departamento asignado en tu perfil.</>

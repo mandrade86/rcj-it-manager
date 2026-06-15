@@ -18,7 +18,7 @@ export async function fetchProyectos(params?: {
   tipo?: string
   usuario_id?: string
   departamento_id?: string
-  scope?: 'equipo'
+  scope?: 'equipo' | 'participo'
   empresa_id?: string
 }): Promise<Proyecto[]> {
   const q = new URLSearchParams()
@@ -160,4 +160,17 @@ export async function descargarPlantillaProyectos(
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+export async function updateProyectoParticipantes(
+  id: string,
+  participantes: Array<{ usuario_id: string; rol: 'editor' | 'lectura' }>,
+): Promise<Proyecto> {
+  const res = await fetch(`/api/proyectos/${encodeURIComponent(id)}/participantes`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ participantes }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<Proyecto>
 }

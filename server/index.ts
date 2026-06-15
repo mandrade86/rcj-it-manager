@@ -20,6 +20,7 @@ import {
   ensureRubricasPorPerfil,
   ensureRubricasPorPuesto,
 } from './db/initData.js'
+import { isAdLoginEnabled } from './utils/ehrAuth.js'
 import { requireAuth } from './middleware/requireAuth.js'
 import { authRouter } from './routes/auth.js'
 import { dashboardRouter } from './routes/dashboard.js'
@@ -59,7 +60,7 @@ const INIT_DATA_ON_START = process.env.INIT_DATA_ON_START === 'true'
 
 const app = express()
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '2mb' }))
 app.use('/api/certificados', express.static(CERTS_DIR))
 app.use('/api/adjuntos-tareas', express.static(ADJUNTOS_TAREAS_DIR))
 
@@ -117,6 +118,10 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
+    if (err instanceof SyntaxError && (err as { status?: number }).status === 400) {
+      res.status(400).json({ error: 'Solicitud inválida. Vuelve a intentar el inicio de sesión.' })
+      return
+    }
     if (err instanceof mongoose.Error.ValidationError) {
       res.status(400).json({ error: 'Error de validación', detalle: err.message })
       return
@@ -130,6 +135,15 @@ app.use(
     res.status(500).json({ error: 'Error interno del servidor' })
   },
 )
+
+function logAuthMode() {
+  const platform = isAdLoginEnabled() ? false : true
+  const ad = isAdLoginEnabled()
+  const fallback = process.env.AUTH_LOCAL_FALLBACK === 'true'
+  console.log(
+    `Auth: ${platform ? 'IT Manager (correo + contraseña local)' : `Active Directory (fallback local=${fallback})`}`,
+  )
+}
 
 async function runStartupTasks() {
   try {
@@ -153,9 +167,16 @@ async function runStartupTasks() {
 }
 
 async function main() {
-  app.listen(PORT, HOST, () => {
+  const server = app.listen(PORT, HOST, () => {
     console.log(`RCJ IT Manager — http://${HOST}:${PORT}`)
+    logAuthMode()
   })
+
+  const shutdown = () => {
+    server.close(() => process.exit(0))
+  }
+  process.once('SIGTERM', shutdown)
+  process.once('SIGINT', shutdown)
 
   void connectDb()
     .then(() => {

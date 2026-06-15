@@ -12,12 +12,29 @@ export default defineConfig({
     },
   },
   server: {
+    host: '127.0.0.1',
     port: 5173,
+    strictPort: false,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:3001',
         changeOrigin: true,
-        timeout: 60_000,
+        timeout: 90_000,
+        proxyTimeout: 90_000,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            console.warn('[vite proxy]', err.message)
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  error:
+                    'API no disponible (502). Ejecuta: npm run dev:clean && npm run dev',
+                }),
+              )
+            }
+          })
+        },
       },
     },
   },
