@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, Building2, Download, Factory, FileUp, GitBranch, History,
+  ArrowLeft, ArrowRight, Building2, Download, Factory, FileUp, GanttChartSquare, GitBranch, History,
   LayoutGrid, List, Lock, Paperclip, Pencil, Plus, Trash2, User, Users,
 } from 'lucide-react'
 
@@ -47,6 +47,7 @@ import { TareaDetalleSheet } from '@/pages/proyectos/TareaDetalleSheet'
 import { TareaFormDialog } from '@/pages/proyectos/TareaFormDialog'
 import { ProyectoParticipantesPanel } from '@/pages/proyectos/ProyectoParticipantesPanel'
 import { TareasPanel } from '@/pages/proyectos/TareasPanel'
+import { TareasMiniGantt } from '@/pages/proyectos/TareasMiniGantt'
 import { useAuthStore } from '@/store/authStore'
 import { useProyectosStore } from '@/store/proyectosStore'
 import type { Proyecto, ProyectoEstado } from '@/types/proyecto'
@@ -570,6 +571,10 @@ export function ProyectoDetailView({
                           <LayoutGrid className="size-3.5" />
                           Canvas
                         </TabsTrigger>
+                        <TabsTrigger value="gantt" className="gap-1.5">
+                          <GanttChartSquare className="size-3.5" />
+                          Gantt
+                        </TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="lista" className="mt-0">
@@ -734,6 +739,14 @@ export function ProyectoDetailView({
                           selectedId={tareaDetalle?._id}
                           onSelect={(t) => setTareaDetalle(t)}
                           onTareaMoved={reload}
+                        />
+                      </TabsContent>
+
+                      <TabsContent value="gantt" className="mt-0">
+                        <TareasMiniGantt
+                          proyecto={proyecto}
+                          tareas={tareas}
+                          onSelect={(t) => setTareaDetalle(t)}
                         />
                       </TabsContent>
                     </Tabs>

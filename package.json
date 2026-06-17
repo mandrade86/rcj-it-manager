@@ -25,7 +25,11 @@
     "departamentos:cargar": "tsx server/scripts/cargarDepartamentos.ts",
     "departamentos:exportar": "tsx server/scripts/exportarDepartamentos.ts",
     "departamentos:importar": "tsx server/scripts/importarDepartamentos.ts",
-    "departamentos:diagnostico": "tsx server/scripts/listarDepartamentos.ts"
+    "departamentos:diagnostico": "tsx server/scripts/listarDepartamentos.ts",
+    "talento:exportar": "tsx server/scripts/exportarTalento.ts",
+    "talento:importar": "tsx server/scripts/importarTalento.ts",
+    "talento:diagnostico": "tsx server/scripts/diagnosticarTalento.ts",
+    "talento:importar:prod": "bash scripts/docker-importar-talento.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
