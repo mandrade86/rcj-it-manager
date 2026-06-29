@@ -35,6 +35,7 @@ export type Tarea = {
   /** Ids de tareas que deben completarse antes (predecesoras). */
   depende_de_ids?: string[]
   comentarios?: TareaComentario[]
+  tags?: string[]
   createdAt?: string
   updatedAt?: string
 }
@@ -48,6 +49,7 @@ export type ReporteSemanalTarea = {
   fecha_inicio?: string | null
   fecha_fin?: string | null
   ultimo_comentario?: string | null
+  tags?: string[]
 }
 
 export type ReporteSemanalProyecto = {

@@ -154,6 +154,7 @@ export async function generarReporteSemanalTareas(opts: {
       fecha_fin?: Date
       updatedAt?: Date
       comentarios?: Array<{ texto: string; createdAt?: Date }>
+      tags?: string[]
     }>
 
   const tareasPorProyecto = new Map<string, typeof tareas>()
@@ -197,6 +198,7 @@ export async function generarReporteSemanalTareas(opts: {
           fecha_inicio: t.fecha_inicio?.toISOString() ?? null,
           fecha_fin: t.fecha_fin?.toISOString() ?? null,
           ultimo_comentario: ultimo || null,
+          tags: t.tags ?? [],
         }
       })
 

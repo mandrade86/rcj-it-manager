@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, Clock, GripVertical, Lock } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
 import { formatDateDMY } from '@/lib/format'
 import { moverTareaKanban } from '@/lib/api/tareas'
 import {
@@ -330,6 +331,7 @@ function KanbanCard({
         <p className="mb-1 truncate text-[10px] text-muted-foreground">
           {tarea.responsable ?? 'Sin responsable'}
         </p>
+        <TareaTagsList tags={tarea.tags} className="mb-1" />
         <p className={cn('text-[10px]', salud !== 'ok' ? 'text-red-800/90' : 'text-muted-foreground')}>
           {tarea.fecha_fin ? `Fin ${formatDateDMY(tarea.fecha_fin)}` : 'Sin fecha fin'}
           {' · '}{tarea.porcentaje}%

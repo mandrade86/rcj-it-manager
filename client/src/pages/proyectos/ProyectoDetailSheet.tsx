@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
+import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -662,6 +663,7 @@ export function ProyectoDetailView({
                                 </span>
                               )}
                             </p>
+                            <TareaTagsList tags={t.tags} className="mt-1.5" />
                             {depN > 0 && (
                               <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
                                 <GitBranch className="size-3 shrink-0" />

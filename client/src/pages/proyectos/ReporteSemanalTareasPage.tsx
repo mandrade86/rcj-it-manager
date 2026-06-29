@@ -3,6 +3,7 @@ import { CalendarRange, FileText, FolderKanban, Printer } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -301,6 +302,7 @@ export function ReporteSemanalTareasPage() {
                         <TableHead>Estado</TableHead>
                         <TableHead className="text-right">%</TableHead>
                         <TableHead>Fin</TableHead>
+                        <TableHead className="hidden md:table-cell">Tags</TableHead>
                         <TableHead className="hidden lg:table-cell">Último comentario</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -326,6 +328,9 @@ export function ReporteSemanalTareasPage() {
                             </div>
                           </TableCell>
                           <TableCell>{formatDateDMY(t.fecha_fin)}</TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <TareaTagsList tags={t.tags} />
+                          </TableCell>
                           <TableCell className="hidden max-w-xs truncate text-xs text-muted-foreground lg:table-cell">
                             {t.ultimo_comentario ?? '—'}
                           </TableCell>

@@ -52,6 +52,8 @@ const TareaSchema = new Schema(
     },
     /** Comentarios de seguimiento (bitácora de la tarea). */
     comentarios: { type: [ComentarioTareaSchema], default: [] },
+    /** Etiquetas libres para clasificar y filtrar tareas. */
+    tags: { type: [String], default: [] },
   },
   { timestamps: true },
 )

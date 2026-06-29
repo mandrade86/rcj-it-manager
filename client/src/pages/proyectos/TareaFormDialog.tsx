@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { EmpleadoSearchSelect } from '@/components/empleados/EmpleadoSearchSelect'
+import { TareaTagsInput } from '@/components/proyectos/TareaTagsInput'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchEmpleados } from '@/lib/api/empleados'
+import { collectTagsFromTareas } from '@/lib/tareaTags'
 import type { EmpleadoDoc } from '@/types/empleado'
 import type { Tarea, TareaEstado } from '@/types/tarea'
 
@@ -29,6 +31,7 @@ type FormState = {
   estado: TareaEstado
   porcentaje: string
   depende_de_ids: string[]
+  tags: string[]
 }
 
 function emptyForm(): FormState {
@@ -42,6 +45,7 @@ function emptyForm(): FormState {
     estado: 'Pendiente',
     porcentaje: '0',
     depende_de_ids: [],
+    tags: [],
   }
 }
 
@@ -56,6 +60,7 @@ function fromTarea(t: Tarea): FormState {
     estado: t.estado,
     porcentaje: String(t.porcentaje ?? 0),
     depende_de_ids: [...(t.depende_de_ids ?? [])],
+    tags: [...(t.tags ?? [])],
   }
 }
 
@@ -90,6 +95,11 @@ export function TareaFormDialog({
       .filter((t) => t._id !== editing?._id)
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
     [tareasProyecto, editing?._id],
+  )
+
+  const tagSugerencias = useMemo(
+    () => collectTagsFromTareas(tareasProyecto),
+    [tareasProyecto],
   )
 
   function toggleDependencia(id: string) {
@@ -153,6 +163,7 @@ export function TareaFormDialog({
         porcentaje: Number(form.porcentaje) || 0,
         eje: proyectoEje,
         depende_de_ids: form.depende_de_ids,
+        tags: form.tags,
       }
       if (form.fecha_inicio.trim()) {
         o.fecha_inicio = new Date(`${form.fecha_inicio.trim()}T12:00:00`)
@@ -210,6 +221,12 @@ export function TareaFormDialog({
               Escribe para buscar en el directorio de empleados o deja un nombre manual.
             </p>
           </div>
+          <TareaTagsInput
+            id="t-tags"
+            value={form.tags}
+            onChange={(tags) => setForm((s) => ({ ...s, tags }))}
+            suggestions={tagSugerencias}
+          />
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
             <div className="grid gap-2">
               <Label htmlFor="t-fi">Inicio</Label>

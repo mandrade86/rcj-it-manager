@@ -3,6 +3,7 @@ import { GitBranch, Lock, MessageSquare, Pencil, Paperclip, Send } from 'lucide-
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
@@ -100,6 +101,8 @@ export function TareaDetalleSheet({
               </Badge>
             )}
           </div>
+
+          <TareaTagsList tags={tarea.tags} className="mt-1" />
 
           {salud !== 'ok' && (
             <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">

@@ -24,6 +24,7 @@ import {
   uploadAdjuntoTarea,
 } from '../utils/multerAdjuntosTareas.js'
 import { generarReporteSemanalTareas } from '../utils/reporteSemanalTareas.js'
+import { normalizeTareaTags, parseTagsFromExcel } from '../utils/tareaTags.js'
 
 export const tareasRouter = Router()
 
@@ -117,6 +118,7 @@ function rowToTarea(row: Record<string, unknown>, proyectoId: string, proyectoEj
       estado: parseEstado(getCell(row, ['estado', 'estatus', 'status']), porcentaje),
       porcentaje,
       eje: text(row, ['eje', 'categoria', 'categoría']) || proyectoEje || undefined,
+      tags: parseTagsFromExcel(getCell(row, ['tags', 'tag', 'etiquetas', 'etiqueta', 'labels'])),
     },
   }
 }
@@ -218,6 +220,9 @@ tareasRouter.post('/', async (req, res, next) => {
         return
       }
       body.depende_de_ids = v.ids
+    }
+    if ('tags' in body) {
+      body.tags = normalizeTareaTags(body.tags)
     }
     const doc = await Tarea.create(body)
     await recalcularAvanceProyecto(req.body.proyecto_id)
@@ -344,6 +349,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
       'Estado',
       '% avance',
       'Eje',
+      'Tags',
     ] as const
 
     function toIsoDate(d: Date | string | null | undefined): string {
@@ -380,6 +386,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
             estado?: string
             porcentaje?: number
             eje?: string
+            tags?: string[]
           }>
         for (const t of tareas) {
           rowsData.push({
@@ -392,6 +399,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
             Estado: t.estado ?? 'Pendiente',
             '% avance': t.porcentaje ?? 0,
             Eje: t.eje ?? '',
+            Tags: (t.tags ?? []).join(', '),
           })
         }
       }
@@ -408,6 +416,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
         Estado: 'En progreso',
         '% avance': 25,
         Eje: proyectoEje || 'Seguridad',
+        Tags: 'urgente, seguridad',
       })
     }
 
@@ -415,7 +424,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
     const ws = xlsx.utils.json_to_sheet(rowsData, { header: [...COLS] })
     ;(ws as { '!cols'?: { wch: number }[] })['!cols'] = [
       { wch: 26 }, { wch: 38 }, { wch: 40 }, { wch: 22 }, { wch: 12 },
-      { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 18 },
+      { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 24 },
     ]
     xlsx.utils.book_append_sheet(wb, ws, 'Tareas')
 
@@ -442,6 +451,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
       ['Estado', 'Pendiente | En progreso | Completado | Bloqueado.'],
       ['% avance', 'Número entero 0-100. Si es 100, el estado se asume Completado.'],
       ['Eje', 'Categoría del proyecto. Si va vacío se hereda del proyecto.'],
+      ['Tags', 'Etiquetas separadas por coma (ej. urgente, infra, fase-1).'],
       [],
       ['Nota: El KPI ahora se asocia al proyecto, no a la tarea.'],
     ].filter((r) => r.length > 0)
@@ -619,6 +629,10 @@ tareasRouter.put('/:id', async (req, res, next) => {
         return
       }
       rest.depende_de_ids = v.ids
+    }
+
+    if ('tags' in rest) {
+      rest.tags = normalizeTareaTags(rest.tags)
     }
 
     const doc = await Tarea.findByIdAndUpdate(id, rest, {
