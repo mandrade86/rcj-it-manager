@@ -726,7 +726,7 @@ proyectosRouter.post('/:id/transicion', async (req, res, next) => {
     const scope = await buildScopeFilter(req)
     if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
     const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
-      .select('estado usuario_id participantes')
+      .select('estado usuario_id participantes historial porcentaje_avance')
     if (!doc) {
       res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
       return
@@ -745,11 +745,14 @@ proyectosRouter.post('/:id/transicion', async (req, res, next) => {
     doc.estado = a as (typeof PROYECTO_ESTADOS)[number]
     // Cuando se marca como Completado, fijamos avance al 100%.
     if (a === 'Completado') doc.porcentaje_avance = 100
+    if (!Array.isArray(doc.historial)) doc.historial = []
     doc.historial.push({
       fecha: new Date(),
       de: previo,
       a,
-      usuario_id: new mongoose.Types.ObjectId(u._id),
+      usuario_id: mongoose.isValidObjectId(u._id)
+        ? new mongoose.Types.ObjectId(u._id)
+        : undefined,
       usuario_nombre: u.nombre,
       comentario,
     })
