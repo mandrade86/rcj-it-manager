@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { EmpleadoSearchSelect } from '@/components/empleados/EmpleadoSearchSelect'
 import {
   Dialog,
   DialogContent,
@@ -114,38 +115,28 @@ export function TareaFormDialog({
   }, [])
 
   /** Si el empleado actual (por nombre) no está en la lista activa, lo agregamos
-   * como opción "(actual)" para no perderlo. */
-  const empleadosOrdenados = useMemo(() => {
-    const list = [...empleados].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+   * como opción para no perderlo al buscar. */
+  const empleadosConLegacy = useMemo(() => {
+    const list = [...empleados]
     if (form.responsable && !list.some((e) =>
       String(e._id) === form.responsable_id || e.nombre === form.responsable,
     )) {
       list.unshift({
         _id: `__legacy__:${form.responsable}`,
         codigo: '',
-        nombre: `${form.responsable} (no activo)`,
+        nombre: form.responsable,
         activo: false,
-      })
+      } as EmpleadoDoc)
     }
     return list
   }, [empleados, form.responsable, form.responsable_id])
 
-  function handleResponsableChange(value: string) {
-    if (!value) {
-      setForm((s) => ({ ...s, responsable: '', responsable_id: '' }))
-      return
-    }
-    if (value.startsWith('__legacy__:')) {
-      setForm((s) => ({
-        ...s,
-        responsable: value.slice('__legacy__:'.length),
-        responsable_id: '',
-      }))
-      return
-    }
-    const emp = empleados.find((e) => String(e._id) === value)
-    if (!emp) return
-    setForm((s) => ({ ...s, responsable: emp.nombre, responsable_id: String(emp._id) }))
+  function handleResponsableChange(next: { responsable: string; responsable_id: string }) {
+    setForm((s) => ({
+      ...s,
+      responsable: next.responsable,
+      responsable_id: next.responsable_id,
+    }))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -182,12 +173,6 @@ export function TareaFormDialog({
     }
   }
 
-  const currentResponsableValue = form.responsable_id
-    ? form.responsable_id
-    : form.responsable
-      ? `__legacy__:${form.responsable}`
-      : ''
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -215,24 +200,15 @@ export function TareaFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="t-resp">Responsable</Label>
-            <select
+            <EmpleadoSearchSelect
               id="t-resp"
-              className={selectClass}
-              value={currentResponsableValue}
-              onChange={(e) => handleResponsableChange(e.target.value)}
-            >
-              <option value="">— Sin asignar —</option>
-              {empleadosOrdenados.map((emp) => (
-                <option
-                  key={String(emp._id)}
-                  value={String(emp._id)}
-                  disabled={emp.activo === false && !String(emp._id).startsWith('__legacy__:')}
-                >
-                  {emp.nombre}
-                  {emp.puesto ? ` — ${emp.puesto}` : ''}
-                </option>
-              ))}
-            </select>
+              empleados={empleadosConLegacy.filter((e) => !String(e._id).startsWith('__legacy__:'))}
+              value={{ responsable: form.responsable, responsable_id: form.responsable_id }}
+              onChange={handleResponsableChange}
+            />
+            <p className="text-xs text-muted-foreground">
+              Escribe para buscar en el directorio de empleados o deja un nombre manual.
+            </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
             <div className="grid gap-2">

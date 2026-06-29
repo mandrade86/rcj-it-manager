@@ -11,6 +11,7 @@ const titles: Record<string, string> = {
   '/': 'Dashboard',
   '/resumen-departamento': 'Resumen metas y plan',
   '/proyectos': 'Proyectos',
+  '/proyectos-reporte-semanal': 'Reporte semanal de tareas',
   '/proyectos/roadmap': 'Roadmap de proyectos',
   '/equipo': 'Equipo',
   '/capacitaciones': 'Capacitaciones',

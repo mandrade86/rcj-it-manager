@@ -1,5 +1,5 @@
 import type { KanbanColumna } from '@/lib/tareaKanban'
-import type { Tarea, TareaAdjunto } from '@/types/tarea'
+import type { Tarea, TareaAdjunto, TareaComentario, ReporteSemanalTareas } from '@/types/tarea'
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -154,4 +154,32 @@ export async function deleteAdjuntoTarea(tareaId: string, adjuntoId: string): Pr
 
 export function urlAdjuntoTarea(archivo: string): string {
   return `/api/adjuntos-tareas/${encodeURIComponent(archivo)}`
+}
+
+export async function addComentarioTarea(
+  tareaId: string,
+  texto: string,
+): Promise<TareaComentario> {
+  const res = await fetch(`/api/tareas/${tareaId}/comentarios`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texto }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<TareaComentario>
+}
+
+export async function fetchReporteSemanalTareas(params: {
+  semana: string
+  alcance?: 'todos' | 'proyecto' | 'departamento'
+  proyecto_id?: string
+  departamento_id?: string
+}): Promise<ReporteSemanalTareas> {
+  const q = new URLSearchParams({ semana: params.semana })
+  if (params.alcance) q.set('alcance', params.alcance)
+  if (params.proyecto_id) q.set('proyecto_id', params.proyecto_id)
+  if (params.departamento_id) q.set('departamento_id', params.departamento_id)
+  const res = await fetch(`/api/tareas/reporte-semanal?${q}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ReporteSemanalTareas>
 }

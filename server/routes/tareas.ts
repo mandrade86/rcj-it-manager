@@ -23,6 +23,7 @@ import {
   ADJUNTOS_TAREAS_DIR,
   uploadAdjuntoTarea,
 } from '../utils/multerAdjuntosTareas.js'
+import { generarReporteSemanalTareas } from '../utils/reporteSemanalTareas.js'
 
 export const tareasRouter = Router()
 
@@ -152,6 +153,36 @@ tareasRouter.get('/', async (req, res, next) => {
       .sort({ fecha_fin: 1, nombre: 1 })
       .lean()
     res.json(rows)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Reporte semanal de tareas para gerencia. */
+tareasRouter.get('/reporte-semanal', async (req, res, next) => {
+  try {
+    const semana = typeof req.query.semana === 'string' ? req.query.semana : ''
+    if (!semana) {
+      res.status(400).json({ error: 'Query semana es obligatorio (formato YYYY-Www)' })
+      return
+    }
+    const alcance = typeof req.query.alcance === 'string' ? req.query.alcance : 'todos'
+    const proyecto_id = typeof req.query.proyecto_id === 'string' ? req.query.proyecto_id : undefined
+    const departamento_id = typeof req.query.departamento_id === 'string'
+      ? req.query.departamento_id
+      : undefined
+
+    const result = await generarReporteSemanalTareas({
+      semana,
+      alcance,
+      proyecto_id,
+      departamento_id,
+    })
+    if ('error' in result) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+    res.json(result)
   } catch (err) {
     next(err)
   }
@@ -626,6 +657,43 @@ tareasRouter.delete('/:id', async (req, res, next) => {
     await limpiarDependenciasRotas(prev.proyecto_id, [id])
     await recalcularAvanceProyecto(prev.proyecto_id)
     res.status(204).send()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ============================================================
+ * Comentarios de tareas
+ * ============================================================ */
+
+tareasRouter.post('/:id/comentarios', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({ error: 'Identificador inválido' })
+      return
+    }
+    const texto = String((req.body as { texto?: unknown }).texto ?? '').trim()
+    if (!texto) {
+      res.status(400).json({ error: 'El comentario no puede estar vacío' })
+      return
+    }
+
+    const tarea = await Tarea.findById(id).select('proyecto_id comentarios')
+    if (!tarea) {
+      res.status(404).json({ error: 'Tarea no encontrada' })
+      return
+    }
+
+    const comentario = {
+      texto,
+      autor: req.user?.nombre ?? req.user?.email ?? 'Usuario',
+      autor_id: req.user?._id ?? null,
+    }
+    tarea.comentarios.push(comentario)
+    await tarea.save()
+    const saved = tarea.comentarios[tarea.comentarios.length - 1]
+    res.status(201).json(saved)
   } catch (err) {
     next(err)
   }

@@ -17,6 +17,7 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { ProyectoDetailPage } from '@/pages/proyectos/ProyectoDetailPage'
 import { ProyectoFormPage } from '@/pages/proyectos/ProyectoFormPage'
 import { ProyectosPage } from '@/pages/proyectos/ProyectosPage'
+import { ReporteSemanalTareasPage } from '@/pages/proyectos/ReporteSemanalTareasPage'
 import { DepartamentosPage } from '@/pages/maestros/DepartamentosPage'
 import { MetasPage } from '@/pages/maestros/MetasPage'
 import { EjesProyectoPage } from '@/pages/maestros/EjesProyectoPage'
@@ -44,6 +45,7 @@ export function AppRoutes() {
           <Route path="proyectos/:id/editar" element={<ProyectoFormPage />} />
           <Route path="proyectos/:id" element={<ProyectoDetailPage />} />
           <Route path="proyectos" element={<ProyectosPage />} />
+          <Route path="proyectos-reporte-semanal" element={<ReporteSemanalTareasPage />} />
           <Route path="equipo" element={<EquipoPage />} />
           <Route path="equipo/organigrama" element={<Navigate to="/equipo" replace />} />
           <Route path="mi-evaluacion" element={<MiEvaluacionPage />} />

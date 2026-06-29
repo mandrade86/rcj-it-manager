@@ -16,6 +16,15 @@ const AdjuntoTareaSchema = new Schema(
   { _id: true },
 )
 
+const ComentarioTareaSchema = new Schema(
+  {
+    texto: { type: String, required: true },
+    autor: { type: String, default: '' },
+    autor_id: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
+  },
+  { timestamps: true },
+)
+
 const TareaSchema = new Schema(
   {
     proyecto_id: { type: String, ref: 'Proyecto', required: true },
@@ -41,6 +50,8 @@ const TareaSchema = new Schema(
       type: [{ type: Schema.Types.ObjectId, ref: 'Tarea' }],
       default: [],
     },
+    /** Comentarios de seguimiento (bitácora de la tarea). */
+    comentarios: { type: [ComentarioTareaSchema], default: [] },
   },
   { timestamps: true },
 )

@@ -28,6 +28,7 @@ import {
   fetchAdjuntosTarea,
   fetchTareas,
   importTareasExcel,
+  addComentarioTarea,
   updateTarea,
   uploadAdjuntoTarea,
   urlAdjuntoTarea,
@@ -796,6 +797,13 @@ export function ProyectoDetailView({
           onAdjuntos={(t) => {
             setTareaDetalle(null)
             setAdjuntosTareaId(t._id)
+          }}
+          onAddComentario={async (tareaId, texto) => {
+            await addComentarioTarea(tareaId, texto)
+            const ts = await fetchTareas(proyecto._id)
+            setTareas(ts)
+            const updated = ts.find((x) => x._id === tareaId) ?? null
+            setTareaDetalle(updated)
           }}
         />
       )}

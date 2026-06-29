@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Factory,
+  FileText,
   FolderKanban,
   GraduationCap,
   HelpCircle,
@@ -61,6 +62,7 @@ const operacionNav: NavItemDef[] = [
   { to: '/resumen-departamento', label: 'Resumen metas y plan', icon: BarChart3 },
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
   { to: '/proyectos?vista=roadmap', label: 'Roadmap', icon: Map },
+  { to: '/proyectos-reporte-semanal', label: 'Reporte semanal', icon: FileText },
   { to: '/equipo', label: 'Equipo', icon: Users },
   { to: '/kpis', label: 'KPIs', icon: Target },
 ]

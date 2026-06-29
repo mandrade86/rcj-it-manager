@@ -1,7 +1,9 @@
-import { GitBranch, Lock, Pencil, Paperclip } from 'lucide-react'
+import { useState } from 'react'
+import { GitBranch, Lock, MessageSquare, Pencil, Paperclip, Send } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetContent,
@@ -29,6 +31,7 @@ type Props = {
   onOpenChange: (open: boolean) => void
   onEdit: (t: Tarea) => void
   onAdjuntos: (t: Tarea) => void
+  onAddComentario?: (tareaId: string, texto: string) => Promise<void>
 }
 
 export function TareaDetalleSheet({
@@ -38,7 +41,11 @@ export function TareaDetalleSheet({
   onOpenChange,
   onEdit,
   onAdjuntos,
+  onAddComentario,
 }: Props) {
+  const [nuevoComentario, setNuevoComentario] = useState('')
+  const [enviandoComentario, setEnviandoComentario] = useState(false)
+
   if (!tarea) return null
 
   const mapa = mapaTareas(tareas)
@@ -47,6 +54,23 @@ export function TareaDetalleSheet({
   const depIds = dependeDeIds(tarea)
   const salud = evaluarSaludTarea(tarea, mapa)
   const etiquetaSalud = etiquetaSaludTarea(salud)
+  const comentarios = [...(tarea.comentarios ?? [])].sort(
+    (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+  )
+
+  async function handleEnviarComentario() {
+    const texto = nuevoComentario.trim()
+    if (!texto || !onAddComentario) return
+    setEnviandoComentario(true)
+    try {
+      await onAddComentario(tarea._id, texto)
+      setNuevoComentario('')
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Error al guardar comentario')
+    } finally {
+      setEnviandoComentario(false)
+    }
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -163,6 +187,51 @@ export function TareaDetalleSheet({
               {tarea.adjuntos!.length === 1 ? '' : 's'}
             </p>
           )}
+
+          <section>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
+              <MessageSquare className="size-3.5" />
+              Comentarios
+            </p>
+            {comentarios.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin comentarios aún.</p>
+            ) : (
+              <ul className="max-h-48 space-y-2 overflow-y-auto">
+                {comentarios.map((c) => (
+                  <li
+                    key={c._id}
+                    className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs"
+                  >
+                    <p className="whitespace-pre-wrap leading-relaxed">{c.texto}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      {c.autor || 'Usuario'}
+                      {c.createdAt ? ` · ${formatDateDMY(c.createdAt)}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {onAddComentario && (
+              <div className="mt-3 space-y-2">
+                <Textarea
+                  rows={2}
+                  placeholder="Agregar comentario de seguimiento…"
+                  value={nuevoComentario}
+                  onChange={(e) => setNuevoComentario(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
+                  disabled={enviandoComentario || !nuevoComentario.trim()}
+                  onClick={() => void handleEnviarComentario()}
+                >
+                  <Send className="size-3.5" />
+                  {enviandoComentario ? 'Guardando…' : 'Comentar'}
+                </Button>
+              </div>
+            )}
+          </section>
         </div>
 
         <SheetFooter className="flex-row gap-2 border-t border-border pt-4">
