@@ -48,8 +48,9 @@ export function TareaDetalleSheet({
 
   if (!tarea) return null
 
+  const tareaId = tarea._id
   const mapa = mapaTareas(tareas)
-  const succs = sucesorasDirectas(tarea._id, tareas)
+  const succs = sucesorasDirectas(tareaId, tareas)
   const bloqueada = tareaBloqueadaPorDependencias(tarea, mapa)
   const depIds = dependeDeIds(tarea)
   const salud = evaluarSaludTarea(tarea, mapa)
@@ -63,7 +64,7 @@ export function TareaDetalleSheet({
     if (!texto || !onAddComentario) return
     setEnviandoComentario(true)
     try {
-      await onAddComentario(tarea._id, texto)
+      await onAddComentario(tareaId, texto)
       setNuevoComentario('')
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Error al guardar comentario')
