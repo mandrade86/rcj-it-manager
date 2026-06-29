@@ -9,6 +9,7 @@ import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import {
   descargarPlantillaProyectos,
+  exportarProyectosExcel,
   importProyectosExcel,
 } from '@/lib/api/proyectos'
 import { fetchUsuarios } from '@/lib/api/usuarios'
@@ -393,6 +394,19 @@ export function ProyectosPage() {
             className="hidden"
             onChange={(e) => void handleImportProyectos(e.target.files?.[0])}
           />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() =>
+              void exportarProyectosExcel({ ...plantillaQuery, alcance }).catch((e) =>
+                window.alert(e instanceof Error ? e.message : 'Error al exportar'),
+              )
+            }
+          >
+            <Download className="size-3.5" /> Exportar Excel
+          </Button>
           <Button
             type="button"
             variant="outline"

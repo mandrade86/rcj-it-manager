@@ -79,6 +79,25 @@ export async function descargarPlantillaTareas(proyectoId?: string): Promise<voi
   window.URL.revokeObjectURL(blobUrl)
 }
 
+/** Descarga las tareas del proyecto como Excel de lectura. */
+export async function exportarTareasExcel(proyectoId: string): Promise<void> {
+  const url = `/api/tareas/exportar-excel?proyecto_id=${encodeURIComponent(proyectoId)}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await parseError(res))
+  const cd = res.headers.get('Content-Disposition') ?? ''
+  const match = cd.match(/filename="?([^"]+)"?/i)
+  const filename = match?.[1] ?? 'Tareas.xlsx'
+  const blob = await res.blob()
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(blobUrl)
+}
+
 /** Mueve la tarea a una columna del tablero Kanban (permiso en servidor). */
 export async function moverTareaKanban(id: string, columna: KanbanColumna): Promise<Tarea> {
   const res = await fetch(`/api/tareas/${id}/estado-kanban`, {

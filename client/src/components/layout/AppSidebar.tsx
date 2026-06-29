@@ -33,10 +33,17 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { cumplePermiso } from '@/lib/permisosNav'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
 
-type NavItemDef = { to: string; label: string; icon: LucideIcon; end?: boolean }
+type NavItemDef = {
+  to: string
+  label: string
+  icon: LucideIcon
+  end?: boolean
+  permiso?: string | string[]
+}
 
 type NavGroupDef = {
   id: string
@@ -56,32 +63,38 @@ const dashboardNav: NavItemDef = {
   label: 'Dashboard',
   icon: LayoutDashboard,
   end: true,
+  permiso: 'dashboard:ver',
 }
 
 const operacionNav: NavItemDef[] = [
-  { to: '/resumen-departamento', label: 'Resumen metas y plan', icon: BarChart3 },
-  { to: '/proyectos', label: 'Proyectos', icon: FolderKanban },
-  { to: '/proyectos?vista=roadmap', label: 'Roadmap', icon: Map },
-  { to: '/proyectos-reporte-semanal', label: 'Reporte semanal', icon: FileText },
-  { to: '/equipo', label: 'Equipo', icon: Users },
-  { to: '/kpis', label: 'KPIs', icon: Target },
+  { to: '/resumen-departamento', label: 'Resumen metas y plan', icon: BarChart3, permiso: 'dashboard:ver' },
+  { to: '/proyectos', label: 'Proyectos', icon: FolderKanban, permiso: 'proyectos:ver' },
+  { to: '/proyectos?vista=roadmap', label: 'Roadmap', icon: Map, permiso: 'proyectos:ver' },
+  { to: '/proyectos-reporte-semanal', label: 'Reporte semanal', icon: FileText, permiso: 'proyectos:ver' },
+  { to: '/equipo', label: 'Equipo', icon: Users, permiso: 'equipo:ver' },
+  { to: '/kpis', label: 'KPIs', icon: Target, permiso: 'kpis:ver' },
 ]
 
-const gastosNav: NavItemDef = { to: '/gastos', label: 'Gastos', icon: Wallet }
+const gastosNav: NavItemDef = {
+  to: '/gastos',
+  label: 'Gastos',
+  icon: Wallet,
+  permiso: 'gastos:ver',
+}
 
 const talentoNav: NavItemDef[] = [
-  { to: '/maestros/empleados', label: 'Empleados', icon: UsersRound },
-  { to: '/maestros/planes-carrera', label: 'Plan de carrera', icon: Route },
-  { to: '/maestros/perfiles-puesto', label: 'Perfiles de puesto', icon: BookOpen },
-  { to: '/capacitaciones', label: 'Capacitaciones', icon: GraduationCap },
-  { to: '/maestros/proveedores-capacitacion', label: 'Proveedores', icon: Store },
+  { to: '/maestros/empleados', label: 'Empleados', icon: UsersRound, permiso: 'empleados:ver' },
+  { to: '/maestros/planes-carrera', label: 'Plan de carrera', icon: Route, permiso: 'maestros:ver' },
+  { to: '/maestros/perfiles-puesto', label: 'Perfiles de puesto', icon: BookOpen, permiso: 'maestros:ver' },
+  { to: '/capacitaciones', label: 'Capacitaciones', icon: GraduationCap, permiso: 'capacitaciones:ver' },
+  { to: '/maestros/proveedores-capacitacion', label: 'Proveedores', icon: Store, permiso: 'maestros:ver' },
 ]
 
 const estructuraNav: NavItemDef[] = [
-  { to: '/maestros/departamentos', label: 'Departamentos', icon: Building2 },
-  { to: '/maestros/empresas', label: 'Empresas', icon: Factory },
-  { to: '/maestros/ejes-proyecto', label: 'Ejes de proyecto', icon: Tags },
-  { to: '/maestros/metas', label: 'Objetivos estratégicos', icon: Target },
+  { to: '/maestros/departamentos', label: 'Departamentos', icon: Building2, permiso: 'maestros:ver' },
+  { to: '/maestros/empresas', label: 'Empresas', icon: Factory, permiso: 'maestros:ver' },
+  { to: '/maestros/ejes-proyecto', label: 'Ejes de proyecto', icon: Tags, permiso: 'maestros:ver' },
+  { to: '/maestros/metas', label: 'Objetivos estratégicos', icon: Target, permiso: 'maestros:ver' },
 ]
 
 const adminNav: { to: string; label: string; icon: LucideIcon; permiso: string }[] = [
@@ -154,6 +167,8 @@ function NavGroup({
   group: NavGroupDef
   collapsed: boolean
 }) {
+  if (group.items.length === 0) return null
+
   return (
     <>
       <GroupLabel icon={group.icon} label={group.label} collapsed={collapsed} />
@@ -177,15 +192,25 @@ export function AppSidebar() {
 
   const isAdmin = hasPermiso('*')
   const llevaGastos = Boolean(user?.departamento_lleva_gastos)
-  const mostrarGastos = isAdmin || llevaGastos
 
-  const navGroups = navGroupsBase.map((g) => {
-    if (g.id !== 'operacion') return g
-    return {
-      ...g,
-      items: mostrarGastos ? [...g.items, gastosNav] : g.items,
-    }
-  })
+  const puedeVerItem = (item: NavItemDef) =>
+    cumplePermiso(item.permiso, hasPermiso, {
+      llevaGastos: item.permiso === 'gastos:ver' && llevaGastos,
+    })
+
+  const navGroups = navGroupsBase
+    .map((g) => {
+      if (g.id !== 'operacion') return g
+      const items = [...g.items]
+      if (isAdmin || llevaGastos || hasPermiso('gastos:ver')) {
+        items.push(gastosNav)
+      }
+      return { ...g, items }
+    })
+    .map((g) => ({ ...g, items: g.items.filter(puedeVerItem) }))
+    .filter((g) => g.items.length > 0)
+
+  const mostrarDashboard = puedeVerItem(dashboardNav)
 
   return (
     <aside
@@ -224,13 +249,15 @@ export function AppSidebar() {
 
       <ScrollArea className="flex-1 py-2">
         <nav className="flex flex-col gap-0.5 px-2">
-          <NavItem
-            to={dashboardNav.to}
-            label={dashboardNav.label}
-            icon={dashboardNav.icon}
-            end={dashboardNav.end}
-            collapsed={collapsed}
-          />
+          {mostrarDashboard && (
+            <NavItem
+              to={dashboardNav.to}
+              label={dashboardNav.label}
+              icon={dashboardNav.icon}
+              end={dashboardNav.end}
+              collapsed={collapsed}
+            />
+          )}
 
           {navGroups.map((group) => (
             <NavGroup key={group.id} group={group} collapsed={collapsed} />

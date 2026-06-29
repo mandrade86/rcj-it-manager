@@ -26,6 +26,7 @@ type AuthState = {
   setUser: (user: AuthUser) => void
   clearAuth: () => void
   hasPermiso: (permiso: string) => boolean
+  hasAnyPermiso: (permisos: string[]) => boolean
 }
 
 const TOKEN_KEY = 'rcj_token'
@@ -69,5 +70,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get()
     if (!user) return false
     return user.permisos.includes('*') || user.permisos.includes(permiso)
+  },
+
+  hasAnyPermiso: (permisos: string[]) => {
+    const { user } = get()
+    if (!user) return false
+    if (user.permisos.includes('*')) return true
+    return permisos.some((p) => user.permisos.includes(p))
   },
 }))

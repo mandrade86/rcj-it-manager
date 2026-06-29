@@ -26,6 +26,7 @@ import {
   deleteTarea,
   deleteTareasLote,
   descargarPlantillaTareas,
+  exportarTareasExcel,
   fetchAdjuntosTarea,
   fetchTareas,
   importTareasExcel,
@@ -515,6 +516,22 @@ export function ProyectoDetailView({
                           className="hidden"
                           onChange={(e) => void handleImportTareas(e.target.files?.[0])}
                         />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={async () => {
+                            try {
+                              await exportarTareasExcel(proyecto._id)
+                            } catch (e) {
+                              window.alert(e instanceof Error ? e.message : 'Error al exportar')
+                            }
+                          }}
+                        >
+                          <Download className="size-4" />
+                          Exportar Excel
+                        </Button>
                         <Button
                           type="button"
                           size="sm"

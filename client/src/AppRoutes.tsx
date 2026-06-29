@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { MaestrosRedirect } from '@/components/auth/MaestrosRedirect'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { CapacitacionesPage } from '@/pages/capacitaciones/CapacitacionesPage'
 import { MisCapacitacionesPage } from '@/pages/capacitaciones/MisCapacitacionesPage'
@@ -39,44 +40,70 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="resumen-departamento" element={<ResumenDepartamentoPage />} />
-          <Route path="proyectos/nuevo" element={<ProyectoFormPage />} />
-          <Route path="proyectos/:id/editar" element={<ProyectoFormPage />} />
-          <Route path="proyectos/:id" element={<ProyectoDetailPage />} />
-          <Route path="proyectos" element={<ProyectosPage />} />
-          <Route path="proyectos-reporte-semanal" element={<ReporteSemanalTareasPage />} />
-          <Route path="equipo" element={<EquipoPage />} />
-          <Route path="equipo/organigrama" element={<Navigate to="/equipo" replace />} />
+          {/* Mi espacio — cualquier usuario autenticado */}
           <Route path="mi-evaluacion" element={<MiEvaluacionPage />} />
-          <Route path="equipo/:id/evaluaciones/nueva" element={<EvaluacionDesarrolloPage />} />
-          <Route path="equipo/:id/evaluaciones/:evaluacionId" element={<EvaluacionDesarrolloPage />} />
-          <Route path="equipo/:id/evaluaciones-kpi/nueva" element={<EvaluacionKpiPage />} />
-          <Route path="equipo/:id/evaluaciones-kpi/:evaluacionId" element={<EvaluacionKpiPage />} />
-          <Route path="equipo/:id" element={<ColaboradorPerfilPage />} />
-          <Route path="capacitaciones" element={<CapacitacionesPage />} />
           <Route path="mis-capacitaciones" element={<MisCapacitacionesPage />} />
-          <Route path="gastos" element={<GastosPage />} />
-          <Route path="kpis" element={<KpisPage />} />
           <Route path="manual" element={<ManualHubPage />} />
           <Route path="manual/:slug" element={<ManualGuidePage />} />
+
+          <Route element={<ProtectedRoute permiso="dashboard:ver" />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="resumen-departamento" element={<ResumenDepartamentoPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="proyectos:ver" />}>
+            <Route path="proyectos/:id" element={<ProyectoDetailPage />} />
+            <Route path="proyectos" element={<ProyectosPage />} />
+            <Route path="proyectos-reporte-semanal" element={<ReporteSemanalTareasPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="proyectos:editar" />}>
+            <Route path="proyectos/nuevo" element={<ProyectoFormPage />} />
+            <Route path="proyectos/:id/editar" element={<ProyectoFormPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="equipo:ver" />}>
+            <Route path="equipo" element={<EquipoPage />} />
+            <Route path="equipo/organigrama" element={<Navigate to="/equipo" replace />} />
+            <Route path="equipo/:id/evaluaciones/nueva" element={<EvaluacionDesarrolloPage />} />
+            <Route path="equipo/:id/evaluaciones/:evaluacionId" element={<EvaluacionDesarrolloPage />} />
+            <Route path="equipo/:id/evaluaciones-kpi/nueva" element={<EvaluacionKpiPage />} />
+            <Route path="equipo/:id/evaluaciones-kpi/:evaluacionId" element={<EvaluacionKpiPage />} />
+            <Route path="equipo/:id" element={<ColaboradorPerfilPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="capacitaciones:ver" />}>
+            <Route path="capacitaciones" element={<CapacitacionesPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="gastos:ver" allowGastosDept />}>
+            <Route path="gastos" element={<GastosPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="kpis:ver" />}>
+            <Route path="kpis" element={<KpisPage />} />
+          </Route>
 
           <Route element={<ProtectedRoute permiso="it:arquitectura:ver" />}>
             <Route path="it/arquitectura" element={<ArquitecturaDashboardPage />} />
           </Route>
 
-          {/* Maestros */}
-          <Route path="maestros" element={<Navigate to="/maestros/departamentos" replace />} />
-          <Route path="maestros/departamentos" element={<DepartamentosPage />} />
-          <Route path="maestros/metas" element={<MetasPage />} />
-          <Route path="maestros/ejes-proyecto" element={<EjesProyectoPage />} />
-          <Route path="maestros/empresas" element={<EmpresasPage />} />
-          <Route path="maestros/empleados" element={<EmpleadosPage />} />
-          <Route path="maestros/planes-carrera" element={<PlantillasCarreraPage />} />
-          <Route path="maestros/perfiles-puesto" element={<PerfilesPuestoPage />} />
-          <Route path="maestros/proveedores-capacitacion" element={<ProveedoresCapacitacionPage />} />
+          <Route element={<ProtectedRoute permiso="maestros:ver" />}>
+            <Route path="maestros/metas" element={<MetasPage />} />
+            <Route path="maestros/ejes-proyecto" element={<EjesProyectoPage />} />
+            <Route path="maestros/empresas" element={<EmpresasPage />} />
+            <Route path="maestros/planes-carrera" element={<PlantillasCarreraPage />} />
+            <Route path="maestros/perfiles-puesto" element={<PerfilesPuestoPage />} />
+            <Route path="maestros/proveedores-capacitacion" element={<ProveedoresCapacitacionPage />} />
+            <Route path="maestros/departamentos" element={<DepartamentosPage />} />
+          </Route>
 
-          {/* Administración (require permiso) */}
+          <Route element={<ProtectedRoute permiso="empleados:ver" />}>
+            <Route path="maestros/empleados" element={<EmpleadosPage />} />
+          </Route>
+
+          <Route path="maestros" element={<MaestrosRedirect />} />
+
           <Route element={<ProtectedRoute permiso="usuarios:ver" />}>
             <Route path="admin/usuarios" element={<UsuariosPage />} />
           </Route>

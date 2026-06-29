@@ -19,6 +19,7 @@ export const PERMISOS_DISPONIBLES = [
   { clave: 'equipo:ver', descripcion: 'Equipo — ver colaboradores' },
   { clave: 'equipo:editar', descripcion: 'Equipo — editar colaboradores' },
   { clave: 'capacitaciones:ver', descripcion: 'Capacitaciones — ver' },
+  { clave: 'capacitaciones:ver-todos', descripcion: 'Capacitaciones — ver todas (no solo las del equipo)' },
   { clave: 'capacitaciones:editar', descripcion: 'Capacitaciones — editar' },
   { clave: 'gastos:ver', descripcion: 'Gastos — ver' },
   { clave: 'kpis:ver', descripcion: 'KPIs — ver' },
@@ -31,6 +32,8 @@ export const PERMISOS_DISPONIBLES = [
   { clave: 'usuarios:editar', descripcion: 'Usuarios — crear/editar' },
   { clave: 'roles:ver', descripcion: 'Roles — ver' },
   { clave: 'roles:editar', descripcion: 'Roles — crear/editar' },
+  { clave: 'it:arquitectura:ver', descripcion: 'Arquitectura IT — ver' },
+  { clave: 'it:arquitectura:editar', descripcion: 'Arquitectura IT — editar' },
 ]
 
 rolesRouter.get('/permisos-disponibles', (_req, res) => {

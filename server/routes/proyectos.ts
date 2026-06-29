@@ -246,6 +246,106 @@ proyectosRouter.get('/plantilla-excel', async (req, res, next) => {
   }
 })
 
+/** GET /api/proyectos/exportar-excel — descarga los proyectos filtrados como Excel legible. */
+proyectosRouter.get('/exportar-excel', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const filter: Record<string, unknown> = { ...scope }
+    if (req.query.scope === 'equipo' || req.query.alcance === 'equipo') {
+      const equipoFilter = await buildEquipoFilter(req)
+      if (equipoFilter) Object.assign(filter, equipoFilter)
+    }
+    if (req.query.scope === 'participo' || req.query.alcance === 'participo') {
+      Object.assign(filter, buildProyectoParticipoFilter(u._id))
+    }
+    if (req.query.fase != null && req.query.fase !== '') {
+      const n = Number(req.query.fase)
+      if ([1, 2, 3].includes(n)) filter.fase = n
+    }
+    if (typeof req.query.eje === 'string' && req.query.eje) filter.eje = req.query.eje
+    if (typeof req.query.estado === 'string' && req.query.estado) filter.estado = req.query.estado
+    if (typeof req.query.prioridad === 'string' && req.query.prioridad) filter.prioridad = req.query.prioridad
+    if (typeof req.query.tipo === 'string' && req.query.tipo) filter.tipo = req.query.tipo
+    if (typeof req.query.departamento_id === 'string' && req.query.departamento_id) {
+      filter.departamento_id = req.query.departamento_id
+    }
+
+    const rows = await Proyecto.find(filter)
+      .populate('departamento_id', 'codigo nombre')
+      .populate('empresa_ids', 'codigo nombre')
+      .populate('usuario_id', 'nombre email')
+      .populate('kpi_id', 'nombre')
+      .sort({ nombre: 1 })
+      .lean()
+
+    function toDate(d: Date | string | null | undefined): string {
+      if (!d) return ''
+      const date = d instanceof Date ? d : new Date(d)
+      if (Number.isNaN(date.getTime())) return ''
+      const dd = String(date.getDate()).padStart(2, '0')
+      const mm = String(date.getMonth() + 1).padStart(2, '0')
+      const yyyy = date.getFullYear()
+      return `${dd}/${mm}/${yyyy}`
+    }
+
+    const COLS = [
+      'Nombre', 'Descripción', 'Eje', 'Fase', 'Tipo', 'Departamento',
+      'Empresas', 'Propietario', 'Responsable', 'Inicio', 'Fin',
+      'Prioridad', 'Estado', 'KPI', 'Meta KPI', '% Avance', 'Notas', 'Creado',
+    ] as const
+
+    const rowsData = rows.map((p) => {
+      const dept = p.departamento_id as { codigo?: string; nombre?: string } | null
+      const emps = (p.empresa_ids ?? []) as Array<{ codigo?: string; nombre?: string }>
+      const owner = p.usuario_id as { nombre?: string; email?: string } | null
+      const kpi = p.kpi_id as { nombre?: string } | null
+      return {
+        Nombre: p.nombre ?? '',
+        'Descripción': p.descripcion ?? '',
+        Eje: p.eje ?? '',
+        Fase: p.fase != null ? String(p.fase) : '',
+        Tipo: p.tipo === 'departamental' ? 'Departamental' : 'Individual',
+        Departamento: dept?.nombre ?? dept?.codigo ?? '',
+        Empresas: emps.map((e) => e.nombre ?? e.codigo).filter(Boolean).join(', '),
+        Propietario: owner?.nombre ?? owner?.email ?? '',
+        Responsable: p.responsable ?? '',
+        Inicio: toDate(p.fecha_inicio),
+        Fin: toDate(p.fecha_fin),
+        Prioridad: p.prioridad ?? '',
+        Estado: p.estado ?? '',
+        KPI: kpi?.nombre ?? '',
+        'Meta KPI': p.meta_kpi ?? '',
+        '% Avance': p.porcentaje_avance ?? 0,
+        Notas: p.notas ?? '',
+        Creado: toDate(p.createdAt),
+      }
+    })
+
+    const wb = xlsx.utils.book_new()
+    const ws = xlsx.utils.json_to_sheet(rowsData, { header: [...COLS] })
+    ;(ws as { '!cols'?: { wch: number }[] })['!cols'] = [
+      { wch: 36 }, { wch: 28 }, { wch: 16 }, { wch: 6 }, { wch: 14 },
+      { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 12 },
+      { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 24 }, { wch: 16 },
+      { wch: 10 }, { wch: 24 }, { wch: 12 },
+    ]
+    xlsx.utils.book_append_sheet(wb, ws, 'Proyectos')
+
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="Proyectos-${stamp}.xlsx"`)
+    res.send(buf)
+  } catch (err) {
+    next(err)
+  }
+})
+
 /** POST /api/proyectos/importar-excel — carga o actualiza proyectos desde Excel. */
 proyectosRouter.post('/importar-excel', (req, res, next) => {
   uploadProyectosExcel(req, res, async (uploadErr) => {

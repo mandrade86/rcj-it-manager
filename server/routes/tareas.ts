@@ -472,6 +472,99 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
   }
 })
 
+/** GET /api/tareas/exportar-excel?proyecto_id=xxx — descarga las tareas del proyecto como Excel. */
+tareasRouter.get('/exportar-excel', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const proyectoId = typeof req.query.proyecto_id === 'string' ? req.query.proyecto_id : ''
+    if (!proyectoId || !mongoose.isValidObjectId(proyectoId)) {
+      res.status(400).json({ error: 'Parámetro proyecto_id requerido' })
+      return
+    }
+
+    const proyecto = await Proyecto.findById(proyectoId).select('_id nombre eje').lean() as
+      | { _id: mongoose.Types.ObjectId; nombre?: string; eje?: string } | null
+
+    if (!proyecto) {
+      res.status(404).json({ error: 'Proyecto no encontrado' })
+      return
+    }
+
+    const tareas = await Tarea.find({ proyecto_id: proyectoId })
+      .sort({ fecha_fin: 1, nombre: 1 })
+      .lean() as Array<{
+        _id: mongoose.Types.ObjectId
+        nombre?: string
+        descripcion?: string
+        responsable?: string
+        fecha_inicio?: Date
+        fecha_fin?: Date
+        estado?: string
+        porcentaje?: number
+        eje?: string
+        tags?: string[]
+        createdAt?: Date
+      }>
+
+    function toDate(d: Date | string | null | undefined): string {
+      if (!d) return ''
+      const date = d instanceof Date ? d : new Date(d)
+      if (Number.isNaN(date.getTime())) return ''
+      const dd = String(date.getDate()).padStart(2, '0')
+      const mm = String(date.getMonth() + 1).padStart(2, '0')
+      const yyyy = date.getFullYear()
+      return `${dd}/${mm}/${yyyy}`
+    }
+
+    const COLS = [
+      'Nombre', 'Descripción', 'Responsable', 'Inicio', 'Fin',
+      'Estado', '% Avance', 'Eje', 'Tags', 'Creado',
+    ] as const
+
+    const rowsData = tareas.map((t) => ({
+      Nombre: t.nombre ?? '',
+      'Descripción': t.descripcion ?? '',
+      Responsable: t.responsable ?? '',
+      Inicio: toDate(t.fecha_inicio),
+      Fin: toDate(t.fecha_fin),
+      Estado: t.estado ?? '',
+      '% Avance': t.porcentaje ?? 0,
+      Eje: t.eje ?? proyecto.eje ?? '',
+      Tags: (t.tags ?? []).join(', '),
+      Creado: toDate(t.createdAt),
+    }))
+
+    const wb = xlsx.utils.book_new()
+
+    const wsInfo = xlsx.utils.aoa_to_sheet([
+      [`Proyecto: ${proyecto.nombre ?? ''}`],
+      proyecto.eje ? [`Eje: ${proyecto.eje}`] : [],
+      [`Total tareas: ${tareas.length}`],
+    ].filter((r) => r.length > 0))
+    ;(wsInfo as { '!cols'?: { wch: number }[] })['!cols'] = [{ wch: 60 }]
+    xlsx.utils.book_append_sheet(wb, wsInfo, 'Info')
+
+    const ws = xlsx.utils.json_to_sheet(rowsData, { header: [...COLS] })
+    ;(ws as { '!cols'?: { wch: number }[] })['!cols'] = [
+      { wch: 40 }, { wch: 40 }, { wch: 22 }, { wch: 12 }, { wch: 12 },
+      { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 28 }, { wch: 12 },
+    ]
+    xlsx.utils.book_append_sheet(wb, ws, 'Tareas')
+
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    const safeName = (proyecto.nombre ?? 'Tareas').replace(/[^A-Za-z0-9_\- ]/g, '_').slice(0, 40)
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="Tareas-${safeName}-${stamp}.xlsx"`)
+    res.send(buf)
+  } catch (err) {
+    next(err)
+  }
+})
+
 /**
  * Elimina varias tareas y sus archivos adjuntos.
  * POST /api/tareas/eliminar-lote  { ids: string[], proyecto_id?: string }

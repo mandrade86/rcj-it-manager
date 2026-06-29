@@ -162,6 +162,25 @@ export async function descargarPlantillaProyectos(
   URL.revokeObjectURL(a.href)
 }
 
+/** Descarga los proyectos filtrados como Excel de lectura (no plantilla de importación). */
+export async function exportarProyectosExcel(
+  params?: Record<string, string | undefined>,
+): Promise<void> {
+  const qs = queryFromParams(params)
+  const url = `/api/proyectos/exportar-excel${qs ? `?${qs}` : ''}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await parseError(res))
+  const blob = await res.blob()
+  const cd = res.headers.get('Content-Disposition')
+  const match = cd?.match(/filename="?([^";]+)"?/)
+  const filename = match?.[1] ?? 'Proyectos.xlsx'
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 export async function updateProyectoParticipantes(
   id: string,
   participantes: Array<{ usuario_id: string; rol: 'editor' | 'lectura' }>,
