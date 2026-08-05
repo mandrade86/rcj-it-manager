@@ -1,13 +1,16 @@
 import { Config } from '../db/models/Config.js'
 
-export const DEFAULT_EHR_BASE = 'https://ehr.rcjcorp.hn:8095'
+export const DEFAULT_EHR_BASE = 'https://ehrapi.rcjcorp.hn'
 /** Endpoint real del EHR RCJ (POST JSON UserName + Password). */
 export const DEFAULT_EHR_LOGIN_URL = `${DEFAULT_EHR_BASE}/api/Login`
+export const DEFAULT_EHR_EMPLOYEE_URL = `${DEFAULT_EHR_BASE}/api/Employee`
+export const DEFAULT_EHR_COMPANY_LIST_URL = `${DEFAULT_EHR_BASE}/api/Company/list`
 
+const LEGACY_EHR_BASE = 'https://ehr.rcjcorp.hn:8095'
 const LEGACY_WRONG_LOGIN_URLS = new Set([
-  `${DEFAULT_EHR_BASE}/api/Auth/login`,
-  `${DEFAULT_EHR_BASE}/api/Auth/Login`,
-  `${DEFAULT_EHR_BASE}/api/auth/login`,
+  `${LEGACY_EHR_BASE}/api/Auth/login`,
+  `${LEGACY_EHR_BASE}/api/Auth/Login`,
+  `${LEGACY_EHR_BASE}/api/auth/login`,
 ])
 
 export const EHR_CONFIG_KEYS = {
@@ -16,6 +19,8 @@ export const EHR_CONFIG_KEYS = {
   password: 'ehr_password',
   accessToken: 'ehr_access_token',
   tokenExpiresAt: 'ehr_token_expires_at',
+  employeeUrl: 'empleados_service_url',
+  companyListUrl: 'ehr_company_list_url',
 } as const
 
 export type EhrAuthStatus = {
@@ -32,11 +37,40 @@ async function getConfig(clave: string): Promise<string | null> {
   return v || null
 }
 
-/** Corrige URL de login guardada con ruta obsoleta (/api/Auth/login → 404). */
+/** Migra host antiguo ehr.rcjcorp.hn:8095 → ehrapi.rcjcorp.hn */
+export function migrateLegacyEhrUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    if (u.hostname === 'ehr.rcjcorp.hn') {
+      u.hostname = 'ehrapi.rcjcorp.hn'
+      if (u.port === '8095') u.port = ''
+      return u.toString()
+    }
+  } catch {
+    /* ignore */
+  }
+  return url
+}
+
+/** Corrige URLs EHR guardadas (host antiguo o rutas obsoletas). */
 export async function normalizeEhrLoginUrl(): Promise<void> {
-  const stored = await getConfig(EHR_CONFIG_KEYS.loginUrl)
-  if (stored && LEGACY_WRONG_LOGIN_URLS.has(stored)) {
-    await setConfig(EHR_CONFIG_KEYS.loginUrl, DEFAULT_EHR_LOGIN_URL)
+  const configKeys = [
+    EHR_CONFIG_KEYS.loginUrl,
+    EHR_CONFIG_KEYS.employeeUrl,
+    EHR_CONFIG_KEYS.companyListUrl,
+  ] as const
+
+  for (const clave of configKeys) {
+    const stored = await getConfig(clave)
+    if (!stored) continue
+
+    let next = migrateLegacyEhrUrl(stored)
+    if (clave === EHR_CONFIG_KEYS.loginUrl && LEGACY_WRONG_LOGIN_URLS.has(stored)) {
+      next = DEFAULT_EHR_LOGIN_URL
+    }
+    if (next !== stored) {
+      await setConfig(clave, next)
+    }
   }
 }
 
@@ -309,7 +343,20 @@ async function tryLoginRequest(
     throw new Error('La respuesta de login no incluyó un token reconocible.')
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      throw new Error('Active Directory no respondió a tiempo. Intenta de nuevo.')
+      throw new Error('El servidor EHR no respondió a tiempo. Intenta de nuevo.')
+    }
+    if (e instanceof Error && !e.message.includes('EHR') && !e.message.includes('token')) {
+      const cause = e.cause instanceof Error ? e.cause.message : String(e.cause ?? '')
+      if (/certificate|cert|UNABLE_TO_VERIFY|self signed/i.test(`${e.message} ${cause}`)) {
+        throw new Error(
+          'No se pudo verificar el certificado SSL del EHR desde el servidor. Contacta a IT infraestructura.',
+        )
+      }
+      if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network/i.test(`${e.message} ${cause}`)) {
+        throw new Error(
+          `No se pudo conectar al EHR en ${url}. Verifica que el servidor del portal tenga acceso a ehrapi.rcjcorp.hn.`,
+        )
+      }
     }
     throw e
   } finally {

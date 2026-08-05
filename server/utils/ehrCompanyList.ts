@@ -1,8 +1,8 @@
 import { Config } from '../db/models/Config.js'
 import { Empresa } from '../db/models/Empresa.js'
-import { fetchEhrJson } from './ehrAuth.js'
+import { DEFAULT_EHR_COMPANY_LIST_URL, fetchEhrJson } from './ehrAuth.js'
 
-export const DEFAULT_EHR_COMPANY_LIST_URL = 'https://ehr.rcjcorp.hn:8095/api/Company/list'
+export { DEFAULT_EHR_COMPANY_LIST_URL }
 
 export const CONFIG_CLAVE_EHR_COMPANY_LIST = 'ehr_company_list_url'
 

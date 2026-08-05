@@ -30,7 +30,7 @@ import {
 } from '@/lib/api/empresas'
 import type { EmpresaDoc } from '@/types/empresa'
 
-const DEFAULT_EHR_COMPANY_LIST_URL = 'https://ehr.rcjcorp.hn:8095/api/Company/list'
+const DEFAULT_EHR_COMPANY_LIST_URL = 'https://ehrapi.rcjcorp.hn/api/Company/list'
 
 const COLORS = [
   '#002060', '#70AD47', '#C00000', '#4527A0', '#0F6E56',

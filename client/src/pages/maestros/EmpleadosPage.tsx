@@ -202,6 +202,16 @@ export function EmpleadosPage() {
   }
 
   async function handleEhrLogin() {
+    if (!ehrUser.trim()) {
+      setSyncResult('Error: Indica el usuario EHR.')
+      return
+    }
+    if (!ehrPassword && !ehrAuth?.hasPassword) {
+      setSyncResult(
+        'Error: Indica la contraseña EHR (portal EHR, no la de IT Manager). Puedes guardarla con «Guardar configuración».',
+      )
+      return
+    }
     setLoginLoading(true)
     setSyncResult(null)
     try {
@@ -670,7 +680,7 @@ export function EmpleadosPage() {
                   <Input
                     value={loginUrl}
                     onChange={(e) => setLoginUrl(e.target.value)}
-                    placeholder="https://ehr.rcjcorp.hn:8095/api/Login"
+                    placeholder="https://ehrapi.rcjcorp.hn/api/Login"
                   />
                   <p className="text-[11px] text-muted-foreground">
                     RCJ EHR: <code className="rounded bg-muted px-1">/api/Login</code> con usuario y
@@ -720,7 +730,7 @@ export function EmpleadosPage() {
             </div>
             <div className="grid gap-2">
               <Label>URL del servicio (empleados)</Label>
-              <Input value={serviceUrl} onChange={(e) => setServiceUrl(e.target.value)} placeholder="https://ehr.rcjcorp.hn:8095/api/Employee" />
+              <Input value={serviceUrl} onChange={(e) => setServiceUrl(e.target.value)} placeholder="https://ehrapi.rcjcorp.hn/api/Employee" />
             </div>
             {syncResult && (
               <p className={`rounded-md px-3 py-2 text-sm ${syncResult.startsWith('Error') ? 'bg-destructive/10 text-destructive' : 'bg-[var(--lime-lt)] text-[var(--navy)]'}`}>

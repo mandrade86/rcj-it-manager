@@ -22,7 +22,11 @@ import { Rol } from './models/Rol.js'
 import { SistemaIT } from './models/SistemaIT.js'
 import { Usuario } from './models/Usuario.js'
 import { Empleado } from './models/Empleado.js'
-import { normalizeEhrLoginUrl } from '../utils/ehrAuth.js'
+import {
+  DEFAULT_EHR_EMPLOYEE_URL,
+  DEFAULT_EHR_LOGIN_URL,
+  normalizeEhrLoginUrl,
+} from '../utils/ehrAuth.js'
 import {
   CONFIG_CLAVE_EHR_COMPANY_LIST,
   DEFAULT_EHR_COMPANY_LIST_URL,
@@ -845,12 +849,12 @@ export async function ensureRolesYAdmin(): Promise<void> {
   await normalizeEhrLoginUrl()
   await Config.findOneAndUpdate(
     { clave: 'empleados_service_url' },
-    { $setOnInsert: { valor: 'https://ehr.rcjcorp.hn:8095/api/Employee' } },
+    { $setOnInsert: { valor: DEFAULT_EHR_EMPLOYEE_URL } },
     { upsert: true },
   )
   await Config.findOneAndUpdate(
     { clave: 'ehr_auth_login_url' },
-    { $setOnInsert: { valor: 'https://ehr.rcjcorp.hn:8095/api/Login' } },
+    { $setOnInsert: { valor: DEFAULT_EHR_LOGIN_URL } },
     { upsert: true },
   )
 

@@ -99,7 +99,7 @@ AUTH_AD_ENABLED=false
 AUTH_LOCAL_FALLBACK=false
 AD_DOMAIN=RCJ
 AD_EMAIL_DOMAINS=rcjcorp.com,grupoc.com
-EHR_LOGIN_URL=https://ehr.rcjcorp.hn:8095/api/Login
+EHR_LOGIN_URL=https://ehrapi.rcjcorp.hn/api/Login
 ```
 
 Guardar en nano: `Ctrl+O`, Enter, `Ctrl+X`.
@@ -344,5 +344,5 @@ Prod y dev pueden compartir la carpeta `./data` o usar carpetas distintas si lo 
 |---------|-----------|
 | 502 / ECONNREFUSED | API reiniciando; espera y reintenta |
 | `portal.rcjcorp.hn` no abre | DNS, Apache (`apachectl configtest`), `curl http://127.0.0.1:3001/api/health` |
-| Login AD falla | Servidor debe alcanzar `ehr.rcjcorp.hn:8095`; usuario creado en Maestros → Usuarios |
+| Login AD falla | Servidor debe alcanzar `ehrapi.rcjcorp.hn`; usuario creado en Maestros → Usuarios |
 | Prod y dev mezclados | Revisa que uses el compose y `.env` correctos |

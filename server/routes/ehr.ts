@@ -46,7 +46,20 @@ ehrRouter.post('/auth/login', async (req, res, next) => {
     if (loginUrl !== undefined || username !== undefined || password !== undefined) {
       await saveEhrAuthConfig({ loginUrl, username, password })
     }
-    await clearEhrToken()
+
+    const statusBefore = await getEhrAuthStatus()
+    if (!statusBefore.username.trim()) {
+      res.status(400).json({ error: 'Indica el usuario EHR antes de iniciar sesión.' })
+      return
+    }
+    if (!statusBefore.hasPassword && !password?.trim()) {
+      res.status(400).json({
+        error:
+          'Indica la contraseña EHR. Es la del portal EHR (no la de IT Manager). Guárdala con «Guardar configuración» o escríbela antes de «Iniciar sesión EHR».',
+      })
+      return
+    }
+
     const token = await loginEhr(true)
     const status = await getEhrAuthStatus()
     res.json({

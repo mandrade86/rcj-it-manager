@@ -36,7 +36,7 @@ services:
       AUTH_LOCAL_FALLBACK: 'false'
       AD_DOMAIN: ${AD_DOMAIN:-RCJ}
       AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
-      EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehr.rcjcorp.hn:8095/api/Login}
+      EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehrapi.rcjcorp.hn/api/Login}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://portal.rcjcorporacion.com}
     volumes:
       - ./data:/app/data
