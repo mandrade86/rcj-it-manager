@@ -76,11 +76,11 @@ export async function normalizeEhrLoginUrl(): Promise<void> {
 
 export async function resolveEhrLoginUrl(): Promise<string> {
   await normalizeEhrLoginUrl()
-  return (
-    process.env.EHR_LOGIN_URL?.trim() ||
-    (await getConfig(EHR_CONFIG_KEYS.loginUrl)) ||
-    DEFAULT_EHR_LOGIN_URL
-  )
+  const fromConfig = await getConfig(EHR_CONFIG_KEYS.loginUrl)
+  const fromEnv = process.env.EHR_LOGIN_URL?.trim()
+  // Config en MongoDB (Maestros → Empleados) tiene prioridad sobre .env
+  const raw = fromConfig || fromEnv || DEFAULT_EHR_LOGIN_URL
+  return migrateLegacyEhrUrl(raw)
 }
 
 async function setConfig(clave: string, valor: string): Promise<void> {
@@ -366,15 +366,18 @@ async function tryLoginRequest(
 
 /**
  * Obtiene token del EHR (cache en Config o login con usuario/contraseña).
+ * @param loginUrlOverride URL explícita del request (p. ej. formulario Maestros).
  */
-export async function loginEhr(force = false): Promise<string> {
+export async function loginEhr(force = false, loginUrlOverride?: string): Promise<string> {
   const cached = await getConfig(EHR_CONFIG_KEYS.accessToken)
   const expiresRaw = await getConfig(EHR_CONFIG_KEYS.tokenExpiresAt)
   if (!force && cached && isTokenStillValid(expiresRaw)) {
     return cached
   }
 
-  const loginUrl = await resolveEhrLoginUrl()
+  const loginUrl = loginUrlOverride?.trim()
+    ? migrateLegacyEhrUrl(loginUrlOverride.trim())
+    : await resolveEhrLoginUrl()
   const username =
     process.env.EHR_USERNAME?.trim() || (await getConfig(EHR_CONFIG_KEYS.username))
   const password =

@@ -60,7 +60,7 @@ ehrRouter.post('/auth/login', async (req, res, next) => {
       return
     }
 
-    const token = await loginEhr(true)
+    const token = await loginEhr(true, loginUrl?.trim() || statusBefore.loginUrl)
     const status = await getEhrAuthStatus()
     res.json({
       ok: true,
