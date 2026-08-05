@@ -1,5 +1,5 @@
 import { notifyKpiDataChanged } from '@/lib/kpiSync'
-import type { Proyecto } from '@/types/proyecto'
+import type { Proyecto, ProyectoRiesgoAdjunto, ProyectoRiesgoRegistro } from '@/types/proyecto'
 import type { ReporteStatusProyectos } from '@/types/reporteProyectos'
 
 async function parseError(res: Response): Promise<string> {
@@ -185,13 +185,73 @@ export async function exportarProyectosExcel(
 export async function fetchReporteStatusProyectos(params: {
   alcance?: 'todos' | 'departamento'
   departamento_id?: string
+  proyecto_id?: string
 }): Promise<ReporteStatusProyectos> {
   const q = new URLSearchParams()
   if (params.alcance) q.set('alcance', params.alcance)
   if (params.departamento_id) q.set('departamento_id', params.departamento_id)
+  if (params.proyecto_id) q.set('proyecto_id', params.proyecto_id)
   const res = await fetch(`/api/proyectos/reporte-status?${q}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<ReporteStatusProyectos>
+}
+
+export async function fetchProyectoRiesgos(proyectoId: string): Promise<ProyectoRiesgoRegistro[]> {
+  const res = await fetch(`/api/proyectos/${encodeURIComponent(proyectoId)}/riesgos`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProyectoRiesgoRegistro[]>
+}
+
+export async function addProyectoRiesgo(
+  proyectoId: string,
+  payload: { texto: string; nivel?: 'Alto' | 'Medio' | 'Bajo' },
+): Promise<ProyectoRiesgoRegistro> {
+  const res = await fetch(`/api/proyectos/${encodeURIComponent(proyectoId)}/riesgos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProyectoRiesgoRegistro>
+}
+
+export async function deleteProyectoRiesgo(proyectoId: string, riesgoId: string): Promise<void> {
+  const res = await fetch(
+    `/api/proyectos/${encodeURIComponent(proyectoId)}/riesgos/${encodeURIComponent(riesgoId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) throw new Error(await parseError(res))
+}
+
+export async function uploadProyectoRiesgoAdjunto(
+  proyectoId: string,
+  riesgoId: string,
+  file: File,
+): Promise<ProyectoRiesgoAdjunto> {
+  const fd = new FormData()
+  fd.append('archivo', file)
+  const res = await fetch(
+    `/api/proyectos/${encodeURIComponent(proyectoId)}/riesgos/${encodeURIComponent(riesgoId)}/adjuntos`,
+    { method: 'POST', body: fd },
+  )
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProyectoRiesgoAdjunto>
+}
+
+export async function deleteProyectoRiesgoAdjunto(
+  proyectoId: string,
+  riesgoId: string,
+  adjuntoId: string,
+): Promise<void> {
+  const res = await fetch(
+    `/api/proyectos/${encodeURIComponent(proyectoId)}/riesgos/${encodeURIComponent(riesgoId)}/adjuntos/${encodeURIComponent(adjuntoId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) throw new Error(await parseError(res))
+}
+
+export function urlAdjuntoProyectoRiesgo(archivo: string): string {
+  return `/api/adjuntos-proyectos/${encodeURIComponent(archivo)}`
 }
 
 export async function updateProyectoParticipantes(

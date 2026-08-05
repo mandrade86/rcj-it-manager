@@ -41,6 +41,34 @@ const ProyectoCambioSchema = new Schema(
   { _id: false },
 )
 
+const AdjuntoRiesgoProyectoSchema = new Schema(
+  {
+    nombre_original: { type: String, required: true },
+    archivo: { type: String, required: true },
+    mime_type: { type: String, default: '' },
+    size_bytes: { type: Number, default: 0 },
+    subido_por: { type: String, default: '' },
+    subido_en: { type: Date, default: Date.now },
+  },
+  { _id: true },
+)
+
+/** Riesgo manual registrado en el Project Status Report (bitácora con evidencias). */
+const RiesgoProyectoRegistroSchema = new Schema(
+  {
+    texto: { type: String, required: true },
+    nivel: {
+      type: String,
+      enum: ['Alto', 'Medio', 'Bajo'],
+      default: 'Medio',
+    },
+    autor: { type: String, default: '' },
+    autor_id: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null },
+    adjuntos: { type: [AdjuntoRiesgoProyectoSchema], default: [] },
+  },
+  { timestamps: true },
+)
+
 const ProyectoSchema = new Schema(
   {
     _id: { type: String, required: true },
@@ -94,6 +122,8 @@ const ProyectoSchema = new Schema(
      * `lectura`: solo consulta; `editor`: puede editar proyecto y tareas.
      */
     participantes: { type: [ProyectoParticipanteSchema], default: [] },
+    /** Riesgos documentados para reportes ejecutivos (comentarios + evidencias). */
+    riesgos_registro: { type: [RiesgoProyectoRegistroSchema], default: [] },
   },
   { timestamps: true },
 )

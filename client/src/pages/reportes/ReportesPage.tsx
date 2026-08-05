@@ -33,7 +33,7 @@ export function ReportesPage() {
           </TabsTrigger>
           <TabsTrigger value="status" className="gap-1.5">
             <BarChart3 className="size-3.5" />
-            Project Status Report
+            Project Status Dashboard
           </TabsTrigger>
         </TabsList>
 

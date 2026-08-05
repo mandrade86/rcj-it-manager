@@ -1,72 +1,57 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BarChart3, Building2, Printer } from 'lucide-react'
+import {
+  AlertTriangle,
+  BarChart3,
+  Building2,
+  ChevronRight,
+  FolderKanban,
+  Printer,
+  X,
+} from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { fetchReporteStatusProyectos } from '@/lib/api/proyectos'
 import { formatDateDMY } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { estadoColor, type ProyectoEstado } from '@/types/proyecto'
-import type { ReporteStatusProyectos } from '@/types/reporteProyectos'
+import type { ReporteStatusProyectoItem, ReporteStatusProyectos } from '@/types/reporteProyectos'
+
+import { ProyectoStatusSheet } from './ProyectoStatusSheet'
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
-
-function prioridadClass(p: string) {
-  if (p === 'Alta') return 'border-red-300 bg-red-50 text-red-800'
-  if (p === 'Baja') return 'border-slate-300 bg-slate-50 text-slate-700'
-  return 'border-blue-300 bg-blue-50 text-blue-800'
-}
 
 type Props = {
   embedded?: boolean
 }
 
 export function ReporteStatusProyectosPage({ embedded = false }: Props) {
-  const [alcance, setAlcance] = useState<'todos' | 'departamento'>('todos')
-  const [departamentoId, setDepartamentoId] = useState('')
   const [data, setData] = useState<ReporteStatusProyectos | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-
-  const departamentos = useMemo(
-    () => data?.departamentos_disponibles ?? [],
-    [data?.departamentos_disponibles],
-  )
+  const [filtroDepto, setFiltroDepto] = useState<string | null>(null)
+  const [filtroProyecto, setFiltroProyecto] = useState('')
+  const [proyectoSheet, setProyectoSheet] = useState<ReporteStatusProyectoItem | null>(null)
 
   const cargar = useCallback(async () => {
-    if (alcance === 'departamento' && !departamentoId) {
-      setErr('Selecciona un departamento para este reporte.')
-      setData(null)
-      return
-    }
     setLoading(true)
     setErr(null)
     try {
       const r = await fetchReporteStatusProyectos({
-        alcance,
-        departamento_id: alcance === 'departamento' ? departamentoId : undefined,
+        alcance: filtroDepto ? 'departamento' : 'todos',
+        departamento_id: filtroDepto ?? undefined,
+        proyecto_id: filtroProyecto || undefined,
       })
       setData(r)
-      if (alcance === 'departamento' && !departamentoId && r.departamentos_disponibles.length === 1) {
-        setDepartamentoId(r.departamentos_disponibles[0]!._id)
-      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al cargar reporte')
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [alcance, departamentoId])
+  }, [filtroDepto, filtroProyecto])
 
   useEffect(() => {
     void cargar()
@@ -84,25 +69,53 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
     }
   }, [])
 
-  const tituloAlcance = useMemo(() => {
-    if (alcance === 'departamento') {
-      const d = departamentos.find((x) => x._id === departamentoId)
-      return d ? `Departamento: ${d.nombre}` : 'Departamento seleccionado'
+  const todosProyectos = useMemo(() => {
+    if (!data) return [] as ReporteStatusProyectoItem[]
+    return data.departamentos.flatMap((d) => d.proyectos)
+  }, [data])
+
+  const proyectosVisibles = useMemo(() => {
+    let list = todosProyectos
+    if (filtroDepto) {
+      list = list.filter((p) => p.departamento_id === filtroDepto)
     }
-    return 'Todos los departamentos'
-  }, [alcance, departamentoId, departamentos])
+    if (filtroProyecto) {
+      list = list.filter((p) => p.proyecto_id === filtroProyecto)
+    }
+    return list
+  }, [todosProyectos, filtroDepto, filtroProyecto])
+
+  const deptosEnVista = useMemo(() => {
+    if (!data) return []
+    if (filtroDepto) {
+      return data.departamentos.filter((d) => d.departamento_id === filtroDepto)
+    }
+    return data.departamentos
+  }, [data, filtroDepto])
+
+  const opcionesProyecto = useMemo(() => {
+    const base = filtroDepto
+      ? todosProyectos.filter((p) => p.departamento_id === filtroDepto)
+      : todosProyectos
+    return [...base].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  }, [todosProyectos, filtroDepto])
+
+  function limpiarFiltros() {
+    setFiltroDepto(null)
+    setFiltroProyecto('')
+  }
 
   return (
-    <div className="reporte-status-page mx-auto max-w-6xl space-y-6">
+    <div className={cn('reporte-status-page space-y-6', !embedded && 'mx-auto max-w-7xl')}>
       {!embedded && (
         <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--navy)]">
               <BarChart3 className="size-7" />
-              Project Status Report
+              Project Status Dashboard
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Estado general del portafolio de proyectos agrupado por departamento.
+              Vista ejecutiva del portafolio: filtra por departamento o proyecto y documenta riesgos con evidencias.
             </p>
           </div>
           <Button type="button" variant="outline" className="gap-2" onClick={() => window.print()}>
@@ -121,49 +134,83 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
         </div>
       )}
 
+      {/* Filtros interactivos */}
       <Card className="print:hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Filtros del reporte</CardTitle>
+          <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="status-alcance">
-              Alcance
-            </label>
-            <select
-              id="status-alcance"
-              className={selectClass}
-              value={alcance}
-              onChange={(e) => setAlcance(e.target.value as typeof alcance)}
-            >
-              <option value="todos">Todos los departamentos</option>
-              <option value="departamento">Por departamento</option>
-            </select>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Departamentos</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltroDepto(null)
+                  setFiltroProyecto('')
+                }}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  filtroDepto === null
+                    ? 'border-[var(--navy)] bg-[var(--navy)] text-white'
+                    : 'border-border bg-white text-muted-foreground hover:border-[var(--navy)]/40',
+                )}
+              >
+                Todos
+              </button>
+              {(data?.departamentos_disponibles ?? []).map((d) => (
+                <button
+                  key={d._id}
+                  type="button"
+                  onClick={() => {
+                    setFiltroDepto(d._id)
+                    setFiltroProyecto('')
+                  }}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    filtroDepto === d._id
+                      ? 'border-[var(--navy)] bg-[var(--navy)] text-white'
+                      : 'border-border bg-white text-muted-foreground hover:border-[var(--navy)]/40',
+                  )}
+                >
+                  {d.nombre}
+                </button>
+              ))}
+            </div>
           </div>
-          {alcance === 'departamento' && (
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="status-depto">
-                Departamento
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="filtro-proyecto">
+                Proyecto
               </label>
               <select
-                id="status-depto"
+                id="filtro-proyecto"
                 className={selectClass}
-                value={departamentoId}
-                onChange={(e) => setDepartamentoId(e.target.value)}
+                value={filtroProyecto}
+                onChange={(e) => setFiltroProyecto(e.target.value)}
               >
-                <option value="">— Seleccionar —</option>
-                {departamentos.map((d) => (
-                  <option key={d._id} value={d._id}>
-                    {d.nombre}
+                <option value="">— Todos los proyectos —</option>
+                {opcionesProyecto.map((p) => (
+                  <option key={p.proyecto_id} value={p.proyecto_id}>
+                    {p.nombre} ({p.proyecto_id})
                   </option>
                 ))}
               </select>
             </div>
-          )}
+            {(filtroDepto || filtroProyecto) && (
+              <div className="flex items-end">
+                <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={limpiarFiltros}>
+                  <X className="size-3.5" />
+                  Limpiar filtros
+                </Button>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {loading && <p className="text-sm text-muted-foreground">Generando reporte…</p>}
+      {loading && <p className="text-sm text-muted-foreground">Cargando dashboard…</p>}
       {err && (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {err}
@@ -179,9 +226,8 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
                   RCJ Corporación — IT Manager
                 </p>
                 <h2 className="mt-1 text-xl font-semibold text-[var(--navy)]">
-                  Project Status Report
+                  Project Status Dashboard
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">{tituloAlcance}</p>
               </div>
               <div className="text-right text-sm text-muted-foreground">
                 Generado: {formatDateDMY(data.generado_en)}
@@ -189,126 +235,158 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {/* KPIs — clicables para filtrar departamentos con riesgos altos */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             {[
-              { label: 'Proyectos', value: data.resumen.total_proyectos },
-              { label: 'Departamentos', value: data.resumen.total_departamentos },
-              { label: 'Activos', value: data.resumen.activos },
-              { label: 'Completados', value: data.resumen.completados },
-              { label: 'Avance prom.', value: `${data.resumen.avance_promedio}%` },
+              { label: 'Proyectos', value: data.resumen.total_proyectos, onClick: undefined },
+              { label: 'Departamentos', value: data.resumen.total_departamentos, onClick: undefined },
+              { label: 'Activos', value: data.resumen.activos, onClick: undefined },
+              { label: 'Completados', value: data.resumen.completados, onClick: undefined },
+              { label: 'Avance prom.', value: `${data.resumen.avance_promedio}%`, onClick: undefined },
+              {
+                label: 'Riesgos doc.',
+                value: data.resumen.riesgos_registrados,
+                sub: data.resumen.riesgos_alto > 0 ? `${data.resumen.riesgos_alto} alto` : undefined,
+                onClick: undefined,
+                alert: data.resumen.riesgos_alto > 0,
+              },
             ].map((c) => (
-              <Card key={c.label}>
+              <Card
+                key={c.label}
+                className={cn(c.onClick && 'cursor-pointer transition-shadow hover:shadow-md')}
+                onClick={c.onClick}
+              >
                 <CardContent className="pt-4">
                   <p className="text-xs text-muted-foreground">{c.label}</p>
-                  <p className="text-2xl font-semibold text-[var(--navy)]">{c.value}</p>
+                  <p className={cn('text-2xl font-semibold', c.alert ? 'text-red-600' : 'text-[var(--navy)]')}>
+                    {c.value}
+                  </p>
+                  {'sub' in c && c.sub && (
+                    <p className="text-[10px] text-red-600">{c.sub}</p>
+                  )}
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          {data.departamentos.length === 0 ? (
+          {/* Tarjetas de departamento — clicables */}
+          {!filtroProyecto && deptosEnVista.length > 1 && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
+              {deptosEnVista.map((dept) => (
+                <button
+                  key={dept.departamento_id ?? 'sin-depto'}
+                  type="button"
+                  onClick={() => setFiltroDepto(dept.departamento_id)}
+                  className="rounded-lg border border-border bg-white p-4 text-left shadow-sm transition-all hover:border-[var(--navy)]/30 hover:shadow-md"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 font-semibold text-[var(--navy)]">
+                      <Building2 className="size-4" />
+                      {dept.departamento_nombre}
+                    </span>
+                    <ChevronRight className="size-4 text-muted-foreground" />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {dept.resumen.total_proyectos} proyectos · Avance {dept.resumen.avance_promedio}%
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Grid de proyectos — clicables */}
+          {proyectosVisibles.length === 0 ? (
             <Card>
               <CardContent className="py-10 text-center text-sm text-muted-foreground">
                 No hay proyectos para los filtros seleccionados.
               </CardContent>
             </Card>
           ) : (
-            data.departamentos.map((dept) => (
-              <Card key={dept.departamento_id ?? 'sin-depto'} className="break-inside-avoid">
-                <CardHeader className="border-b border-border bg-[var(--gray-lt)]/60 pb-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Building2 className="size-4 text-[var(--navy)]" />
-                      {dept.departamento_nombre}
-                      {dept.departamento_codigo && (
-                        <span className="text-xs font-normal text-muted-foreground">
-                          ({dept.departamento_codigo})
-                        </span>
-                      )}
-                    </CardTitle>
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>{dept.resumen.total_proyectos} proyectos</span>
-                      <span>Activos: {dept.resumen.activos}</span>
-                      <span>Completados: {dept.resumen.completados}</span>
-                      <span>Avance: <strong>{dept.resumen.avance_promedio}%</strong></span>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {proyectosVisibles.map((p) => {
+                const deptNombre = data.departamentos.find(
+                  (d) => d.departamento_id === p.departamento_id,
+                )?.departamento_nombre ?? '—'
+                return (
+                  <button
+                    key={p.proyecto_id}
+                    type="button"
+                    onClick={() => setProyectoSheet(p)}
+                    className="group rounded-lg border border-border bg-white p-4 text-left shadow-sm transition-all hover:border-[var(--lime)] hover:shadow-md print:break-inside-avoid"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-[var(--navy)] group-hover:text-[var(--navy)]">
+                          {p.nombre}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {p.proyecto_id} · {deptNombre}
+                        </p>
+                      </div>
+                      <FolderKanban className="size-4 shrink-0 text-muted-foreground group-hover:text-[var(--lime)]" />
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Proyecto</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Fase</TableHead>
-                        <TableHead>Prioridad</TableHead>
-                        <TableHead className="text-right">Avance</TableHead>
-                        <TableHead>Responsable</TableHead>
-                        <TableHead>Fin</TableHead>
-                        <TableHead className="hidden lg:table-cell">Tareas</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dept.proyectos.map((p) => (
-                        <TableRow key={p.proyecto_id}>
-                          <TableCell>
-                            <div className="font-medium">{p.nombre}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {p.proyecto_id}
-                              {p.eje ? ` · ${p.eje}` : ''}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={cn('text-xs', estadoColor(p.estado as ProyectoEstado))}
-                            >
-                              {p.estado}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{p.fase != null ? `Fase ${p.fase}` : '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={cn('text-xs', prioridadClass(p.prioridad))}>
-                              {p.prioridad}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-muted sm:block">
-                                <div
-                                  className="h-full rounded-full bg-[var(--lime)]"
-                                  style={{ width: `${Math.min(100, p.porcentaje_avance)}%` }}
-                                />
-                              </div>
-                              <span className="tabular-nums">{p.porcentaje_avance}%</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{p.responsable ?? p.propietario ?? '—'}</TableCell>
-                          <TableCell>{formatDateDMY(p.fecha_fin)}</TableCell>
-                          <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">
-                            {p.tareas_total > 0 ? (
-                              <>
-                                {p.tareas_completadas}/{p.tareas_total} done
-                                {p.tareas_bloqueadas > 0 && (
-                                  <span className="ml-1 text-red-600">
-                                    · {p.tareas_bloqueadas} bloq.
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              '—'
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            ))
+
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className={cn('text-[10px]', estadoColor(p.estado as ProyectoEstado))}
+                      >
+                        {p.estado}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px]"
+                        style={{
+                          borderColor: p.riesgo_auto.color,
+                          color: p.riesgo_auto.color,
+                        }}
+                      >
+                        {p.riesgo_auto.nivel}
+                      </Badge>
+                      {p.riesgos_registrados > 0 && (
+                        <Badge variant="outline" className="gap-0.5 border-red-200 bg-red-50 text-[10px] text-red-700">
+                          <AlertTriangle className="size-2.5" />
+                          {p.riesgos_registrados}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="mt-3">
+                      <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+                        <span>Avance</span>
+                        <span className="tabular-nums">{p.porcentaje_avance}%</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-[var(--lime)]"
+                          style={{ width: `${Math.min(100, p.porcentaje_avance)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">
+                      {p.riesgo_auto.motivo}
+                    </p>
+
+                    <p className="mt-2 text-[10px] font-medium text-[var(--navy)] opacity-0 transition-opacity group-hover:opacity-100 print:hidden">
+                      Clic para ver detalle y riesgos →
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
           )}
         </>
       )}
+
+      <ProyectoStatusSheet
+        proyecto={proyectoSheet}
+        open={proyectoSheet != null}
+        onOpenChange={(o) => {
+          if (!o) setProyectoSheet(null)
+        }}
+        onChanged={() => void cargar()}
+      />
     </div>
   )
 }

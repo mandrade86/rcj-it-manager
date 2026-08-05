@@ -50,6 +50,7 @@ import { tareasRouter } from './routes/tareas.js'
 import { usuariosRouter } from './routes/usuarios.js'
 import { vacacionesRouter } from './routes/vacaciones.js'
 import { ADJUNTOS_TAREAS_DIR } from './utils/multerAdjuntosTareas.js'
+import { ADJUNTOS_PROYECTOS_DIR } from './utils/multerAdjuntosProyectos.js'
 import { CERTS_DIR } from './utils/multerCertificados.js'
 import { mountClientApp } from './utils/serveClient.js'
 import { sincronizarEmpleadosDepartamentoDesdeEhr } from './utils/sincronizarEmpleadoDepartamentoEhr.js'
@@ -63,6 +64,7 @@ app.use(cors())
 app.use(express.json({ limit: '2mb' }))
 app.use('/api/certificados', express.static(CERTS_DIR))
 app.use('/api/adjuntos-tareas', express.static(ADJUNTOS_TAREAS_DIR))
+app.use('/api/adjuntos-proyectos', express.static(ADJUNTOS_PROYECTOS_DIR))
 
 // Public routes (no auth required)
 app.get('/api/health', (_req, res) => {

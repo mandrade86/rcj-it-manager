@@ -1,8 +1,10 @@
 import type { ProyectoEstado } from './proyecto'
+import type { RiesgoProyecto } from './proyecto'
 
 export type ReporteStatusProyectoItem = {
   proyecto_id: string
   nombre: string
+  departamento_id?: string | null
   eje?: string | null
   fase?: number | null
   estado: ProyectoEstado | string
@@ -18,6 +20,9 @@ export type ReporteStatusProyectoItem = {
   tareas_en_progreso: number
   tareas_bloqueadas: number
   tareas_pendientes: number
+  riesgo_auto: RiesgoProyecto
+  riesgos_registrados: number
+  riesgos_alto: number
 }
 
 export type ReporteStatusDepartamento = {
@@ -38,6 +43,7 @@ export type ReporteStatusProyectos = {
   generado_en: string
   alcance: string
   departamento_id?: string | null
+  proyecto_id?: string | null
   resumen: {
     total_proyectos: number
     total_departamentos: number
@@ -45,6 +51,8 @@ export type ReporteStatusProyectos = {
     completados: number
     bloqueados: number
     avance_promedio: number
+    riesgos_registrados: number
+    riesgos_alto: number
   }
   departamentos: ReporteStatusDepartamento[]
   departamentos_disponibles: Array<{ _id: string; nombre: string; codigo?: string }>

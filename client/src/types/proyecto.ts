@@ -216,3 +216,26 @@ export type RiesgoProyecto = {
   motivo: string
   color: string
 }
+
+export type ProyectoRiesgoNivel = 'Alto' | 'Medio' | 'Bajo'
+
+export type ProyectoRiesgoAdjunto = {
+  _id: string
+  nombre_original: string
+  archivo: string
+  mime_type?: string
+  size_bytes?: number
+  subido_por?: string
+  subido_en?: string
+}
+
+export type ProyectoRiesgoRegistro = {
+  _id: string
+  texto: string
+  nivel: ProyectoRiesgoNivel
+  autor?: string
+  autor_id?: string | null
+  adjuntos?: ProyectoRiesgoAdjunto[]
+  createdAt?: string
+  updatedAt?: string
+}

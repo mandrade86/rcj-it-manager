@@ -4,10 +4,12 @@ import { Departamento } from '../db/models/Departamento.js'
 import { Proyecto } from '../db/models/Proyecto.js'
 import { Tarea } from '../db/models/Tarea.js'
 import { buildProyectoScopeFilter, isAdminProyectos, resolveDepartamentosUsuario } from './proyectoScope.js'
+import { calcularRiesgo } from './proyectoRiesgo.js'
 
 export type ReporteStatusProyectoItem = {
   proyecto_id: string
   nombre: string
+  departamento_id?: string | null
   eje?: string | null
   fase?: number | null
   estado: string
@@ -23,6 +25,9 @@ export type ReporteStatusProyectoItem = {
   tareas_en_progreso: number
   tareas_bloqueadas: number
   tareas_pendientes: number
+  riesgo_auto: { nivel: string; motivo: string; color: string }
+  riesgos_registrados: number
+  riesgos_alto: number
 }
 
 export type ReporteStatusDepartamento = {
@@ -44,12 +49,17 @@ export async function generarReporteStatusProyectos(opts: {
   permisos: string[]
   alcance?: string
   departamento_id?: string
+  proyecto_id?: string
 }) {
   const alcance = opts.alcance ?? 'todos'
   const scope = await buildProyectoScopeFilter(opts.userId, opts.permisos)
   const filter: Record<string, unknown> = {
     ...scope,
     estado: { $ne: 'Cancelado' },
+  }
+
+  if (opts.proyecto_id) {
+    filter._id = opts.proyecto_id
   }
 
   if (alcance === 'departamento' && opts.departamento_id) {
@@ -82,13 +92,14 @@ export async function generarReporteStatusProyectos(opts: {
       fecha_inicio?: Date
       fecha_fin?: Date
       meta_kpi?: string
+      riesgos_registro?: Array<{ nivel?: string }>
       departamento_id?: { _id: mongoose.Types.ObjectId; codigo?: string; nombre?: string } | null
       usuario_id?: { nombre?: string; email?: string } | null
     }>
 
   const proyectoIds = proyectos.map((p) => p._id)
   const tareasAgg = proyectoIds.length > 0
-    ? await Tarea.aggregate<{ _id: string; total: number; completadas: number; en_progreso: number; bloqueadas: number; pendientes: number }>([
+    ? await Tarea.aggregate<{ _id: string; total: number; completadas: number; en_progreso: number; bloqueadas: number; pendientes: number; estados: string[] }>([
         { $match: { proyecto_id: { $in: proyectoIds } } },
         {
           $group: {
@@ -98,6 +109,7 @@ export async function generarReporteStatusProyectos(opts: {
             en_progreso: { $sum: { $cond: [{ $eq: ['$estado', 'En progreso'] }, 1, 0] } },
             bloqueadas: { $sum: { $cond: [{ $eq: ['$estado', 'Bloqueado'] }, 1, 0] } },
             pendientes: { $sum: { $cond: [{ $eq: ['$estado', 'Pendiente'] }, 1, 0] } },
+            estados: { $push: '$estado' },
           },
         },
       ])
@@ -131,9 +143,21 @@ export async function generarReporteStatusProyectos(opts: {
 
     const ts = tareasPorProyecto.get(p._id)
     const owner = p.usuario_id as { nombre?: string; email?: string } | null
+    const riesgosReg = p.riesgos_registro ?? []
+    const tareasEstados = (ts?.estados ?? []).map((e) => ({ estado: e }))
+    const riesgoAuto = calcularRiesgo(
+      {
+        estado: p.estado,
+        fecha_inicio: p.fecha_inicio,
+        fecha_fin: p.fecha_fin,
+        porcentaje_avance: p.porcentaje_avance,
+      },
+      tareasEstados,
+    )
     const item: ReporteStatusProyectoItem = {
       proyecto_id: p._id,
       nombre: p.nombre,
+      departamento_id: dept?._id ? String(dept._id) : null,
       eje: p.eje ?? null,
       fase: p.fase ?? null,
       estado: p.estado,
@@ -149,6 +173,9 @@ export async function generarReporteStatusProyectos(opts: {
       tareas_en_progreso: ts?.en_progreso ?? 0,
       tareas_bloqueadas: ts?.bloqueadas ?? 0,
       tareas_pendientes: ts?.pendientes ?? 0,
+      riesgo_auto: riesgoAuto,
+      riesgos_registrados: riesgosReg.length,
+      riesgos_alto: riesgosReg.filter((r) => r.nivel === 'Alto').length,
     }
 
     const grupo = porDept.get(deptKey)!
@@ -187,6 +214,14 @@ export async function generarReporteStatusProyectos(opts: {
           proyectos.reduce((s, p) => s + (p.porcentaje_avance ?? 0), 0) / totalProyectos,
         )
       : 0,
+    riesgos_registrados: departamentos.reduce(
+      (s, d) => s + d.proyectos.reduce((ss, p) => ss + p.riesgos_registrados, 0),
+      0,
+    ),
+    riesgos_alto: departamentos.reduce(
+      (s, d) => s + d.proyectos.reduce((ss, p) => ss + p.riesgos_alto, 0),
+      0,
+    ),
   }
 
   const deptIdsVisibles = [...new Set(
@@ -223,6 +258,7 @@ export async function generarReporteStatusProyectos(opts: {
     generado_en: new Date().toISOString(),
     alcance,
     departamento_id: alcance === 'departamento' ? opts.departamento_id ?? null : null,
+    proyecto_id: opts.proyecto_id ?? null,
     resumen: resumenGlobal,
     departamentos,
     departamentos_disponibles: departamentosCatalogo,

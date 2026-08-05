@@ -22,6 +22,7 @@ import {
   usuarioPuedeGestionarParticipantes,
 } from '../utils/proyectoPermisos.js'
 import { ADJUNTOS_TAREAS_DIR } from '../utils/multerAdjuntosTareas.js'
+import { ADJUNTOS_PROYECTOS_DIR, uploadAdjuntoProyectoRiesgo } from '../utils/multerAdjuntosProyectos.js'
 import { calcularRiesgo } from '../utils/proyectoRiesgo.js'
 import {
   PROYECTO_EXCEL_COLS,
@@ -136,9 +137,30 @@ async function validateProyectoKpi(
 }
 
 type TareaAdjuntosLean = { adjuntos?: Array<{ archivo: string }> }
+type ProyectoRiesgosLean = {
+  riesgos_registro?: Array<{ adjuntos?: Array<{ archivo: string }> }>
+}
+
+function eliminarAdjuntosProyectoRiesgos(riesgos?: ProyectoRiesgosLean['riesgos_registro']): void {
+  for (const r of riesgos ?? []) {
+    for (const adj of r.adjuntos ?? []) {
+      const fp = path.join(ADJUNTOS_PROYECTOS_DIR, adj.archivo)
+      if (fs.existsSync(fp)) {
+        try {
+          fs.unlinkSync(fp)
+        } catch {
+          /* noop */
+        }
+      }
+    }
+  }
+}
 
 /** Elimina tareas, archivos adjuntos y el documento del proyecto. */
 async function deleteProyectoCascade(pid: string): Promise<void> {
+  const proyecto = await Proyecto.findById(pid).select('riesgos_registro').lean() as ProyectoRiesgosLean | null
+  eliminarAdjuntosProyectoRiesgos(proyecto?.riesgos_registro)
+
   const tareas = await Tarea.find({ proyecto_id: pid }).select('adjuntos').lean() as TareaAdjuntosLean[]
   for (const t of tareas) {
     for (const adj of t.adjuntos ?? []) {
@@ -623,6 +645,7 @@ proyectosRouter.get('/reporte-status', async (req, res, next) => {
       permisos: u.permisos ?? [],
       alcance,
       departamento_id,
+      proyecto_id: typeof req.query.proyecto_id === 'string' ? req.query.proyecto_id : undefined,
     })
 
     if ('error' in result) {
@@ -890,6 +913,219 @@ proyectosRouter.post('/:id/transicion', async (req, res, next) => {
     await doc.save()
     const full = await Proyecto.findById(doc._id).populate(POPULATE_FIELDS).lean()
     res.json(enrichProyectoAcceso(full as Record<string, unknown>, u._id, u.permisos ?? []))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Lista riesgos registrados de un proyecto (Project Status Report). */
+proyectosRouter.get('/:id/riesgos', async (req, res, next) => {
+  try {
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
+      .select('riesgos_registro usuario_id participantes')
+      .lean() as {
+        riesgos_registro?: Array<Record<string, unknown>>
+      } | null
+
+    if (!doc) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+
+    const riesgos = [...(doc.riesgos_registro ?? [])].sort(
+      (a, b) => new Date(String(b.createdAt ?? 0)).getTime() - new Date(String(a.createdAt ?? 0)).getTime(),
+    )
+    res.json(riesgos)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Registra un riesgo/comentario en el proyecto. */
+proyectosRouter.post('/:id/riesgos', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
+      .select('riesgos_registro usuario_id participantes')
+    if (!doc) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], doc)) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+      return
+    }
+
+    const texto = String((req.body as { texto?: unknown }).texto ?? '').trim()
+    if (!texto) {
+      res.status(400).json({ error: 'El texto del riesgo es obligatorio' })
+      return
+    }
+    const nivelRaw = String((req.body as { nivel?: unknown }).nivel ?? 'Medio')
+    const nivel = ['Alto', 'Medio', 'Bajo'].includes(nivelRaw) ? nivelRaw : 'Medio'
+
+    doc.riesgos_registro.push({
+      texto,
+      nivel: nivel as 'Alto' | 'Medio' | 'Bajo',
+      autor: u.nombre ?? u.email ?? '',
+      autor_id: mongoose.isValidObjectId(u._id) ? new mongoose.Types.ObjectId(u._id) : undefined,
+      adjuntos: [],
+    })
+    await doc.save()
+    const saved = doc.riesgos_registro[doc.riesgos_registro.length - 1]
+    res.status(201).json(saved)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Elimina un riesgo registrado y sus adjuntos. */
+proyectosRouter.delete('/:id/riesgos/:riesgoId', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
+      .select('riesgos_registro usuario_id participantes')
+    if (!doc) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], doc)) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+      return
+    }
+
+    const riesgoId = req.params.riesgoId
+    const idx = doc.riesgos_registro.findIndex((r) => String(r._id) === riesgoId)
+    if (idx < 0) {
+      res.status(404).json({ error: 'Riesgo no encontrado' })
+      return
+    }
+
+    const target = doc.riesgos_registro[idx]!
+    eliminarAdjuntosProyectoRiesgos([target])
+    doc.riesgos_registro.splice(idx, 1)
+    await doc.save()
+    res.status(204).send()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Sube evidencia (imagen/documento) a un riesgo del proyecto. */
+proyectosRouter.post('/:id/riesgos/:riesgoId/adjuntos', (req, res, next) => {
+  uploadAdjuntoProyectoRiesgo(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      next(uploadErr)
+      return
+    }
+    try {
+      const u = req.user
+      if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+      const scope = await buildScopeFilter(req)
+      if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+      const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
+        .select('riesgos_registro usuario_id participantes')
+      if (!doc) {
+        res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+        return
+      }
+      if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], doc)) {
+        res.status(403).json({ error: 'Solo lectura en este proyecto' })
+        return
+      }
+
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'No se recibió archivo' })
+        return
+      }
+
+      const riesgo = doc.riesgos_registro.id(req.params.riesgoId)
+      if (!riesgo) {
+        const fp = path.join(ADJUNTOS_PROYECTOS_DIR, file.filename)
+        if (fs.existsSync(fp)) fs.unlinkSync(fp)
+        res.status(404).json({ error: 'Riesgo no encontrado' })
+        return
+      }
+
+      const adjunto = {
+        nombre_original: file.originalname,
+        archivo: file.filename,
+        mime_type: file.mimetype,
+        size_bytes: file.size,
+        subido_por: u.nombre ?? u.email ?? '',
+        subido_en: new Date(),
+      }
+      riesgo.adjuntos.push(adjunto)
+      await doc.save()
+      const saved = riesgo.adjuntos[riesgo.adjuntos.length - 1]
+      res.status(201).json(saved)
+    } catch (err) {
+      next(err)
+    }
+  })
+})
+
+/** Elimina un adjunto de un riesgo del proyecto. */
+proyectosRouter.delete('/:id/riesgos/:riesgoId/adjuntos/:adjuntoId', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const doc = await Proyecto.findOne({ _id: req.params.id, ...scope })
+      .select('riesgos_registro usuario_id participantes')
+    if (!doc) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], doc)) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+      return
+    }
+
+    const riesgo = doc.riesgos_registro.id(req.params.riesgoId)
+    if (!riesgo) {
+      res.status(404).json({ error: 'Riesgo no encontrado' })
+      return
+    }
+
+    const adjuntos = riesgo.adjuntos as Array<{ _id: mongoose.Types.ObjectId; archivo: string }>
+    const idx = adjuntos.findIndex((a) => String(a._id) === req.params.adjuntoId)
+    if (idx < 0) {
+      res.status(404).json({ error: 'Adjunto no encontrado' })
+      return
+    }
+
+    const target = adjuntos[idx]!
+    const fp = path.join(ADJUNTOS_PROYECTOS_DIR, target.archivo)
+    if (fs.existsSync(fp)) {
+      try {
+        fs.unlinkSync(fp)
+      } catch {
+        /* noop */
+      }
+    }
+    adjuntos.splice(idx, 1)
+    await doc.save()
+    res.status(204).send()
   } catch (err) {
     next(err)
   }
