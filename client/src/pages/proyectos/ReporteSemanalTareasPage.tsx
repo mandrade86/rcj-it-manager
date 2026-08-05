@@ -215,20 +215,20 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
   }, [data])
 
   const mensajeEjecutivo = useMemo(() => {
-    if (!data || data.resumen.total_tareas === 0) return null
-    const r = data.resumen
+    if (!data || data.actividad_semana.total_tareas === 0) return null
+    const r = data.actividad_semana
     const lineas: string[] = [
-      `Durante ${data.semana.etiqueta.toLowerCase()} se reportan ${r.total_tareas} tareas activas en ${r.total_proyectos} proyecto${r.total_proyectos === 1 ? '' : 's'}.`,
-      `Se completaron ${r.completadas} tareas (${r.pct_completadas}% del total) con avance promedio del ${r.avance_promedio}%.`,
+      `Durante ${data.semana.etiqueta.toLowerCase()} se reportan ${r.total_tareas} tareas con actividad en ${r.proyectos_con_tareas} proyecto${r.proyectos_con_tareas === 1 ? '' : 's'}.`,
+      `En la semana se completaron ${r.completadas} tareas (${r.pct_completadas}% del total semanal) con avance promedio del ${r.avance_promedio}%.`,
     ]
     if (r.bloqueadas > 0) {
-      lineas.push(`${r.bloqueadas} tarea${r.bloqueadas === 1 ? '' : 's'} bloqueada${r.bloqueadas === 1 ? '' : 's'} requiere${r.bloqueadas === 1 ? '' : 'n'} escalamiento.`)
+      lineas.push(`${r.bloqueadas} tarea${r.bloqueadas === 1 ? '' : 's'} bloqueada${r.bloqueadas === 1 ? '' : 's'} en la semana requiere${r.bloqueadas === 1 ? '' : 'n'} escalamiento.`)
     }
     if (r.vencidas > 0) {
-      lineas.push(`${r.vencidas} tarea${r.vencidas === 1 ? '' : 's'} vencida${r.vencidas === 1 ? '' : 's'} sin cerrar.`)
+      lineas.push(`${r.vencidas} tarea${r.vencidas === 1 ? '' : 's'} vencida${r.vencidas === 1 ? '' : 's'} dentro del alcance semanal.`)
     }
     if (r.bloqueadas === 0 && r.vencidas === 0) {
-      lineas.push('No hay tareas bloqueadas ni vencidas en el periodo reportado.')
+      lineas.push('Sin tareas bloqueadas ni vencidas en el alcance de la semana.')
     }
     return lineas
   }, [data])
@@ -405,10 +405,19 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
           )}
 
           {/* KPIs + gráficas */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Portafolio actual — mismo alcance y criterios que el Dashboard (tareas vencidas: fecha fin anterior a hoy).
+            </p>
           <div className="grid gap-4 lg:grid-cols-12">
             <div className="grid gap-3 sm:grid-cols-2 lg:col-span-8 lg:grid-cols-3">
-              <KpiCard label="Proyectos" value={data.resumen.total_proyectos} icon={FolderKanban} accent="#002060" />
-              <KpiCard label="Tareas activas" value={data.resumen.total_tareas} icon={ListTodo} accent="#1F4E79" />
+              <KpiCard
+                label="Proyectos activos"
+                value={`${data.resumen.proyectos_activos} / ${data.resumen.total_proyectos}`}
+                icon={FolderKanban}
+                accent="#002060"
+              />
+              <KpiCard label="Tareas totales" value={data.resumen.total_tareas} icon={ListTodo} accent="#1F4E79" />
               <KpiCard
                 label="Completadas"
                 value={data.resumen.completadas}
@@ -475,6 +484,7 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
                 </Card>
               )}
             </div>
+          </div>
           </div>
 
           {chartProyectos.length > 1 && (

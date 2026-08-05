@@ -6,10 +6,20 @@ import {
   startOfISOWeek,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type mongoose from 'mongoose'
+import mongoose from 'mongoose'
 
 import { Proyecto } from '../db/models/Proyecto.js'
 import { Tarea } from '../db/models/Tarea.js'
+import {
+  buildDestacadosTareas,
+  contarProyectosActivos,
+  contarResumenTareas,
+} from './metricasProyectosTareas.js'
+import {
+  buildProyectoScopeFilter,
+  isAdminProyectos,
+  resolveDepartamentosUsuario,
+} from './proyectoScope.js'
 
 export type RangoSemana = { inicio: Date; fin: Date; iso: string }
 
@@ -85,8 +95,35 @@ function etiquetaSemana(inicio: Date, fin: Date, iso: string): string {
   return `Semana ${num} · ${rango}`
 }
 
+const resumenVacio = {
+  total_proyectos: 0,
+  proyectos_activos: 0,
+  total_tareas: 0,
+  completadas: 0,
+  en_progreso: 0,
+  pendientes: 0,
+  bloqueadas: 0,
+  vencidas: 0,
+  pct_completadas: 0,
+  avance_promedio: 0,
+}
+
+const actividadSemanaVacia = {
+  proyectos_con_tareas: 0,
+  total_tareas: 0,
+  completadas: 0,
+  en_progreso: 0,
+  pendientes: 0,
+  bloqueadas: 0,
+  vencidas: 0,
+  pct_completadas: 0,
+  avance_promedio: 0,
+}
+
 export async function generarReporteSemanalTareas(opts: {
   semana: string
+  userId: string
+  permisos: string[]
   alcance?: string
   proyecto_id?: string
   departamento_id?: string
@@ -99,12 +136,25 @@ export async function generarReporteSemanalTareas(opts: {
   const { inicio, fin, iso } = rango
   const alcance = opts.alcance ?? 'todos'
 
+  const scope = await buildProyectoScopeFilter(opts.userId, opts.permisos)
   const proyectoFilter: Record<string, unknown> = {
+    ...scope,
     estado: { $nin: ['Cancelado'] },
   }
+
   if (alcance === 'proyecto' && opts.proyecto_id) {
     proyectoFilter._id = opts.proyecto_id
   } else if (alcance === 'departamento' && opts.departamento_id) {
+    if (!mongoose.isValidObjectId(opts.departamento_id)) {
+      return { error: 'departamento_id inválido' }
+    }
+    if (!isAdminProyectos(opts.permisos)) {
+      const permitidos = await resolveDepartamentosUsuario(opts.userId)
+      const allowed = new Set(permitidos.map((id) => String(id)))
+      if (!allowed.has(opts.departamento_id)) {
+        return { error: 'Solo puedes consultar proyectos de tus departamentos asignados.' }
+      }
+    }
     proyectoFilter.departamento_id = opts.departamento_id
   }
 
@@ -119,32 +169,27 @@ export async function generarReporteSemanalTareas(opts: {
       porcentaje_avance?: number
     }>
 
+  const semanaPayload = {
+    iso,
+    inicio: inicio.toISOString(),
+    fin: fin.toISOString(),
+    etiqueta: etiquetaSemana(inicio, fin, iso),
+  }
+
   if (proyectos.length === 0) {
     return {
-      semana: {
-        iso,
-        inicio: inicio.toISOString(),
-        fin: fin.toISOString(),
-        etiqueta: etiquetaSemana(inicio, fin, iso),
-      },
+      semana: semanaPayload,
       alcance,
-      resumen: {
-        total_proyectos: 0,
-        total_tareas: 0,
-        completadas: 0,
-        en_progreso: 0,
-        pendientes: 0,
-        bloqueadas: 0,
-        vencidas: 0,
-        pct_completadas: 0,
-        avance_promedio: 0,
-      },
+      resumen: { ...resumenVacio },
+      actividad_semana: { ...actividadSemanaVacia },
       destacados: { bloqueadas: [], vencidas: [] },
       proyectos: [],
     }
   }
 
   const proyectoIds = proyectos.map((p) => p._id)
+  const proyectoNombreById = new Map(proyectos.map((p) => [p._id, p.nombre]))
+
   const tareas = await Tarea.find({ proyecto_id: { $in: proyectoIds } })
     .sort({ fecha_fin: 1, nombre: 1 })
     .lean() as Array<{
@@ -162,29 +207,30 @@ export async function generarReporteSemanalTareas(opts: {
       tags?: string[]
     }>
 
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  const conteoPortafolio = contarResumenTareas(tareas, hoy)
+  const resumen = {
+    total_proyectos: proyectos.length,
+    proyectos_activos: contarProyectosActivos(proyectos),
+    ...conteoPortafolio,
+  }
+
+  const tareasSemana = tareas.filter((t) => tareaAplicaSemana(t, inicio, fin))
+  const actividad_semana = {
+    proyectos_con_tareas: new Set(tareasSemana.map((t) => t.proyecto_id)).size,
+    ...contarResumenTareas(tareasSemana, hoy),
+  }
+
+  const destacados = buildDestacadosTareas(tareas, proyectoNombreById, hoy)
+
   const tareasPorProyecto = new Map<string, typeof tareas>()
-  for (const t of tareas) {
-    if (!tareaAplicaSemana(t, inicio, fin)) continue
+  for (const t of tareasSemana) {
     const list = tareasPorProyecto.get(t.proyecto_id) ?? []
     list.push(t)
     tareasPorProyecto.set(t.proyecto_id, list)
   }
-
-  let completadas = 0
-  let enProgreso = 0
-  let pendientes = 0
-  let bloqueadas = 0
-  let vencidas = 0
-  let totalTareas = 0
-  let sumAvance = 0
-
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-
-  const destacados: {
-    bloqueadas: Array<{ proyecto_id: string; proyecto_nombre: string; tarea_id: string; tarea_nombre: string; responsable?: string | null }>
-    vencidas: Array<{ proyecto_id: string; proyecto_nombre: string; tarea_id: string; tarea_nombre: string; responsable?: string | null; fecha_fin?: string | null }>
-  } = { bloqueadas: [], vencidas: [] }
 
   const proyectosReporte = proyectos
     .map((p) => {
@@ -192,38 +238,6 @@ export async function generarReporteSemanalTareas(opts: {
       if (list.length === 0) return null
 
       const tareasFmt = list.map((t) => {
-        totalTareas++
-        sumAvance += t.porcentaje ?? 0
-        if (t.estado === 'Completado') completadas++
-        else if (t.estado === 'En progreso') enProgreso++
-        else if (t.estado === 'Bloqueado') {
-          bloqueadas++
-          if (destacados.bloqueadas.length < 12) {
-            destacados.bloqueadas.push({
-              proyecto_id: p._id,
-              proyecto_nombre: p.nombre,
-              tarea_id: String(t._id),
-              tarea_nombre: t.nombre,
-              responsable: t.responsable ?? null,
-            })
-          }
-        } else pendientes++
-
-        const fin = t.fecha_fin ? new Date(t.fecha_fin) : null
-        if (t.estado !== 'Completado' && fin && fin < hoy) {
-          vencidas++
-          if (destacados.vencidas.length < 12) {
-            destacados.vencidas.push({
-              proyecto_id: p._id,
-              proyecto_nombre: p.nombre,
-              tarea_id: String(t._id),
-              tarea_nombre: t.nombre,
-              responsable: t.responsable ?? null,
-              fecha_fin: t.fecha_fin?.toISOString() ?? null,
-            })
-          }
-        }
-
         const comentarios = [...(t.comentarios ?? [])].sort(
           (a, b) =>
             new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
@@ -259,28 +273,11 @@ export async function generarReporteSemanalTareas(opts: {
     })
     .filter((p): p is NonNullable<typeof p> => p != null)
 
-  const pctCompletadas = totalTareas > 0 ? Math.round((completadas / totalTareas) * 100) : 0
-  const avancePromedio = totalTareas > 0 ? Math.round(sumAvance / totalTareas) : 0
-
   return {
-    semana: {
-      iso,
-      inicio: inicio.toISOString(),
-      fin: fin.toISOString(),
-      etiqueta: etiquetaSemana(inicio, fin, iso),
-    },
+    semana: semanaPayload,
     alcance,
-    resumen: {
-      total_proyectos: proyectosReporte.length,
-      total_tareas: totalTareas,
-      completadas,
-      en_progreso: enProgreso,
-      pendientes,
-      bloqueadas,
-      vencidas,
-      pct_completadas: pctCompletadas,
-      avance_promedio: avancePromedio,
-    },
+    resumen,
+    actividad_semana,
     destacados,
     proyectos: proyectosReporte,
   }

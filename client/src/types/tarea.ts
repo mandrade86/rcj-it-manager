@@ -74,6 +74,18 @@ export type ReporteSemanalTareas = {
   alcance: string
   resumen: {
     total_proyectos: number
+    proyectos_activos: number
+    total_tareas: number
+    completadas: number
+    en_progreso: number
+    pendientes: number
+    bloqueadas: number
+    vencidas: number
+    pct_completadas: number
+    avance_promedio: number
+  }
+  actividad_semana: {
+    proyectos_con_tareas: number
     total_tareas: number
     completadas: number
     en_progreso: number

@@ -61,12 +61,13 @@ export function ReporteSemanalPrintSheet({ data, tituloAlcance, mensajeEjecutivo
       )}
 
       <section className="reporte-print-section">
-        <h2 className="reporte-print-h2">Indicadores clave</h2>
+        <h2 className="reporte-print-h2">Indicadores clave — portafolio actual</h2>
+        <p className="reporte-print-sub">Mismo alcance y criterios que el Dashboard.</p>
         <table className="reporte-print-kpi">
           <tbody>
             <tr>
-              <td><strong>{r.total_proyectos}</strong><br /><span>Proyectos</span></td>
-              <td><strong>{r.total_tareas}</strong><br /><span>Tareas</span></td>
+              <td><strong>{r.proyectos_activos} / {r.total_proyectos}</strong><br /><span>Proyectos activos</span></td>
+              <td><strong>{r.total_tareas}</strong><br /><span>Tareas totales</span></td>
               <td><strong>{r.completadas}</strong><br /><span>Completadas ({r.pct_completadas}%)</span></td>
               <td><strong>{r.en_progreso}</strong><br /><span>En progreso</span></td>
               <td><strong>{r.bloqueadas}</strong><br /><span>Bloqueadas</span></td>

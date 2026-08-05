@@ -179,6 +179,8 @@ tareasRouter.get('/reporte-semanal', async (req, res, next) => {
       alcance,
       proyecto_id,
       departamento_id,
+      userId: String(req.user!._id),
+      permisos: req.user!.permisos ?? [],
     })
     if ('error' in result) {
       res.status(400).json({ error: result.error })
