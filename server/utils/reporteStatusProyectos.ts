@@ -6,6 +6,16 @@ import { Tarea } from '../db/models/Tarea.js'
 import { buildProyectoScopeFilter, isAdminProyectos, resolveDepartamentosUsuario } from './proyectoScope.js'
 import { calcularRiesgo } from './proyectoRiesgo.js'
 
+export type ReporteStatusTareaItem = {
+  tarea_id: string
+  nombre: string
+  estado: string
+  porcentaje: number
+  responsable?: string | null
+  fecha_inicio?: string | null
+  fecha_fin?: string | null
+}
+
 export type ReporteStatusProyectoItem = {
   proyecto_id: string
   nombre: string
@@ -28,6 +38,8 @@ export type ReporteStatusProyectoItem = {
   riesgo_auto: { nivel: string; motivo: string; color: string }
   riesgos_registrados: number
   riesgos_alto: number
+  avance_tareas_promedio: number
+  tareas: ReporteStatusTareaItem[]
 }
 
 export type ReporteStatusDepartamento = {
@@ -117,6 +129,37 @@ export async function generarReporteStatusProyectos(opts: {
 
   const tareasPorProyecto = new Map(tareasAgg.map((t) => [t._id, t]))
 
+  const tareasDetalleDocs = proyectoIds.length > 0
+    ? await Tarea.find({ proyecto_id: { $in: proyectoIds } })
+      .select('proyecto_id nombre estado porcentaje responsable fecha_inicio fecha_fin')
+      .sort({ fecha_fin: 1, nombre: 1 })
+      .lean() as Array<{
+        _id: mongoose.Types.ObjectId
+        proyecto_id: string
+        nombre: string
+        estado: string
+        porcentaje?: number
+        responsable?: string
+        fecha_inicio?: Date
+        fecha_fin?: Date
+      }>
+    : []
+
+  const tareasListaPorProyecto = new Map<string, ReporteStatusTareaItem[]>()
+  for (const t of tareasDetalleDocs) {
+    const list = tareasListaPorProyecto.get(t.proyecto_id) ?? []
+    list.push({
+      tarea_id: String(t._id),
+      nombre: t.nombre,
+      estado: t.estado,
+      porcentaje: t.porcentaje ?? 0,
+      responsable: t.responsable ?? null,
+      fecha_inicio: t.fecha_inicio?.toISOString() ?? null,
+      fecha_fin: t.fecha_fin?.toISOString() ?? null,
+    })
+    tareasListaPorProyecto.set(t.proyecto_id, list)
+  }
+
   const porDept = new Map<string, ReporteStatusDepartamento>()
 
   for (const p of proyectos) {
@@ -154,6 +197,10 @@ export async function generarReporteStatusProyectos(opts: {
       },
       tareasEstados,
     )
+    const tareasLista = tareasListaPorProyecto.get(p._id) ?? []
+    const avanceTareas = tareasLista.length > 0
+      ? Math.round(tareasLista.reduce((s, t) => s + t.porcentaje, 0) / tareasLista.length)
+      : 0
     const item: ReporteStatusProyectoItem = {
       proyecto_id: p._id,
       nombre: p.nombre,
@@ -176,6 +223,8 @@ export async function generarReporteStatusProyectos(opts: {
       riesgo_auto: riesgoAuto,
       riesgos_registrados: riesgosReg.length,
       riesgos_alto: riesgosReg.filter((r) => r.nivel === 'Alto').length,
+      avance_tareas_promedio: avanceTareas,
+      tareas: tareasLista,
     }
 
     const grupo = porDept.get(deptKey)!

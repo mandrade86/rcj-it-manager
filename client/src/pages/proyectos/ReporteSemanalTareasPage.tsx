@@ -9,7 +9,6 @@ import {
   ListTodo,
   PauseCircle,
   PieChart as PieChartIcon,
-  Printer,
   Sparkles,
   TrendingUp,
   X,
@@ -27,6 +26,8 @@ import {
 } from 'recharts'
 
 import { GaugeRing } from '@/components/kpis/GaugeRing'
+import { ReportePdfButtons } from '@/components/reportes/ReportePdfButtons'
+import { ReporteSemanalPrintSheet } from '@/components/reportes/ReporteSemanalPrintSheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
@@ -271,15 +272,28 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
               </p>
             )}
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="gap-2 border-0 bg-white/95 text-[var(--navy)] shadow-lg hover:bg-white"
-            onClick={() => window.print()}
-          >
-            <Printer className="size-4" />
-            Imprimir / PDF
-          </Button>
+          {data ? (
+            <ReportePdfButtons
+              filename={`resumen-tareas-${data.semana.iso}.pdf`}
+              renderPrintSheet={(onMounted) => (
+                <ReporteSemanalPrintSheet
+                  data={data}
+                  tituloAlcance={tituloAlcance}
+                  mensajeEjecutivo={mensajeEjecutivo}
+                  onMounted={onMounted}
+                />
+              )}
+            />
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled
+              className="gap-2 border-0 bg-white/60 text-[var(--navy)]"
+            >
+              Descargar PDF
+            </Button>
+          )}
         </div>
 
         <div className="relative mt-6 grid gap-3 rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-md sm:grid-cols-2 lg:grid-cols-4">
@@ -568,6 +582,9 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
                           </div>
                         </div>
                         <Badge variant="outline" className="text-xs">{proy.tareas.length} tareas</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Avance tareas: <strong className="text-[var(--navy)]">{proy.avance_tareas_promedio}%</strong>
+                        </span>
                       </div>
                     </div>
                   </CardHeader>
@@ -576,7 +593,13 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
                       <div key={t._id} className="flex flex-wrap items-start gap-3 px-4 py-3 sm:items-center">
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-[var(--navy)]">{t.nombre}</p>
-                          <p className="text-[11px] text-muted-foreground">{t.responsable ?? 'Sin responsable'}</p>
+                          {t.descripcion && (
+                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{t.descripcion}</p>
+                          )}
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            {t.responsable ?? 'Sin responsable'} · {formatDateDMY(t.fecha_inicio)} → {formatDateDMY(t.fecha_fin)}
+                            {(t.comentarios_count ?? 0) > 0 && ` · ${t.comentarios_count} comentario(s)`}
+                          </p>
                           {t.ultimo_comentario && (
                             <p className="mt-1 line-clamp-2 text-[11px] italic text-muted-foreground">
                               «{t.ultimo_comentario}»

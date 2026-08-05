@@ -43,12 +43,14 @@ export type Tarea = {
 export type ReporteSemanalTarea = {
   _id: string
   nombre: string
+  descripcion?: string | null
   estado: TareaEstado
   porcentaje: number
   responsable?: string | null
   fecha_inicio?: string | null
   fecha_fin?: string | null
   ultimo_comentario?: string | null
+  comentarios_count?: number
   tags?: string[]
 }
 
@@ -58,6 +60,7 @@ export type ReporteSemanalProyecto = {
   eje?: string | null
   estado_proyecto?: string
   avance_proyecto: number
+  avance_tareas_promedio: number
   tareas: ReporteSemanalTarea[]
 }
 

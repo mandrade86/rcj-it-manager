@@ -30,6 +30,7 @@ import {
   type ProyectoRiesgoRegistro,
 } from '@/types/proyecto'
 import type { ReporteStatusProyectoItem } from '@/types/reporteProyectos'
+import { ReporteTareasDetalleList } from '@/components/reportes/ReporteTareasDetalleList'
 
 const selectClass =
   'flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -172,12 +173,21 @@ export function ProyectoStatusSheet({ proyecto, open, onOpenChange, onChanged }:
             <dd>{formatDateDMY(proyecto.fecha_fin)}</dd>
             <dt className="text-muted-foreground">Tareas</dt>
             <dd>
-              {proyecto.tareas_completadas}/{proyecto.tareas_total} completadas
+              {proyecto.tareas_completadas}/{proyecto.tareas_total} completadas · Avance {proyecto.avance_tareas_promedio}%
               {proyecto.tareas_bloqueadas > 0 && (
                 <span className="text-red-600"> · {proyecto.tareas_bloqueadas} bloq.</span>
               )}
             </dd>
           </dl>
+
+          {proyecto.tareas.length > 0 && (
+            <div className="rounded-lg border border-border bg-[var(--gray-lt)]/40 p-3">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Detalle de tareas
+              </h3>
+              <ReporteTareasDetalleList tareas={proyecto.tareas} />
+            </div>
+          )}
 
           <Button asChild variant="outline" size="sm" className="gap-1.5">
             <Link to={`/proyectos/${encodeURIComponent(proyecto.proyecto_id)}`}>

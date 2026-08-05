@@ -157,6 +157,7 @@ export async function generarReporteSemanalTareas(opts: {
       fecha_inicio?: Date
       fecha_fin?: Date
       updatedAt?: Date
+      descripcion?: string
       comentarios?: Array<{ texto: string; createdAt?: Date }>
       tags?: string[]
     }>
@@ -232,12 +233,14 @@ export async function generarReporteSemanalTareas(opts: {
         return {
           _id: String(t._id),
           nombre: t.nombre,
+          descripcion: t.descripcion?.trim().slice(0, 300) || null,
           estado: t.estado,
           porcentaje: t.porcentaje ?? 0,
           responsable: t.responsable ?? null,
           fecha_inicio: t.fecha_inicio?.toISOString() ?? null,
           fecha_fin: t.fecha_fin?.toISOString() ?? null,
           ultimo_comentario: ultimo || null,
+          comentarios_count: comentarios.length,
           tags: t.tags ?? [],
         }
       })
@@ -248,6 +251,9 @@ export async function generarReporteSemanalTareas(opts: {
         eje: p.eje ?? null,
         estado_proyecto: p.estado ?? null,
         avance_proyecto: p.porcentaje_avance ?? 0,
+        avance_tareas_promedio: tareasFmt.length > 0
+          ? Math.round(tareasFmt.reduce((s, x) => s + x.porcentaje, 0) / tareasFmt.length)
+          : 0,
         tareas: tareasFmt,
       }
     })

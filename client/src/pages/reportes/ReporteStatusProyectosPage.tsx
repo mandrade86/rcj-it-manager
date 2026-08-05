@@ -8,7 +8,6 @@ import {
   ChevronRight,
   FolderKanban,
   Layers,
-  Printer,
   Sparkles,
   TrendingUp,
   X,
@@ -33,7 +32,9 @@ import { cn } from '@/lib/utils'
 import { estadoColor, type ProyectoEstado } from '@/types/proyecto'
 import type { ReporteStatusProyectoItem, ReporteStatusProyectos } from '@/types/reporteProyectos'
 
-import { ProyectoStatusSheet } from './ProyectoStatusSheet'
+import { ReportePdfButtons } from '@/components/reportes/ReportePdfButtons'
+import { ReporteStatusPrintSheet } from '@/components/reportes/ReporteStatusPrintSheet'
+import { ReporteTareasDetalleList } from '@/components/reportes/ReporteTareasDetalleList'
 
 const selectClass =
   'flex h-10 w-full rounded-lg border border-white/20 bg-white/90 px-3 py-1 text-sm shadow-sm outline-none backdrop-blur-sm focus-visible:border-[var(--lime)] focus-visible:ring-2 focus-visible:ring-[var(--lime)]/40'
@@ -44,6 +45,8 @@ const RIESGO_CHART_COLORS: Record<string, string> = {
   Bajo: '#70AD47',
   'Sin fecha': '#6B7280',
 }
+
+import { ProyectoStatusSheet } from './ProyectoStatusSheet'
 
 type Props = {
   embedded?: boolean
@@ -179,6 +182,20 @@ function ProjectStatusCard({
           {p.riesgo_auto.motivo}
         </p>
 
+        <div className="mt-3 rounded-lg bg-[var(--gray-lt)]/50 px-2.5 py-2">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Tareas · {p.tareas_completadas}/{p.tareas_total} completadas · Avance {p.avance_tareas_promedio}%
+          </p>
+          {p.tareas.length > 0 ? (
+            <ReporteTareasDetalleList tareas={p.tareas.slice(0, 3)} compact />
+          ) : (
+            <p className="text-[10px] text-muted-foreground">Sin tareas</p>
+          )}
+          {p.tareas.length > 3 && (
+            <p className="mt-1 text-[10px] text-[var(--navy)]">+{p.tareas.length - 3} tareas más…</p>
+          )}
+        </div>
+
         <div className="mt-3 flex items-center justify-between border-t border-dashed border-border/80 pt-3 text-[10px] font-semibold text-[var(--lime)] opacity-80 transition-opacity group-hover:opacity-100 print:hidden">
           <span>Ver detalle y documentar riesgos</span>
           <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -278,6 +295,18 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
     setFiltroProyecto('')
   }
 
+  const tituloAlcance = useMemo(() => {
+    if (filtroProyecto) {
+      const p = todosProyectos.find((x) => x.proyecto_id === filtroProyecto)
+      return p ? `Proyecto: ${p.nombre}` : 'Proyecto seleccionado'
+    }
+    if (filtroDepto) {
+      const d = data?.departamentos_disponibles.find((x) => x._id === filtroDepto)
+      return d ? `Departamento: ${d.nombre}` : 'Departamento seleccionado'
+    }
+    return 'Todos los departamentos'
+  }, [filtroProyecto, filtroDepto, todosProyectos, data?.departamentos_disponibles])
+
   return (
     <div className={cn('reporte-status-page space-y-6', !embedded && 'mx-auto max-w-7xl')}>
       {/* Hero ejecutivo */}
@@ -320,15 +349,22 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
               </p>
             )}
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="gap-2 border-0 bg-white/95 text-[var(--navy)] shadow-lg hover:bg-white"
-            onClick={() => window.print()}
-          >
-            <Printer className="size-4" />
-            Imprimir / PDF
-          </Button>
+          {data ? (
+            <ReportePdfButtons
+              filename={`project-status-${data.generado_en.slice(0, 10)}.pdf`}
+              renderPrintSheet={(onMounted) => (
+                <ReporteStatusPrintSheet
+                  data={data}
+                  tituloAlcance={tituloAlcance}
+                  onMounted={onMounted}
+                />
+              )}
+            />
+          ) : (
+            <Button type="button" variant="secondary" disabled className="border-0 bg-white/60 text-[var(--navy)]">
+              Descargar PDF
+            </Button>
+          )}
         </div>
 
         {/* Filtros integrados en hero */}

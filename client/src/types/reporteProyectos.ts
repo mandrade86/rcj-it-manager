@@ -1,5 +1,14 @@
-import type { ProyectoEstado } from './proyecto'
-import type { RiesgoProyecto } from './proyecto'
+import type { ProyectoEstado, RiesgoProyecto } from './proyecto'
+
+export type ReporteStatusTareaItem = {
+  tarea_id: string
+  nombre: string
+  estado: string
+  porcentaje: number
+  responsable?: string | null
+  fecha_inicio?: string | null
+  fecha_fin?: string | null
+}
 
 export type ReporteStatusProyectoItem = {
   proyecto_id: string
@@ -23,6 +32,8 @@ export type ReporteStatusProyectoItem = {
   riesgo_auto: RiesgoProyecto
   riesgos_registrados: number
   riesgos_alto: number
+  avance_tareas_promedio: number
+  tareas: ReporteStatusTareaItem[]
 }
 
 export type ReporteStatusDepartamento = {
