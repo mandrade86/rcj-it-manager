@@ -1,5 +1,6 @@
 import { notifyKpiDataChanged } from '@/lib/kpiSync'
 import type { Proyecto } from '@/types/proyecto'
+import type { ReporteStatusProyectos } from '@/types/reporteProyectos'
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -179,6 +180,18 @@ export async function exportarProyectosExcel(
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+export async function fetchReporteStatusProyectos(params: {
+  alcance?: 'todos' | 'departamento'
+  departamento_id?: string
+}): Promise<ReporteStatusProyectos> {
+  const q = new URLSearchParams()
+  if (params.alcance) q.set('alcance', params.alcance)
+  if (params.departamento_id) q.set('departamento_id', params.departamento_id)
+  const res = await fetch(`/api/proyectos/reporte-status?${q}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ReporteStatusProyectos>
 }
 
 export async function updateProyectoParticipantes(

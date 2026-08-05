@@ -5,6 +5,7 @@ export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/proyectos': 'proyectos:ver',
   '/proyectos/nuevo': 'proyectos:editar',
   '/proyectos-reporte-semanal': 'proyectos:ver',
+  '/reportes': 'proyectos:ver',
   '/equipo': 'equipo:ver',
   '/kpis': 'kpis:ver',
   '/gastos': 'gastos:ver',

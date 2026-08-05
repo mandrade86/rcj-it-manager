@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ArrowRight, Building2, Download, Factory, FileUp, GanttChartSquare, GitBranch, History,
-  LayoutGrid, List, Lock, Paperclip, Pencil, Plus, Trash2, User, Users,
+  LayoutGrid, List, Lock, MessageSquare, Paperclip, Pencil, Plus, Trash2, User, Users,
 } from 'lucide-react'
 
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
@@ -577,7 +577,8 @@ export function ProyectoDetailView({
                     <p className="mb-3 text-xs text-muted-foreground">
                       El <strong>KPI / meta</strong> del proyecto está arriba en «KPI / Meta»; no se repite por tarea.
                       En <strong>Canvas</strong> usa el tablero To Do / In Progress / Done (arrastrar solo dueño o responsable). Al editar puedes indicar
-                      de cuáles depende (deben completarse antes). Usa <strong>Adjuntos</strong> para evidencias.
+                      de cuáles depende (deben completarse antes). Usa <strong>Adjuntos</strong> para evidencias y el icono{' '}
+                      <strong>Comentarios</strong> para la bitácora de seguimiento.
                     </p>
 
                     <Tabs defaultValue="lista" className="w-full">
@@ -679,6 +680,11 @@ export function ProyectoDetailView({
                                   · {t.adjuntos!.length} adjunto{t.adjuntos!.length === 1 ? '' : 's'}
                                 </span>
                               )}
+                              {(t.comentarios?.length ?? 0) > 0 && (
+                                <span className="ml-1 text-[var(--navy)]">
+                                  · {t.comentarios!.length} comentario{t.comentarios!.length === 1 ? '' : 's'}
+                                </span>
+                              )}
                             </p>
                             <TareaTagsList tags={t.tags} className="mt-1.5" />
                             {depN > 0 && (
@@ -703,6 +709,20 @@ export function ProyectoDetailView({
                               onClick={() => setTareaDetalle(t)}
                             >
                               Ver
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground"
+                              onClick={() => setTareaDetalle(t)}
+                              aria-label="Comentarios de la tarea"
+                              title="Comentarios"
+                            >
+                              <MessageSquare className="size-4" />
+                              {(t.comentarios?.length ?? 0) > 0 && (
+                                <span className="sr-only">{t.comentarios!.length} comentarios</span>
+                              )}
                             </Button>
                             <Button
                               type="button"

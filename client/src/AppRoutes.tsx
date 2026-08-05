@@ -18,7 +18,7 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { ProyectoDetailPage } from '@/pages/proyectos/ProyectoDetailPage'
 import { ProyectoFormPage } from '@/pages/proyectos/ProyectoFormPage'
 import { ProyectosPage } from '@/pages/proyectos/ProyectosPage'
-import { ReporteSemanalTareasPage } from '@/pages/proyectos/ReporteSemanalTareasPage'
+import { ReportesPage } from '@/pages/reportes/ReportesPage'
 import { DepartamentosPage } from '@/pages/maestros/DepartamentosPage'
 import { MetasPage } from '@/pages/maestros/MetasPage'
 import { EjesProyectoPage } from '@/pages/maestros/EjesProyectoPage'
@@ -54,7 +54,8 @@ export function AppRoutes() {
           <Route element={<ProtectedRoute permiso="proyectos:ver" />}>
             <Route path="proyectos/:id" element={<ProyectoDetailPage />} />
             <Route path="proyectos" element={<ProyectosPage />} />
-            <Route path="proyectos-reporte-semanal" element={<ReporteSemanalTareasPage />} />
+            <Route path="reportes" element={<ReportesPage />} />
+            <Route path="proyectos-reporte-semanal" element={<Navigate to="/reportes" replace />} />
           </Route>
 
           <Route element={<ProtectedRoute permiso="proyectos:editar" />}>

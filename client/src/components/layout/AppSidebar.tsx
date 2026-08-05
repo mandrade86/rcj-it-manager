@@ -70,7 +70,7 @@ const operacionNav: NavItemDef[] = [
   { to: '/resumen-departamento', label: 'Resumen metas y plan', icon: BarChart3, permiso: 'dashboard:ver' },
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban, permiso: 'proyectos:ver' },
   { to: '/proyectos?vista=roadmap', label: 'Roadmap', icon: Map, permiso: 'proyectos:ver' },
-  { to: '/proyectos-reporte-semanal', label: 'Reporte semanal', icon: FileText, permiso: 'proyectos:ver' },
+  { to: '/reportes', label: 'Reportería', icon: FileText, permiso: 'proyectos:ver' },
   { to: '/equipo', label: 'Equipo', icon: Users, permiso: 'equipo:ver' },
   { to: '/kpis', label: 'KPIs', icon: Target, permiso: 'kpis:ver' },
 ]

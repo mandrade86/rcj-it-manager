@@ -339,6 +339,20 @@
     max-width: none !important;
   }
 
+  body.reporte-status-print-active aside,
+  body.reporte-status-print-active header,
+  body.reporte-status-print-active .print\:hidden {
+    display: none !important;
+  }
+
+  body.reporte-status-print-active main {
+    padding: 0 !important;
+  }
+
+  body.reporte-status-print-active .reporte-status-page {
+    max-width: none !important;
+  }
+
   body.descriptor-print-active > *:not(.descriptor-print-host) {
     display: none !important;
   }

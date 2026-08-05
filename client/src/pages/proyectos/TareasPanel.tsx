@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Clock, GripVertical, Lock } from 'lucide-react'
+import { AlertTriangle, Clock, GripVertical, Lock, MessageSquare } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
@@ -336,6 +336,13 @@ function KanbanCard({
           {tarea.fecha_fin ? `Fin ${formatDateDMY(tarea.fecha_fin)}` : 'Sin fecha fin'}
           {' · '}{tarea.porcentaje}%
           {depCount > 0 && ` · ${depCount} dep.`}
+          {(tarea.comentarios?.length ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-0.5">
+              {' · '}
+              <MessageSquare className="size-2.5" />
+              {tarea.comentarios!.length}
+            </span>
+          )}
         </p>
         {tarea.estado === 'Bloqueado' && (
           <Badge variant="outline" className="mt-1 text-[9px]">

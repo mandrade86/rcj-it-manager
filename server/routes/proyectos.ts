@@ -29,6 +29,7 @@ import {
   buildResolverCache,
   rowToProyecto,
 } from '../utils/proyectosExcel.js'
+import { generarReporteStatusProyectos } from '../utils/reporteStatusProyectos.js'
 
 export const proyectosRouter = Router()
 
@@ -601,6 +602,36 @@ proyectosRouter.get('/', async (req, res, next) => {
     }))
 
     res.json(enriched)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Project Status Report — resumen de proyectos agrupados por departamento. */
+proyectosRouter.get('/reporte-status', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+
+    const alcance = typeof req.query.alcance === 'string' ? req.query.alcance : 'todos'
+    const departamento_id = typeof req.query.departamento_id === 'string'
+      ? req.query.departamento_id
+      : undefined
+
+    const result = await generarReporteStatusProyectos({
+      userId: u._id,
+      permisos: u.permisos ?? [],
+      alcance,
+      departamento_id,
+    })
+
+    if ('error' in result) {
+      const status = result.error.includes('departamentos') ? 403 : 400
+      res.status(status).json({ error: result.error })
+      return
+    }
+
+    res.json(result)
   } catch (err) {
     next(err)
   }

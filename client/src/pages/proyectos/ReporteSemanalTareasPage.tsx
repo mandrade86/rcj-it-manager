@@ -40,7 +40,7 @@ function estadoBadgeClass(estado: TareaEstado) {
   return cn('text-xs', estadoTareaColor(estado))
 }
 
-export function ReporteSemanalTareasPage() {
+export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: boolean }) {
   const [semana, setSemana] = useState(isoWeekNow)
   const [alcance, setAlcance] = useState<'todos' | 'proyecto' | 'departamento'>('todos')
   const [proyectoId, setProyectoId] = useState('')
@@ -122,7 +122,8 @@ export function ReporteSemanalTareasPage() {
   }, [alcance, proyectoId, departamentoId, proyectos, departamentos])
 
   return (
-    <div className="reporte-semanal-page mx-auto max-w-6xl space-y-6">
+    <div className={cn('reporte-semanal-page space-y-6', !embedded && 'mx-auto max-w-6xl')}>
+      {!embedded && (
       <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--navy)]">
@@ -138,6 +139,16 @@ export function ReporteSemanalTareasPage() {
           Imprimir / PDF
         </Button>
       </div>
+      )}
+
+      {embedded && (
+        <div className="flex justify-end print:hidden">
+          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => window.print()}>
+            <Printer className="size-4" />
+            Imprimir / PDF
+          </Button>
+        </div>
+      )}
 
       <Card className="print:hidden">
         <CardHeader className="pb-3">
