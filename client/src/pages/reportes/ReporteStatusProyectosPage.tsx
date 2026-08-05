@@ -1,14 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   Building2,
+  CheckCircle2,
   ChevronRight,
   FolderKanban,
+  Layers,
   Printer,
+  Sparkles,
+  TrendingUp,
   X,
 } from 'lucide-react'
+import {
+  Bar,
+  BarChart,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 
+import { GaugeRing } from '@/components/kpis/GaugeRing'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,10 +36,156 @@ import type { ReporteStatusProyectoItem, ReporteStatusProyectos } from '@/types/
 import { ProyectoStatusSheet } from './ProyectoStatusSheet'
 
 const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
+  'flex h-10 w-full rounded-lg border border-white/20 bg-white/90 px-3 py-1 text-sm shadow-sm outline-none backdrop-blur-sm focus-visible:border-[var(--lime)] focus-visible:ring-2 focus-visible:ring-[var(--lime)]/40'
+
+const RIESGO_CHART_COLORS: Record<string, string> = {
+  Alto: '#C00000',
+  Medio: '#F59E0B',
+  Bajo: '#70AD47',
+  'Sin fecha': '#6B7280',
+}
 
 type Props = {
   embedded?: boolean
+}
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  accent,
+  alert,
+}: {
+  label: string
+  value: string | number
+  sub?: string
+  icon: typeof FolderKanban
+  accent: string
+  alert?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-xl border border-white/60 bg-white/95 p-4 shadow-md backdrop-blur-sm transition-transform hover:-translate-y-0.5 hover:shadow-lg',
+        alert && 'ring-2 ring-red-400/50',
+      )}
+    >
+      <div
+        className="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+        style={{ backgroundColor: accent }}
+      />
+      <div className="flex items-start justify-between gap-2 pl-2">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+          <p
+            className={cn(
+              'mt-1 text-3xl font-bold tabular-nums tracking-tight',
+              alert ? 'text-red-600' : 'text-[var(--navy)]',
+            )}
+          >
+            {value}
+          </p>
+          {sub && <p className="mt-0.5 text-[10px] font-medium text-red-600">{sub}</p>}
+        </div>
+        <div
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-inner"
+          style={{ backgroundColor: `${accent}18`, color: accent }}
+        >
+          <Icon className="size-5" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProjectStatusCard({
+  proyecto: p,
+  deptNombre,
+  onClick,
+}: {
+  proyecto: ReporteStatusProyectoItem
+  deptNombre: string
+  onClick: () => void
+}) {
+  const riesgoColor = p.riesgo_auto.color
+  const avance = Math.min(100, p.porcentaje_avance)
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative overflow-hidden rounded-xl border border-border/80 bg-white text-left shadow-md transition-all duration-200 hover:-translate-y-1 hover:border-[var(--lime)]/60 hover:shadow-xl print:break-inside-avoid"
+    >
+      <div
+        className="h-1.5 w-full"
+        style={{ background: `linear-gradient(90deg, ${riesgoColor}, ${riesgoColor}88)` }}
+      />
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="relative shrink-0">
+            <div
+              className="flex size-14 items-center justify-center rounded-full"
+              style={{
+                background: `conic-gradient(${riesgoColor} ${avance * 3.6}deg, var(--gray-lt) 0deg)`,
+              }}
+            >
+              <div className="flex size-11 flex-col items-center justify-center rounded-full bg-white shadow-inner">
+                <span className="text-sm font-bold text-[var(--navy)]">{avance}%</span>
+              </div>
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 font-semibold leading-snug text-[var(--navy)] group-hover:text-[var(--navy)]">
+              {p.nombre}
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {p.proyecto_id} · {deptNombre}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <Badge
+                variant="outline"
+                className={cn('text-[10px]', estadoColor(p.estado as ProyectoEstado))}
+              >
+                {p.estado}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="text-[10px] font-semibold"
+                style={{
+                  borderColor: riesgoColor,
+                  color: riesgoColor,
+                  backgroundColor: `${riesgoColor}12`,
+                }}
+              >
+                {p.riesgo_auto.nivel}
+              </Badge>
+              {p.riesgos_registrados > 0 && (
+                <Badge
+                  variant="outline"
+                  className="gap-0.5 border-red-300 bg-red-50 text-[10px] font-semibold text-red-700"
+                >
+                  <AlertTriangle className="size-2.5" />
+                  {p.riesgos_registrados} riesgo{p.riesgos_registrados === 1 ? '' : 's'}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-3 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+          {p.riesgo_auto.motivo}
+        </p>
+
+        <div className="mt-3 flex items-center justify-between border-t border-dashed border-border/80 pt-3 text-[10px] font-semibold text-[var(--lime)] opacity-80 transition-opacity group-hover:opacity-100 print:hidden">
+          <span>Ver detalle y documentar riesgos</span>
+          <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+        </div>
+      </div>
+    </button>
+  )
 }
 
 export function ReporteStatusProyectosPage({ embedded = false }: Props) {
@@ -76,20 +237,14 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
 
   const proyectosVisibles = useMemo(() => {
     let list = todosProyectos
-    if (filtroDepto) {
-      list = list.filter((p) => p.departamento_id === filtroDepto)
-    }
-    if (filtroProyecto) {
-      list = list.filter((p) => p.proyecto_id === filtroProyecto)
-    }
+    if (filtroDepto) list = list.filter((p) => p.departamento_id === filtroDepto)
+    if (filtroProyecto) list = list.filter((p) => p.proyecto_id === filtroProyecto)
     return list
   }, [todosProyectos, filtroDepto, filtroProyecto])
 
   const deptosEnVista = useMemo(() => {
     if (!data) return []
-    if (filtroDepto) {
-      return data.departamentos.filter((d) => d.departamento_id === filtroDepto)
-    }
+    if (filtroDepto) return data.departamentos.filter((d) => d.departamento_id === filtroDepto)
     return data.departamentos
   }, [data, filtroDepto])
 
@@ -100,6 +255,24 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
     return [...base].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   }, [todosProyectos, filtroDepto])
 
+  const chartRiesgo = useMemo(() => {
+    const counts: Record<string, number> = { Alto: 0, Medio: 0, Bajo: 0, 'Sin fecha': 0 }
+    for (const p of proyectosVisibles) {
+      const n = p.riesgo_auto.nivel
+      counts[n] = (counts[n] ?? 0) + 1
+    }
+    return Object.entries(counts)
+      .filter(([, v]) => v > 0)
+      .map(([name, value]) => ({ name, value, fill: RIESGO_CHART_COLORS[name] ?? '#6B7280' }))
+  }, [proyectosVisibles])
+
+  const avanceVista = useMemo(() => {
+    if (proyectosVisibles.length === 0) return 0
+    return Math.round(
+      proyectosVisibles.reduce((s, p) => s + p.porcentaje_avance, 0) / proyectosVisibles.length,
+    )
+  }, [proyectosVisibles])
+
   function limpiarFiltros() {
     setFiltroDepto(null)
     setFiltroProyecto('')
@@ -107,41 +280,63 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
 
   return (
     <div className={cn('reporte-status-page space-y-6', !embedded && 'mx-auto max-w-7xl')}>
-      {!embedded && (
-        <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--navy)]">
-              <BarChart3 className="size-7" />
+      {/* Hero ejecutivo */}
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-2xl shadow-xl print:hidden',
+          embedded ? 'p-5' : 'p-6 sm:p-8',
+        )}
+        style={{
+          background: 'linear-gradient(135deg, #002060 0%, #003080 45%, #1a4a8a 100%)',
+        }}
+      >
+        <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-[var(--lime)]/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 left-1/3 size-48 rounded-full bg-white/5 blur-2xl" />
+
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            {!embedded && (
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-[var(--lime)]">
+                <Sparkles className="size-3.5" />
+                Reportería ejecutiva
+              </p>
+            )}
+            <h1
+              className={cn(
+                'font-bold tracking-tight text-white',
+                embedded ? 'text-xl' : 'text-2xl sm:text-3xl',
+              )}
+            >
               Project Status Dashboard
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Vista ejecutiva del portafolio: filtra por departamento o proyecto y documenta riesgos con evidencias.
+            <p className="mt-2 max-w-xl text-sm text-blue-100/90">
+              Portafolio de proyectos por departamento — filtra, explora y documenta riesgos con
+              evidencias para presentar a gerencia.
             </p>
+            {data && (
+              <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-blue-100">
+                <TrendingUp className="size-3.5 text-[var(--lime)]" />
+                Actualizado {formatDateDMY(data.generado_en)}
+              </p>
+            )}
           </div>
-          <Button type="button" variant="outline" className="gap-2" onClick={() => window.print()}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="gap-2 border-0 bg-white/95 text-[var(--navy)] shadow-lg hover:bg-white"
+            onClick={() => window.print()}
+          >
             <Printer className="size-4" />
             Imprimir / PDF
           </Button>
         </div>
-      )}
 
-      {embedded && (
-        <div className="flex justify-end print:hidden">
-          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => window.print()}>
-            <Printer className="size-4" />
-            Imprimir / PDF
-          </Button>
-        </div>
-      )}
-
-      {/* Filtros interactivos */}
-      <Card className="print:hidden">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        {/* Filtros integrados en hero */}
+        <div className="relative mt-6 space-y-4 rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">
           <div>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Departamentos</p>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-blue-100/80">
+              Departamentos
+            </p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -150,10 +345,10 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
                   setFiltroProyecto('')
                 }}
                 className={cn(
-                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all',
                   filtroDepto === null
-                    ? 'border-[var(--navy)] bg-[var(--navy)] text-white'
-                    : 'border-border bg-white text-muted-foreground hover:border-[var(--navy)]/40',
+                    ? 'bg-[var(--lime)] text-[var(--navy)] shadow-md'
+                    : 'bg-white/15 text-white hover:bg-white/25',
                 )}
               >
                 Todos
@@ -167,10 +362,10 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
                     setFiltroProyecto('')
                   }}
                   className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all',
                     filtroDepto === d._id
-                      ? 'border-[var(--navy)] bg-[var(--navy)] text-white'
-                      : 'border-border bg-white text-muted-foreground hover:border-[var(--navy)]/40',
+                      ? 'bg-[var(--lime)] text-[var(--navy)] shadow-md'
+                      : 'bg-white/15 text-white hover:bg-white/25',
                   )}
                 >
                   {d.nombre}
@@ -179,9 +374,9 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="filtro-proyecto">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="grid gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-blue-100/80" htmlFor="filtro-proyecto">
                 Proyecto
               </label>
               <select
@@ -199,183 +394,239 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
               </select>
             </div>
             {(filtroDepto || filtroProyecto) && (
-              <div className="flex items-end">
-                <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={limpiarFiltros}>
-                  <X className="size-3.5" />
-                  Limpiar filtros
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1 text-white hover:bg-white/15 hover:text-white"
+                onClick={limpiarFiltros}
+              >
+                <X className="size-3.5" />
+                Limpiar filtros
+              </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {loading && <p className="text-sm text-muted-foreground">Cargando dashboard…</p>}
+      {loading && (
+        <div className="flex items-center justify-center gap-3 rounded-xl border border-border bg-white py-16 shadow-sm">
+          <div className="size-8 animate-spin rounded-full border-2 border-[var(--navy)] border-t-[var(--lime)]" />
+          <p className="text-sm font-medium text-muted-foreground">Cargando portafolio…</p>
+        </div>
+      )}
+
       {err && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-sm">
           {err}
         </p>
       )}
 
       {data && !loading && (
         <>
-          <div className="reporte-status-header rounded-lg border border-border bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  RCJ Corporación — IT Manager
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-[var(--navy)]">
-                  Project Status Dashboard
-                </h2>
-              </div>
-              <div className="text-right text-sm text-muted-foreground">
-                Generado: {formatDateDMY(data.generado_en)}
-              </div>
-            </div>
+          {/* Cabecera impresión */}
+          <div className="reporte-status-header hidden rounded-lg border border-border bg-white p-4 shadow-sm print:block">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              RCJ Corporación — IT Manager
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-[var(--navy)]">
+              Project Status Dashboard
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Generado: {formatDateDMY(data.generado_en)}
+            </p>
           </div>
 
-          {/* KPIs — clicables para filtrar departamentos con riesgos altos */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            {[
-              { label: 'Proyectos', value: data.resumen.total_proyectos, onClick: undefined },
-              { label: 'Departamentos', value: data.resumen.total_departamentos, onClick: undefined },
-              { label: 'Activos', value: data.resumen.activos, onClick: undefined },
-              { label: 'Completados', value: data.resumen.completados, onClick: undefined },
-              { label: 'Avance prom.', value: `${data.resumen.avance_promedio}%`, onClick: undefined },
-              {
-                label: 'Riesgos doc.',
-                value: data.resumen.riesgos_registrados,
-                sub: data.resumen.riesgos_alto > 0 ? `${data.resumen.riesgos_alto} alto` : undefined,
-                onClick: undefined,
-                alert: data.resumen.riesgos_alto > 0,
-              },
-            ].map((c) => (
-              <Card
-                key={c.label}
-                className={cn(c.onClick && 'cursor-pointer transition-shadow hover:shadow-md')}
-                onClick={c.onClick}
-              >
-                <CardContent className="pt-4">
-                  <p className="text-xs text-muted-foreground">{c.label}</p>
-                  <p className={cn('text-2xl font-semibold', c.alert ? 'text-red-600' : 'text-[var(--navy)]')}>
-                    {c.value}
+          {/* KPIs + gauge + gráfica */}
+          <div className="grid gap-4 lg:grid-cols-12">
+            <div className="grid gap-3 sm:grid-cols-2 lg:col-span-8 lg:grid-cols-3">
+              <KpiCard
+                label="Proyectos"
+                value={data.resumen.total_proyectos}
+                icon={FolderKanban}
+                accent="#002060"
+              />
+              <KpiCard
+                label="Departamentos"
+                value={data.resumen.total_departamentos}
+                icon={Building2}
+                accent="#1F4E79"
+              />
+              <KpiCard
+                label="Activos"
+                value={data.resumen.activos}
+                icon={Activity}
+                accent="#70AD47"
+              />
+              <KpiCard
+                label="Completados"
+                value={data.resumen.completados}
+                icon={CheckCircle2}
+                accent="#0F6E56"
+              />
+              <KpiCard
+                label="Avance prom."
+                value={`${data.resumen.avance_promedio}%`}
+                icon={TrendingUp}
+                accent="#4527A0"
+              />
+              <KpiCard
+                label="Riesgos doc."
+                value={data.resumen.riesgos_registrados}
+                sub={data.resumen.riesgos_alto > 0 ? `${data.resumen.riesgos_alto} nivel alto` : undefined}
+                icon={AlertTriangle}
+                accent="#C00000"
+                alert={data.resumen.riesgos_alto > 0}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:col-span-4 lg:grid-cols-1">
+              <Card className="overflow-hidden border-0 bg-gradient-to-br from-white to-[var(--blue-lt)]/40 shadow-lg">
+                <CardContent className="flex flex-col items-center pt-6 pb-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Avance del portafolio
                   </p>
-                  {'sub' in c && c.sub && (
-                    <p className="text-[10px] text-red-600">{c.sub}</p>
-                  )}
+                  <GaugeRing value={avanceVista} size={120} />
+                  <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                    {proyectosVisibles.length} proyecto{proyectosVisibles.length === 1 ? '' : 's'} en vista
+                  </p>
                 </CardContent>
               </Card>
-            ))}
+
+              {chartRiesgo.length > 0 && (
+                <Card className="overflow-hidden border-0 shadow-lg">
+                  <CardHeader className="pb-1 pt-4">
+                    <CardTitle className="flex items-center gap-2 text-sm text-[var(--navy)]">
+                      <BarChart3 className="size-4 text-[var(--lime)]" />
+                      Riesgo automático
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-36 pb-3">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartRiesgo} layout="vertical" margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
+                        <XAxis type="number" hide />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          width={64}
+                          tick={{ fontSize: 11, fill: '#6B7280' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <Tooltip
+                          cursor={{ fill: 'rgba(0,32,96,0.06)' }}
+                          contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                        />
+                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}>
+                          {chartRiesgo.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
 
-          {/* Tarjetas de departamento — clicables */}
-          {!filtroProyecto && deptosEnVista.length > 1 && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
-              {deptosEnVista.map((dept) => (
-                <button
-                  key={dept.departamento_id ?? 'sin-depto'}
-                  type="button"
-                  onClick={() => setFiltroDepto(dept.departamento_id)}
-                  className="rounded-lg border border-border bg-white p-4 text-left shadow-sm transition-all hover:border-[var(--navy)]/30 hover:shadow-md"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 font-semibold text-[var(--navy)]">
-                      <Building2 className="size-4" />
-                      {dept.departamento_nombre}
-                    </span>
-                    <ChevronRight className="size-4 text-muted-foreground" />
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {dept.resumen.total_proyectos} proyectos · Avance {dept.resumen.avance_promedio}%
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Grid de proyectos — clicables */}
-          {proyectosVisibles.length === 0 ? (
-            <Card>
-              <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                No hay proyectos para los filtros seleccionados.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {proyectosVisibles.map((p) => {
-                const deptNombre = data.departamentos.find(
-                  (d) => d.departamento_id === p.departamento_id,
-                )?.departamento_nombre ?? '—'
-                return (
-                  <button
-                    key={p.proyecto_id}
-                    type="button"
-                    onClick={() => setProyectoSheet(p)}
-                    className="group rounded-lg border border-border bg-white p-4 text-left shadow-sm transition-all hover:border-[var(--lime)] hover:shadow-md print:break-inside-avoid"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold text-[var(--navy)] group-hover:text-[var(--navy)]">
-                          {p.nombre}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {p.proyecto_id} · {deptNombre}
-                        </p>
-                      </div>
-                      <FolderKanban className="size-4 shrink-0 text-muted-foreground group-hover:text-[var(--lime)]" />
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      <Badge
-                        variant="outline"
-                        className={cn('text-[10px]', estadoColor(p.estado as ProyectoEstado))}
-                      >
-                        {p.estado}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px]"
-                        style={{
-                          borderColor: p.riesgo_auto.color,
-                          color: p.riesgo_auto.color,
-                        }}
-                      >
-                        {p.riesgo_auto.nivel}
-                      </Badge>
-                      {p.riesgos_registrados > 0 && (
-                        <Badge variant="outline" className="gap-0.5 border-red-200 bg-red-50 text-[10px] text-red-700">
-                          <AlertTriangle className="size-2.5" />
-                          {p.riesgos_registrados}
-                        </Badge>
+          {/* Departamentos */}
+          {!filtroProyecto && deptosEnVista.length > 0 && (
+            <div>
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--navy)] print:hidden">
+                <Layers className="size-4 text-[var(--lime)]" />
+                Por departamento
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
+                {deptosEnVista.map((dept) => {
+                  const selected = filtroDepto === dept.departamento_id
+                  const riesgosDept = dept.proyectos.reduce((s, p) => s + p.riesgos_registrados, 0)
+                  return (
+                    <button
+                      key={dept.departamento_id ?? 'sin-depto'}
+                      type="button"
+                      onClick={() => setFiltroDepto(dept.departamento_id)}
+                      className={cn(
+                        'group relative overflow-hidden rounded-xl border p-4 text-left shadow-md transition-all hover:-translate-y-0.5 hover:shadow-xl',
+                        selected
+                          ? 'border-[var(--lime)] bg-[var(--lime-lt)]/50 ring-2 ring-[var(--lime)]/40'
+                          : 'border-border bg-white hover:border-[var(--navy)]/20',
                       )}
-                    </div>
-
-                    <div className="mt-3">
-                      <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
-                        <span>Avance</span>
-                        <span className="tabular-nums">{p.porcentaje_avance}%</span>
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex size-11 items-center justify-center rounded-xl bg-[var(--navy)]/10 text-[var(--navy)]">
+                          <Building2 className="size-5" />
+                        </div>
+                        <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-[var(--lime)]"
-                          style={{ width: `${Math.min(100, p.porcentaje_avance)}%` }}
-                        />
+                      <p className="mt-3 font-semibold text-[var(--navy)]">{dept.departamento_nombre}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {dept.resumen.total_proyectos} proyectos · {dept.resumen.activos} activos
+                      </p>
+                      <div className="mt-3">
+                        <div className="mb-1 flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Avance</span>
+                          <span className="font-semibold text-[var(--navy)]">
+                            {dept.resumen.avance_promedio}%
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-[var(--navy)] to-[var(--lime)]"
+                            style={{ width: `${dept.resumen.avance_promedio}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
-
-                    <p className="mt-2 line-clamp-1 text-[10px] text-muted-foreground">
-                      {p.riesgo_auto.motivo}
-                    </p>
-
-                    <p className="mt-2 text-[10px] font-medium text-[var(--navy)] opacity-0 transition-opacity group-hover:opacity-100 print:hidden">
-                      Clic para ver detalle y riesgos →
-                    </p>
-                  </button>
-                )
-              })}
+                      {riesgosDept > 0 && (
+                        <p className="mt-2 flex items-center gap-1 text-[10px] font-medium text-red-600">
+                          <AlertTriangle className="size-3" />
+                          {riesgosDept} riesgo{riesgosDept === 1 ? '' : 's'} documentado{riesgosDept === 1 ? '' : 's'}
+                        </p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
+
+          {/* Proyectos */}
+          <div>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--navy)]">
+              <FolderKanban className="size-4 text-[var(--lime)]" />
+              Proyectos
+              <Badge variant="outline" className="ml-1 text-[10px] font-normal">
+                {proyectosVisibles.length}
+              </Badge>
+            </h2>
+
+            {proyectosVisibles.length === 0 ? (
+              <Card className="border-dashed shadow-sm">
+                <CardContent className="flex flex-col items-center py-16 text-center">
+                  <FolderKanban className="mb-3 size-10 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">
+                    No hay proyectos para los filtros seleccionados.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {proyectosVisibles.map((p) => {
+                  const deptNombre =
+                    data.departamentos.find((d) => d.departamento_id === p.departamento_id)
+                      ?.departamento_nombre ?? '—'
+                  return (
+                    <ProjectStatusCard
+                      key={p.proyecto_id}
+                      proyecto={p}
+                      deptNombre={deptNombre}
+                      onClick={() => setProyectoSheet(p)}
+                    />
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </>
       )}
 

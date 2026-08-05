@@ -14,14 +14,14 @@ export function ReportesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--navy)]">
           <FileText className="size-7" />
           Reportería
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Reportes ejecutivos para gerencia: avance semanal de tareas y estado general del portafolio.
+          Reportes ejecutivos para gerencia: resumen semanal de tareas y dashboard del portafolio de proyectos.
         </p>
       </div>
 
@@ -29,7 +29,7 @@ export function ReportesPage() {
         <TabsList className="print:hidden">
           <TabsTrigger value="semanal" className="gap-1.5">
             <FileText className="size-3.5" />
-            Reporte semanal de tareas
+            Resumen ejecutivo de tareas
           </TabsTrigger>
           <TabsTrigger value="status" className="gap-1.5">
             <BarChart3 className="size-3.5" />

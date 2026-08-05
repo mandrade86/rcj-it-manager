@@ -135,7 +135,11 @@ export async function generarReporteSemanalTareas(opts: {
         en_progreso: 0,
         pendientes: 0,
         bloqueadas: 0,
+        vencidas: 0,
+        pct_completadas: 0,
+        avance_promedio: 0,
       },
+      destacados: { bloqueadas: [], vencidas: [] },
       proyectos: [],
     }
   }
@@ -169,7 +173,17 @@ export async function generarReporteSemanalTareas(opts: {
   let enProgreso = 0
   let pendientes = 0
   let bloqueadas = 0
+  let vencidas = 0
   let totalTareas = 0
+  let sumAvance = 0
+
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  const destacados: {
+    bloqueadas: Array<{ proyecto_id: string; proyecto_nombre: string; tarea_id: string; tarea_nombre: string; responsable?: string | null }>
+    vencidas: Array<{ proyecto_id: string; proyecto_nombre: string; tarea_id: string; tarea_nombre: string; responsable?: string | null; fecha_fin?: string | null }>
+  } = { bloqueadas: [], vencidas: [] }
 
   const proyectosReporte = proyectos
     .map((p) => {
@@ -178,10 +192,36 @@ export async function generarReporteSemanalTareas(opts: {
 
       const tareasFmt = list.map((t) => {
         totalTareas++
+        sumAvance += t.porcentaje ?? 0
         if (t.estado === 'Completado') completadas++
         else if (t.estado === 'En progreso') enProgreso++
-        else if (t.estado === 'Bloqueado') bloqueadas++
-        else pendientes++
+        else if (t.estado === 'Bloqueado') {
+          bloqueadas++
+          if (destacados.bloqueadas.length < 12) {
+            destacados.bloqueadas.push({
+              proyecto_id: p._id,
+              proyecto_nombre: p.nombre,
+              tarea_id: String(t._id),
+              tarea_nombre: t.nombre,
+              responsable: t.responsable ?? null,
+            })
+          }
+        } else pendientes++
+
+        const fin = t.fecha_fin ? new Date(t.fecha_fin) : null
+        if (t.estado !== 'Completado' && fin && fin < hoy) {
+          vencidas++
+          if (destacados.vencidas.length < 12) {
+            destacados.vencidas.push({
+              proyecto_id: p._id,
+              proyecto_nombre: p.nombre,
+              tarea_id: String(t._id),
+              tarea_nombre: t.nombre,
+              responsable: t.responsable ?? null,
+              fecha_fin: t.fecha_fin?.toISOString() ?? null,
+            })
+          }
+        }
 
         const comentarios = [...(t.comentarios ?? [])].sort(
           (a, b) =>
@@ -213,6 +253,9 @@ export async function generarReporteSemanalTareas(opts: {
     })
     .filter((p): p is NonNullable<typeof p> => p != null)
 
+  const pctCompletadas = totalTareas > 0 ? Math.round((completadas / totalTareas) * 100) : 0
+  const avancePromedio = totalTareas > 0 ? Math.round(sumAvance / totalTareas) : 0
+
   return {
     semana: {
       iso,
@@ -228,7 +271,11 @@ export async function generarReporteSemanalTareas(opts: {
       en_progreso: enProgreso,
       pendientes,
       bloqueadas,
+      vencidas,
+      pct_completadas: pctCompletadas,
+      avance_promedio: avancePromedio,
     },
+    destacados,
     proyectos: proyectosReporte,
   }
 }

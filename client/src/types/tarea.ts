@@ -76,6 +76,26 @@ export type ReporteSemanalTareas = {
     en_progreso: number
     pendientes: number
     bloqueadas: number
+    vencidas: number
+    pct_completadas: number
+    avance_promedio: number
+  }
+  destacados: {
+    bloqueadas: Array<{
+      proyecto_id: string
+      proyecto_nombre: string
+      tarea_id: string
+      tarea_nombre: string
+      responsable?: string | null
+    }>
+    vencidas: Array<{
+      proyecto_id: string
+      proyecto_nombre: string
+      tarea_id: string
+      tarea_nombre: string
+      responsable?: string | null
+      fecha_fin?: string | null
+    }>
   }
   proyectos: ReporteSemanalProyecto[]
 }
