@@ -33,6 +33,15 @@ export function findColumnInList(columns: string[], candidates: string[]): strin
   return ''
 }
 
+/** Busca columna cuyo nombre coincida con algún patrón (regex sobre nombre original). */
+export function findColumnByPatterns(columns: string[], patterns: RegExp[], exclude = new Set<string>()): string {
+  for (const col of columns) {
+    if (exclude.has(col)) continue
+    if (patterns.some((p) => p.test(col))) return col
+  }
+  return ''
+}
+
 export function suggestColumnMapping(columns: string[]): SapBiColumnMapping {
   return {
     cliente: findColumnInList(columns, CANDIDATES.cliente),

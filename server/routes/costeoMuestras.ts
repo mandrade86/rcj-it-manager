@@ -20,7 +20,10 @@ import {
   clearRecetaCostoFieldsCache,
   getExplosionFields,
   getRecetaCostoFields,
+  suggestExplosionFields,
   VISTA_RECETA_COSTO,
+  VISTA_RECETAS,
+  VISTA_RECETAS_EXPLOSION,
   VISTA_VENTA_COSTO,
 } from '../utils/sapBiVistas.js'
 import { listViewColumns } from '../utils/sapBiQuery.js'
@@ -251,6 +254,37 @@ costeoMuestrasRouter.get('/recetas/catalogo', canView, async (_req, res) => {
   }
 })
 
+costeoMuestrasRouter.get('/recetas/explosion-columnas', canView, async (_req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    clearExplosionFieldsCache()
+    const vistas = [VISTA_RECETAS_EXPLOSION, VISTA_RECETAS] as const
+    const resultado: Record<string, { columnas: string[]; sugerido: Record<string, string> | null; error?: string }> = {}
+    for (const vista of vistas) {
+      try {
+        const columnas = await listViewColumns(cfg, vista)
+        let sugerido: Record<string, string> | null = null
+        try {
+          sugerido = columnas.length ? suggestExplosionFields(columnas) : null
+        } catch (e) {
+          resultado[vista] = { columnas, sugerido: null, error: (e as Error).message }
+          continue
+        }
+        resultado[vista] = { columnas, sugerido }
+      } catch (e) {
+        resultado[vista] = { columnas: [], sugerido: null, error: (e as Error).message }
+      }
+    }
+    res.json(resultado)
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message })
+  }
+})
+
 costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
   try {
     const cfg = await loadSapBiCosteoConfig()
@@ -290,9 +324,7 @@ costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
     res.json(payload)
   } catch (err) {
     const msg = (err as Error).message
-    if (/invalid column name/i.test(msg)) {
-      clearExplosionFieldsCache()
-    }
+    clearExplosionFieldsCache()
     res.status(502).json({ error: `Error al consultar detalle de receta: ${msg}` })
   }
 })

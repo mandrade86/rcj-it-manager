@@ -1,4 +1,4 @@
-import { findColumnInList } from './sapBiColumnDetect.js'
+import { findColumnByPatterns, findColumnInList } from './sapBiColumnDetect.js'
 import type { SapBiCosteoConfig } from './sapBiCosteoConfig.js'
 import { listViewColumns } from './sapBiQuery.js'
 
@@ -69,26 +69,104 @@ export function clearRecetaCostoFieldsCache(): void {
 
 /** Candidatos para explosión BOM / ingredientes. */
 export const EXPLOSION_CANDIDATES: Record<string, string[]> = {
-  receta_code: ['RecetaCode', 'ItemCodePadre', 'FatherCode', 'ParentItem', 'CodReceta', 'ItemCode'],
-  receta_nombre: ['RecetaNombre', 'ItemNamePadre', 'NombreReceta', 'ItemName'],
-  componente_code: ['ComponenteCode', 'ChildCode', 'CodComponente', 'ItemCodeComp', 'ComponentCode', 'ItemCodeHijo'],
-  componente_nombre: ['ComponenteNombre', 'ItemNameComp', 'NombreComponente', 'ItemName', 'Descripcion'],
-  cantidad: ['Cantidad', 'Quantity', 'Qty', 'Cant'],
-  costo_unitario: ['CostoUnitario', 'UnitCost', 'PrecioUnit', 'CostoUnit'],
-  costo_linea: ['CostoLinea', 'LineCost', 'CostoTotal', 'Costo', 'CostoLineaTotal'],
-  nivel: ['Nivel', 'Level', 'NivelBOM', 'BOMLevel'],
+  receta_code: [
+    'RecetaCode', 'CodReceta', 'CodigoReceta', 'CODRECETA', 'ItemCodePadre', 'ItemCodeReceta',
+    'FatherCode', 'ParentItem', 'ParentCode', 'ParentItemCode', 'CodigoPadre', 'ArticuloPadre',
+    'ProductoCode', 'TreeCode', 'CodigoRecetaPadre', 'Receta', 'Articulo', 'Producto',
+  ],
+  receta_nombre: [
+    'RecetaNombre', 'NomReceta', 'NombreReceta', 'ItemNamePadre', 'DescripcionReceta', 'RecetaDesc',
+  ],
+  componente_code: [
+    'ComponenteCode', 'CodComponente', 'CodigoComponente', 'CompCode', 'ItemCodeComp',
+    'ItemCodeHijo', 'ChildCode', 'ChildItem', 'ChildItemCode', 'CodigoHijo', 'ArticuloHijo',
+    'CompItemCode', 'LineItemCode', 'InsumoCode', 'ComponenteItemCode', 'Code', 'Componente',
+    'Insumo', 'Material', 'CompItem', 'ItemCodeComponente',
+  ],
+  componente_nombre: [
+    'ComponenteNombre', 'NomComponente', 'NombreComponente', 'ItemNameComp', 'ItemNameHijo',
+    'DescripcionComponente', 'CompItemName', 'NombreInsumo', 'DescComponente', 'ItemName', 'Descripcion',
+  ],
+  cantidad: ['Cantidad', 'Quantity', 'Qty', 'Cant', 'Qntty', 'BaseQty', 'InvQty'],
+  costo_unitario: [
+    'CostoUnitario', 'UnitCost', 'PrecioUnit', 'CostoUnit', 'Price', 'StockPrice', 'LastPurPrc',
+  ],
+  costo_linea: [
+    'CostoLinea', 'LineCost', 'CostoTotal', 'Costo', 'CostoLineaTotal', 'LineTotal', 'TotalCost',
+  ],
+  nivel: ['Nivel', 'Level', 'NivelBOM', 'BOMLevel', 'Depth', 'Stage'],
+}
+
+const RECETA_CODE_PATTERNS = [
+  /receta.*code/i, /^cod.*receta/i, /padre/i, /parent/i, /father/i, /treecode/i, /^producto$/i, /^articulo$/i,
+]
+const COMPONENTE_CODE_PATTERNS = [
+  /componente/i, /comp.*code/i, /cod.*comp/i, /hijo/i, /child/i, /insumo/i, /^material$/i, /compitem/i,
+]
+const COMPONENTE_NAME_PATTERNS = [
+  /componente.*nom/i, /nom.*componente/i, /comp.*name/i, /desc.*comp/i, /nombre.*insumo/i,
+]
+const CANTIDAD_PATTERNS = [/cantidad/i, /quantity/i, /^qty$/i, /qntty/i]
+const COSTO_UNIT_PATTERNS = [/costo.*unit/i, /unit.*cost/i, /precio.*unit/i, /price/i]
+const COSTO_LINEA_PATTERNS = [/costo.*linea/i, /line.*cost/i, /costo.*total/i, /linetotal/i]
+const NIVEL_PATTERNS = [/nivel/i, /^level$/i, /depth/i]
+
+function applyExplosionHeuristics(columns: string[], fields: Record<string, string>): Record<string, string> {
+  const used = new Set(Object.values(fields))
+  const out = { ...fields }
+
+  if (!out.receta_code) {
+    out.receta_code = findColumnByPatterns(columns, RECETA_CODE_PATTERNS, used)
+    if (out.receta_code) used.add(out.receta_code)
+  }
+
+  if (!out.componente_code) {
+    out.componente_code = findColumnByPatterns(columns, COMPONENTE_CODE_PATTERNS, used)
+    if (out.componente_code) used.add(out.componente_code)
+  }
+
+  if (!out.componente_nombre) {
+    out.componente_nombre = findColumnByPatterns(columns, COMPONENTE_NAME_PATTERNS, used)
+    if (out.componente_nombre) used.add(out.componente_nombre)
+  }
+
+  if (!out.cantidad) {
+    out.cantidad = findColumnByPatterns(columns, CANTIDAD_PATTERNS, used)
+  }
+  if (!out.costo_unitario) {
+    out.costo_unitario = findColumnByPatterns(columns, COSTO_UNIT_PATTERNS, used)
+  }
+  if (!out.costo_linea) {
+    out.costo_linea = findColumnByPatterns(columns, COSTO_LINEA_PATTERNS, used)
+  }
+  if (!out.nivel) {
+    out.nivel = findColumnByPatterns(columns, NIVEL_PATTERNS, used)
+  }
+
+  // BOM nivel 1: a veces solo hay ItemCode (padre) + otro código de línea
+  if (!out.receta_code) {
+    const itemCode = findColumnInList(columns, ['ItemCode', 'Codigo', 'Code'])
+    if (itemCode) out.receta_code = itemCode
+  }
+
+  return out
 }
 
 export function suggestExplosionFields(columns: string[]): Record<string, string> {
-  const fields: Record<string, string> = {}
+  let fields: Record<string, string> = {}
   for (const [alias, candidates] of Object.entries(EXPLOSION_CANDIDATES)) {
     const col = findColumnInList(columns, candidates)
     if (col) fields[alias] = col
   }
+
+  fields = applyExplosionHeuristics(columns, fields)
+
   const hasComponente = fields.componente_code || fields.componente_nombre
   if (!fields.receta_code || !hasComponente) {
     throw new Error(
-      `No se detectaron columnas BOM en explosión. Columnas: ${columns.join(', ')}`,
+      `No se detectaron columnas BOM (receta + componente). `
+      + `Columnas en vista: ${columns.join(', ')}. `
+      + `Mapeo parcial: ${Object.entries(fields).map(([k, v]) => `${k}→${v}`).join(', ') || 'ninguno'}.`,
     )
   }
   return fields
@@ -103,17 +181,6 @@ export function clearExplosionFieldsCache(): void {
   cachedExplosionKey = ''
 }
 
-async function resolveExplosionFieldsForView(
-  cfg: SapBiCosteoConfig,
-  viewName: string,
-): Promise<Record<string, string>> {
-  const columnas = await listViewColumns(cfg, viewName)
-  if (!columnas.length) {
-    throw new Error(`No se pudieron leer columnas de ${viewName}`)
-  }
-  return suggestExplosionFields(columnas)
-}
-
 /** Resuelve mapeo BOM; intenta explosión multinivel y cae a BOM nivel 1. */
 export async function getExplosionFields(cfg: SapBiCosteoConfig): Promise<{
   fields: Record<string, string>
@@ -124,20 +191,28 @@ export async function getExplosionFields(cfg: SapBiCosteoConfig): Promise<{
     return { fields: cachedExplosionFields, vista: cachedExplosionView }
   }
 
+  const errores: string[] = []
+
   for (const viewName of [VISTA_RECETAS_EXPLOSION, VISTA_RECETAS]) {
     try {
-      const fields = await resolveExplosionFieldsForView(cfg, viewName)
+      const columnas = await listViewColumns(cfg, viewName)
+      if (!columnas.length) {
+        errores.push(`${viewName}: vista sin columnas (¿existe en ${cfg.schema}?)`)
+        continue
+      }
+      const fields = suggestExplosionFields(columnas)
       cachedExplosionFields = fields
       cachedExplosionKey = key
       cachedExplosionView = viewName
       return { fields, vista: viewName }
-    } catch {
-      // probar siguiente vista
+    } catch (err) {
+      errores.push(`${viewName}: ${(err as Error).message}`)
     }
   }
 
   throw new Error(
-    `No se pudo mapear columnas en ${VISTA_RECETAS_EXPLOSION} ni ${VISTA_RECETAS}`,
+    `No se pudo mapear columnas en ${VISTA_RECETAS_EXPLOSION} ni ${VISTA_RECETAS}. `
+    + errores.join(' | '),
   )
 }
 
