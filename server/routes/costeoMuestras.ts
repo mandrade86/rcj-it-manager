@@ -6,8 +6,10 @@ import {
   aggregateRecetasCosto,
   aggregateVentasMargen,
   aggregateVentaAnalisis,
+  buildClienteCatalogo,
   buildRecetaCatalogo,
   buildRecetaDetallePayload,
+  buildRecetaVentaCatalogo,
   mapIngredienteRows,
   mapRecetaCostoRows,
   mapVentaMargenRows,
@@ -198,14 +200,62 @@ costeoMuestrasRouter.post('/vista-columnas/aplicar', canConfig, async (_req, res
 })
 
 function parseQueryFilters(req: import('express').Request) {
+  const receta = typeof req.query.receta === 'string' ? req.query.receta : undefined
   return {
     cliente: typeof req.query.cliente === 'string' ? req.query.cliente : undefined,
-    receta: typeof req.query.receta === 'string' ? req.query.receta : undefined,
+    codigo_cliente: typeof req.query.codigo_cliente === 'string' ? req.query.codigo_cliente : undefined,
+    receta,
+    recetaExact: req.query.recetaExact !== 'false' && Boolean(receta?.trim()),
     desde: typeof req.query.desde === 'string' ? req.query.desde : undefined,
     hasta: typeof req.query.hasta === 'string' ? req.query.hasta : undefined,
     refresh: req.query.refresh === 'true',
   }
 }
+
+function buildVentaSapFilters(f: ReturnType<typeof parseQueryFilters>) {
+  const filters: import('../utils/sapBiGenericQuery.js').SapBiGenericFilters = {
+    desde: f.desde,
+    hasta: f.hasta,
+  }
+  if (f.codigo_cliente?.trim()) {
+    filters.codigo_cliente = f.codigo_cliente.trim()
+  } else if (f.cliente?.trim()) {
+    filters.cliente = f.cliente.trim()
+  }
+  if (f.receta?.trim()) {
+    filters.receta = f.receta.trim()
+    filters.recetaExact = f.recetaExact
+  }
+  return filters
+}
+
+costeoMuestrasRouter.get('/ventas/catalogo', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+
+    const f = parseQueryFilters(req)
+    const dateFilters = { desde: f.desde, hasta: f.hasta }
+
+    const rawRecetas = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, dateFilters)
+    const recetas = buildRecetaVentaCatalogo(mapVentaMargenRows(rawRecetas))
+
+    const rawClientes = await querySapBiGeneric(
+      cfg,
+      VISTA_VENTA_COSTO,
+      CAMPOS_VENTA_COSTO,
+      buildVentaSapFilters({ ...f, codigo_cliente: undefined, cliente: undefined }),
+    )
+    const clientes = buildClienteCatalogo(mapVentaMargenRows(rawClientes))
+
+    res.json({ clientes, recetas } satisfies import('../utils/costeoMuestrasBi.js').VentaCatalogoPayload)
+  } catch (err) {
+    res.status(502).json({ error: `Error al cargar catálogo ventas: ${(err as Error).message}` })
+  }
+})
 
 costeoMuestrasRouter.get('/ventas-margen', canView, async (req, res) => {
   try {
@@ -219,13 +269,8 @@ costeoMuestrasRouter.get('/ventas-margen', canView, async (req, res) => {
       return
     }
 
-    const { cliente, receta, desde, hasta } = parseQueryFilters(req)
-    const raw = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, {
-      cliente,
-      receta,
-      desde,
-      hasta,
-    })
+    const f = parseQueryFilters(req)
+    const raw = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, buildVentaSapFilters(f))
     const rows = mapVentaMargenRows(raw)
     const ultimo_sync = await getUltimoSyncCosteo()
     const payload = aggregateVentasMargen(rows, {
@@ -337,11 +382,11 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
       return
     }
 
-    const { cliente, receta, desde, hasta } = parseQueryFilters(req)
+    const f = parseQueryFilters(req)
     const recetaFields = await getRecetaCostoFields(cfg)
 
     const [ventasRaw, recetasRaw] = await Promise.all([
-      querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, { cliente, receta, desde, hasta }),
+      querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, buildVentaSapFilters(f)),
       querySapBiGeneric(cfg, VISTA_RECETA_COSTO, recetaFields, {}),
     ])
 

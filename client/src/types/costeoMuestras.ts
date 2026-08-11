@@ -188,3 +188,23 @@ export type VentaAnalisisPayload = {
   vista: string
   filas_leidas: number
 }
+
+export type ClienteCatalogoItem = {
+  codigo_cliente: string
+  cliente: string
+  venta_total: number
+  margen_total: number
+  registros: number
+}
+
+export type RecetaVentaCatalogoItem = {
+  receta_code: string
+  receta_nombre: string
+  venta_total: number
+  registros: number
+}
+
+export type VentaCatalogoPayload = {
+  clientes: ClienteCatalogoItem[]
+  recetas: RecetaVentaCatalogoItem[]
+}

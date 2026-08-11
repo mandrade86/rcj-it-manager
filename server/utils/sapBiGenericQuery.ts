@@ -12,6 +12,7 @@ export type SapBiFieldMap = Record<string, string>
 
 export type SapBiGenericFilters = {
   cliente?: string
+  codigo_cliente?: string
   receta?: string
   /** Si true, filtra receta por igualdad exacta (dropdown). */
   recetaExact?: boolean
@@ -106,10 +107,16 @@ function applyFilters(
   const params: unknown[] = []
 
   const colCliente = fields.cliente ? quoteColumn(fields.cliente, 'cliente', driver) : null
+  const colCodigoCliente = fields.codigo_cliente
+    ? quoteColumn(fields.codigo_cliente, 'codigo_cliente', driver)
+    : null
   const colReceta = fields.receta_code ? quoteColumn(fields.receta_code, 'receta', driver) : null
   const colFecha = fields.fecha ? quoteColumn(fields.fecha, 'fecha', driver) : null
 
-  if (filters.cliente?.trim() && colCliente) {
+  if (filters.codigo_cliente?.trim() && colCodigoCliente) {
+    where.push(`${colCodigoCliente} = ?`)
+    params.push(filters.codigo_cliente.trim())
+  } else if (filters.cliente?.trim() && colCliente) {
     where.push(`${colCliente} LIKE ?`)
     params.push(`%${filters.cliente.trim()}%`)
   }
@@ -171,10 +178,16 @@ async function queryMssqlGeneric(
     const request = pool.request()
 
     const colCliente = fields.cliente ? quoteColumn(fields.cliente, 'cliente', driver) : null
+    const colCodigoCliente = fields.codigo_cliente
+      ? quoteColumn(fields.codigo_cliente, 'codigo_cliente', driver)
+      : null
     const colReceta = fields.receta_code ? quoteColumn(fields.receta_code, 'receta', driver) : null
     const colFecha = fields.fecha ? quoteColumn(fields.fecha, 'fecha', driver) : null
 
-    if (filters.cliente?.trim() && colCliente) {
+    if (filters.codigo_cliente?.trim() && colCodigoCliente) {
+      where.push(`${colCodigoCliente} = @codigo_cliente`)
+      request.input('codigo_cliente', sql.NVarChar, filters.codigo_cliente.trim())
+    } else if (filters.cliente?.trim() && colCliente) {
       where.push(`${colCliente} LIKE @cliente`)
       request.input('cliente', sql.NVarChar, `%${filters.cliente.trim()}%`)
     }

@@ -7,6 +7,7 @@ import type {
   SapBiColumnMapping,
   SapBiCosteoConfig,
   VentaAnalisisPayload,
+  VentaCatalogoPayload,
   VentaMargenPayload,
 } from '@/types/costeoMuestras'
 
@@ -136,15 +137,36 @@ export async function fetchRecetaDetalle(receta: string): Promise<RecetaDetalleP
   return res.json() as Promise<RecetaDetallePayload>
 }
 
+export async function fetchVentasCatalogo(params?: {
+  receta?: string
+  recetaExact?: boolean
+  desde?: string
+  hasta?: string
+}): Promise<VentaCatalogoPayload> {
+  const q = new URLSearchParams()
+  if (params?.receta) q.set('receta', params.receta)
+  if (params?.recetaExact === false) q.set('recetaExact', 'false')
+  if (params?.desde) q.set('desde', params.desde)
+  if (params?.hasta) q.set('hasta', params.hasta)
+  const suffix = q.toString() ? `?${q.toString()}` : ''
+  const res = await fetch(`/api/costeo-muestras/ventas/catalogo${suffix}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<VentaCatalogoPayload>
+}
+
 export async function fetchVentasAnalisis(params?: {
+  codigo_cliente?: string
   cliente?: string
   receta?: string
+  recetaExact?: boolean
   desde?: string
   hasta?: string
 }): Promise<VentaAnalisisPayload> {
   const q = new URLSearchParams()
+  if (params?.codigo_cliente) q.set('codigo_cliente', params.codigo_cliente)
   if (params?.cliente) q.set('cliente', params.cliente)
   if (params?.receta) q.set('receta', params.receta)
+  if (params?.recetaExact === false) q.set('recetaExact', 'false')
   if (params?.desde) q.set('desde', params.desde)
   if (params?.hasta) q.set('hasta', params.hasta)
   const suffix = q.toString() ? `?${q.toString()}` : ''

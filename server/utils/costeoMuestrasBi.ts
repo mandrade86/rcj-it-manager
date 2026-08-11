@@ -133,6 +133,66 @@ export type VentaAnalisisPayload = {
   filas_leidas: number
 }
 
+export type ClienteCatalogoItem = {
+  codigo_cliente: string
+  cliente: string
+  venta_total: number
+  margen_total: number
+  registros: number
+}
+
+export type RecetaVentaCatalogoItem = {
+  receta_code: string
+  receta_nombre: string
+  venta_total: number
+  registros: number
+}
+
+export type VentaCatalogoPayload = {
+  clientes: ClienteCatalogoItem[]
+  recetas: RecetaVentaCatalogoItem[]
+}
+
+export function buildClienteCatalogo(rows: VentaMargenRow[]): ClienteCatalogoItem[] {
+  const map = new Map<string, ClienteCatalogoItem>()
+  for (const row of rows) {
+    const key = row.codigo_cliente || row.cliente
+    if (!key) continue
+    const prev = map.get(key) ?? {
+      codigo_cliente: row.codigo_cliente,
+      cliente: row.cliente,
+      venta_total: 0,
+      margen_total: 0,
+      registros: 0,
+    }
+    prev.venta_total += row.venta
+    prev.margen_total += row.margen
+    prev.registros += 1
+    map.set(key, prev)
+  }
+  return [...map.values()].sort((a, b) => a.cliente.localeCompare(b.cliente, 'es'))
+}
+
+export function buildRecetaVentaCatalogo(rows: VentaMargenRow[]): RecetaVentaCatalogoItem[] {
+  const map = new Map<string, RecetaVentaCatalogoItem>()
+  for (const row of rows) {
+    const key = row.receta_code || row.receta_nombre
+    if (!key) continue
+    const prev = map.get(key) ?? {
+      receta_code: row.receta_code,
+      receta_nombre: row.receta_nombre || row.receta_code,
+      venta_total: 0,
+      registros: 0,
+    }
+    prev.venta_total += row.venta
+    prev.registros += 1
+    map.set(key, prev)
+  }
+  return [...map.values()].sort((a, b) =>
+    (a.receta_nombre || a.receta_code).localeCompare(b.receta_nombre || b.receta_code, 'es'),
+  )
+}
+
 export function buildRecetaCatalogo(rows: RecetaCostoRow[]): RecetaCatalogoItem[] {
   const map = new Map<string, RecetaCatalogoItem>()
   for (const r of rows) {

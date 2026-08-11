@@ -28,6 +28,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -36,9 +43,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { fetchVentasAnalisis } from '@/lib/api/costeoMuestras'
+import { fetchVentasAnalisis, fetchVentasCatalogo } from '@/lib/api/costeoMuestras'
 import { formatDateDMY, formatLps } from '@/lib/format'
-import type { VentaAnalisisPayload } from '@/types/costeoMuestras'
+import type {
+  ClienteCatalogoItem,
+  RecetaVentaCatalogoItem,
+  VentaAnalisisPayload,
+} from '@/types/costeoMuestras'
 
 import { BiChartTooltip } from './BiChartTooltip'
 import { BI_CHART } from './chartTheme'
@@ -51,21 +62,54 @@ type Props = {
   onError: (msg: string | null) => void
 }
 
+const TODAS_RECETAS = '__todas__'
+const TODOS_CLIENTES = '__todos__'
+
 export function VentasAnalisisTab({ onError }: Props) {
   const [loading, setLoading] = useState(true)
+  const [loadingCatalogo, setLoadingCatalogo] = useState(true)
   const [data, setData] = useState<VentaAnalisisPayload | null>(null)
-  const [filtroCliente, setFiltroCliente] = useState('')
-  const [filtroReceta, setFiltroReceta] = useState('')
+  const [catalogoRecetas, setCatalogoRecetas] = useState<RecetaVentaCatalogoItem[]>([])
+  const [catalogoClientes, setCatalogoClientes] = useState<ClienteCatalogoItem[]>([])
+  const [filtroReceta, setFiltroReceta] = useState(TODAS_RECETAS)
+  const [filtroCodigoCliente, setFiltroCodigoCliente] = useState(TODOS_CLIENTES)
   const [filtroDesde, setFiltroDesde] = useState('')
   const [filtroHasta, setFiltroHasta] = useState('')
+
+  const recetaParam = filtroReceta === TODAS_RECETAS ? undefined : filtroReceta
+  const codigoClienteParam = filtroCodigoCliente === TODOS_CLIENTES ? undefined : filtroCodigoCliente
+
+  const loadCatalogo = useCallback(async () => {
+    setLoadingCatalogo(true)
+    onError(null)
+    try {
+      const payload = await fetchVentasCatalogo({
+        receta: recetaParam,
+        recetaExact: true,
+        desde: filtroDesde || undefined,
+        hasta: filtroHasta || undefined,
+      })
+      setCatalogoRecetas(payload.recetas)
+      setCatalogoClientes(payload.clientes)
+      setFiltroCodigoCliente((prev) => {
+        if (prev === TODOS_CLIENTES) return prev
+        return payload.clientes.some((c) => c.codigo_cliente === prev) ? prev : TODOS_CLIENTES
+      })
+    } catch (e) {
+      onError((e as Error).message)
+    } finally {
+      setLoadingCatalogo(false)
+    }
+  }, [recetaParam, filtroDesde, filtroHasta, onError])
 
   const load = useCallback(async () => {
     setLoading(true)
     onError(null)
     try {
       const payload = await fetchVentasAnalisis({
-        cliente: filtroCliente || undefined,
-        receta: filtroReceta || undefined,
+        codigo_cliente: codigoClienteParam,
+        receta: recetaParam,
+        recetaExact: true,
         desde: filtroDesde || undefined,
         hasta: filtroHasta || undefined,
       })
@@ -75,7 +119,11 @@ export function VentasAnalisisTab({ onError }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [filtroCliente, filtroReceta, filtroDesde, filtroHasta, onError])
+  }, [codigoClienteParam, recetaParam, filtroDesde, filtroHasta, onError])
+
+  useEffect(() => {
+    void loadCatalogo()
+  }, [loadCatalogo])
 
   useEffect(() => {
     void load()
@@ -150,13 +198,53 @@ export function VentasAnalisisTab({ onError }: Props) {
           </p>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4">
-          <div className="min-w-[160px] flex-1">
-            <Label htmlFor="v-cliente">Cliente</Label>
-            <Input id="v-cliente" value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} placeholder="Nombre o código" />
-          </div>
-          <div className="min-w-[160px] flex-1">
+          <div className="min-w-[200px] flex-1">
             <Label htmlFor="v-receta">Receta</Label>
-            <Input id="v-receta" value={filtroReceta} onChange={(e) => setFiltroReceta(e.target.value)} placeholder="Código o nombre" />
+            <Select
+              value={filtroReceta}
+              onValueChange={(v) => {
+                setFiltroReceta(v)
+                setFiltroCodigoCliente(TODOS_CLIENTES)
+              }}
+              disabled={loadingCatalogo}
+            >
+              <SelectTrigger id="v-receta">
+                <SelectValue placeholder="Seleccione receta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODAS_RECETAS}>Todas las recetas</SelectItem>
+                {catalogoRecetas.map((r) => (
+                  <SelectItem key={r.receta_code} value={r.receta_code}>
+                    {r.receta_nombre} ({r.receta_code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-[200px] flex-1">
+            <Label htmlFor="v-cliente">Cliente</Label>
+            <Select
+              value={filtroCodigoCliente}
+              onValueChange={setFiltroCodigoCliente}
+              disabled={loadingCatalogo}
+            >
+              <SelectTrigger id="v-cliente">
+                <SelectValue placeholder="Seleccione cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS_CLIENTES}>Todos los clientes</SelectItem>
+                {catalogoClientes.map((c) => (
+                  <SelectItem key={c.codigo_cliente} value={c.codigo_cliente}>
+                    {c.cliente} ({c.codigo_cliente})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {recetaParam ? (
+              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                Clientes con ventas de la receta seleccionada
+              </p>
+            ) : null}
           </div>
           <div>
             <Label htmlFor="v-desde">Desde</Label>
@@ -167,8 +255,16 @@ export function VentasAnalisisTab({ onError }: Props) {
             <Input id="v-hasta" type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
           </div>
           <div className="flex items-end">
-            <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                void loadCatalogo()
+                void load()
+              }}
+              disabled={loading || loadingCatalogo}
+            >
+              {(loading || loadingCatalogo) ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
               Aplicar
             </Button>
           </div>
