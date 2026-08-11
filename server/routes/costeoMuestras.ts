@@ -1,7 +1,20 @@
 import { Router } from 'express'
 
 import { requirePermiso } from '../middleware/requireAuth.js'
-import { aggregateCosteoMuestras } from '../utils/costeoMuestrasBi.js'
+import {
+  aggregateCosteoMuestras,
+  aggregateRecetasCosto,
+  aggregateVentasMargen,
+  mapRecetaCostoRows,
+  mapVentaMargenRows,
+} from '../utils/costeoMuestrasBi.js'
+import { querySapBiGeneric } from '../utils/sapBiGenericQuery.js'
+import {
+  CAMPOS_RECETA_COSTO,
+  CAMPOS_VENTA_COSTO,
+  VISTA_RECETA_COSTO,
+  VISTA_VENTA_COSTO,
+} from '../utils/sapBiVistas.js'
 import {
   getUltimoSyncCosteo,
   isSapBiConfigured,
@@ -169,6 +182,73 @@ costeoMuestrasRouter.post('/vista-columnas/aplicar', canConfig, async (_req, res
     res.json(saved)
   } catch (err) {
     res.status(502).json({ error: (err as Error).message })
+  }
+})
+
+function parseQueryFilters(req: import('express').Request) {
+  return {
+    cliente: typeof req.query.cliente === 'string' ? req.query.cliente : undefined,
+    receta: typeof req.query.receta === 'string' ? req.query.receta : undefined,
+    desde: typeof req.query.desde === 'string' ? req.query.desde : undefined,
+    hasta: typeof req.query.hasta === 'string' ? req.query.hasta : undefined,
+    refresh: req.query.refresh === 'true',
+  }
+}
+
+costeoMuestrasRouter.get('/ventas-margen', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg)) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    if (!cfg.password?.trim()) {
+      res.status(400).json({ error: 'Contraseña SAP no configurada.' })
+      return
+    }
+
+    const { cliente, receta, desde, hasta } = parseQueryFilters(req)
+    const raw = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, {
+      cliente,
+      receta,
+      desde,
+      hasta,
+    })
+    const rows = mapVentaMargenRows(raw)
+    const ultimo_sync = await getUltimoSyncCosteo()
+    const payload = aggregateVentasMargen(rows, {
+      vista: `${cfg.schema}.${VISTA_VENTA_COSTO}`,
+      ultimo_sync,
+    })
+    res.json(payload)
+  } catch (err) {
+    res.status(502).json({ error: `Error al consultar ventas/margen: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.get('/recetas', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg)) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    if (!cfg.password?.trim()) {
+      res.status(400).json({ error: 'Contraseña SAP no configurada.' })
+      return
+    }
+
+    const { receta } = parseQueryFilters(req)
+    const raw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, CAMPOS_RECETA_COSTO, { receta })
+    const rows = mapRecetaCostoRows(raw)
+    const ultimo_sync = await getUltimoSyncCosteo()
+    const payload = aggregateRecetasCosto(rows, {
+      vista: `${cfg.schema}.${VISTA_RECETA_COSTO}`,
+      ultimo_sync,
+    })
+    res.json(payload)
+  } catch (err) {
+    res.status(502).json({ error: `Error al consultar costos por receta: ${(err as Error).message}` })
   }
 })
 

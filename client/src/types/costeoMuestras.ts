@@ -64,3 +64,54 @@ export type CosteoUltimoSync = {
   vista: string
   configured: boolean
 }
+
+export type VentaMargenRow = {
+  empresa: string
+  fecha: string | null
+  periodo: string
+  codigo_cliente: string
+  cliente: string
+  grupo_cliente: string
+  receta_code: string
+  receta_nombre: string
+  cantidad: number
+  venta: number
+  costo: number
+  margen: number
+}
+
+export type VentaMargenPayload = {
+  resumen: {
+    total_venta: number
+    total_costo: number
+    total_margen: number
+    total_registros: number
+    margen_pct: number
+  }
+  detalle: VentaMargenRow[]
+  ultimo_sync: string | null
+  vista: string
+  filas_leidas: number
+}
+
+export type RecetaCostoRow = {
+  receta_code: string
+  receta_nombre: string
+  costo: number
+  costo_unitario: number
+  flag_costo: string
+  cantidad: number
+}
+
+export type RecetaCostoPayload = {
+  resumen: {
+    total_recetas: number
+    costo_promedio: number
+    costo_max: number
+    costo_min: number
+  }
+  detalle: RecetaCostoRow[]
+  ultimo_sync: string | null
+  vista: string
+  filas_leidas: number
+}
