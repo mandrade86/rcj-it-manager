@@ -5,13 +5,20 @@ import {
   aggregateCosteoMuestras,
   aggregateRecetasCosto,
   aggregateVentasMargen,
+  aggregateVentaAnalisis,
+  buildRecetaCatalogo,
+  buildRecetaDetallePayload,
+  mapIngredienteRows,
   mapRecetaCostoRows,
   mapVentaMargenRows,
+  type RecetaCatalogoItem,
 } from '../utils/costeoMuestrasBi.js'
 import { querySapBiGeneric } from '../utils/sapBiGenericQuery.js'
 import {
   CAMPOS_VENTA_COSTO,
+  clearExplosionFieldsCache,
   clearRecetaCostoFieldsCache,
+  getExplosionFields,
   getRecetaCostoFields,
   VISTA_RECETA_COSTO,
   VISTA_VENTA_COSTO,
@@ -225,6 +232,99 @@ costeoMuestrasRouter.get('/ventas-margen', canView, async (req, res) => {
     res.json(payload)
   } catch (err) {
     res.status(502).json({ error: `Error al consultar ventas/margen: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.get('/recetas/catalogo', canView, async (_req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    const fields = await getRecetaCostoFields(cfg)
+    const raw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, fields, {})
+    const catalogo = buildRecetaCatalogo(mapRecetaCostoRows(raw))
+    res.json({ catalogo, total: catalogo.length })
+  } catch (err) {
+    res.status(502).json({ error: `Error al cargar catálogo de recetas: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+
+    const recetaCode = typeof req.query.receta === 'string' ? req.query.receta.trim() : ''
+    if (!recetaCode) {
+      res.status(400).json({ error: 'Seleccione una receta (parámetro receta).' })
+      return
+    }
+
+    const costoFields = await getRecetaCostoFields(cfg)
+    const [costoRaw, explosion] = await Promise.all([
+      querySapBiGeneric(cfg, VISTA_RECETA_COSTO, costoFields, { receta: recetaCode, recetaExact: true }),
+      getExplosionFields(cfg),
+    ])
+
+    const recetas = buildRecetaCatalogo(mapRecetaCostoRows(costoRaw))
+    const receta: RecetaCatalogoItem = recetas[0] ?? {
+      receta_code: recetaCode,
+      receta_nombre: recetaCode,
+      costo: 0,
+      flag_costo: '',
+    }
+
+    const rawIng = await querySapBiGeneric(cfg, explosion.vista, explosion.fields, {
+      receta: recetaCode,
+      recetaExact: true,
+    })
+    const ingredientes = mapIngredienteRows(rawIng)
+    const payload = buildRecetaDetallePayload(receta, ingredientes, {
+      vista: `${cfg.schema}.${explosion.vista}`,
+    })
+    res.json(payload)
+  } catch (err) {
+    const msg = (err as Error).message
+    if (/invalid column name/i.test(msg)) {
+      clearExplosionFieldsCache()
+    }
+    res.status(502).json({ error: `Error al consultar detalle de receta: ${msg}` })
+  }
+})
+
+costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+
+    const { cliente, receta, desde, hasta } = parseQueryFilters(req)
+    const recetaFields = await getRecetaCostoFields(cfg)
+
+    const [ventasRaw, recetasRaw] = await Promise.all([
+      querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, { cliente, receta, desde, hasta }),
+      querySapBiGeneric(cfg, VISTA_RECETA_COSTO, recetaFields, {}),
+    ])
+
+    const ventas = mapVentaMargenRows(ventasRaw)
+    const recetasMap = new Map(
+      mapRecetaCostoRows(recetasRaw).map((r) => [r.receta_code, r] as const),
+    )
+    const ultimo_sync = await getUltimoSyncCosteo()
+    const payload = aggregateVentaAnalisis(ventas, recetasMap, {
+      vista: `${cfg.schema}.${VISTA_VENTA_COSTO} + ${VISTA_RECETA_COSTO}`,
+      ultimo_sync,
+    })
+    res.json(payload)
+  } catch (err) {
+    res.status(502).json({ error: `Error en análisis ventas/costos: ${(err as Error).message}` })
   }
 })
 

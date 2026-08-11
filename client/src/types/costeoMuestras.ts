@@ -115,3 +115,76 @@ export type RecetaCostoPayload = {
   vista: string
   filas_leidas: number
 }
+
+export type RecetaCatalogoItem = {
+  receta_code: string
+  receta_nombre: string
+  costo: number
+  flag_costo: string
+}
+
+export type IngredienteRow = {
+  componente_code: string
+  componente_nombre: string
+  cantidad: number
+  costo_unitario: number
+  costo_linea: number
+  nivel: number
+  pct_costo: number
+}
+
+export type RecetaDetallePayload = {
+  receta: RecetaCatalogoItem
+  ingredientes: IngredienteRow[]
+  resumen: {
+    total_ingredientes: number
+    costo_total: number
+    costo_promedio_ingrediente: number
+  }
+  vista: string
+}
+
+export type RecetaCatalogoPayload = {
+  catalogo: RecetaCatalogoItem[]
+  total: number
+}
+
+export type VentaAnalisisRow = VentaMargenRow & {
+  costo_teorico_unit: number
+  costo_teorico: number
+  variacion: number
+  variacion_pct: number
+  margen_pct: number
+}
+
+export type VentaPorReceta = {
+  receta_code: string
+  receta_nombre: string
+  cantidad: number
+  venta: number
+  costo_produccion: number
+  costo_teorico: number
+  variacion: number
+  variacion_pct: number
+  margen: number
+  margen_pct: number
+  registros: number
+}
+
+export type VentaAnalisisPayload = {
+  resumen: {
+    total_venta: number
+    total_costo: number
+    total_margen: number
+    total_registros: number
+    margen_pct: number
+    total_costo_teorico: number
+    total_variacion: number
+    variacion_pct: number
+  }
+  por_receta: VentaPorReceta[]
+  detalle: VentaAnalisisRow[]
+  ultimo_sync: string | null
+  vista: string
+  filas_leidas: number
+}

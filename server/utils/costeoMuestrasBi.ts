@@ -68,6 +68,221 @@ export type RecetaCostoPayload = {
   filas_leidas: number
 }
 
+export type RecetaCatalogoItem = {
+  receta_code: string
+  receta_nombre: string
+  costo: number
+  flag_costo: string
+}
+
+export type IngredienteRow = {
+  componente_code: string
+  componente_nombre: string
+  cantidad: number
+  costo_unitario: number
+  costo_linea: number
+  nivel: number
+  pct_costo: number
+}
+
+export type RecetaDetallePayload = {
+  receta: RecetaCatalogoItem
+  ingredientes: IngredienteRow[]
+  resumen: {
+    total_ingredientes: number
+    costo_total: number
+    costo_promedio_ingrediente: number
+  }
+  vista: string
+}
+
+export type VentaAnalisisRow = VentaMargenRow & {
+  costo_teorico_unit: number
+  costo_teorico: number
+  variacion: number
+  variacion_pct: number
+  margen_pct: number
+}
+
+export type VentaPorReceta = {
+  receta_code: string
+  receta_nombre: string
+  cantidad: number
+  venta: number
+  costo_produccion: number
+  costo_teorico: number
+  variacion: number
+  variacion_pct: number
+  margen: number
+  margen_pct: number
+  registros: number
+}
+
+export type VentaAnalisisResumen = VentaMargenResumen & {
+  total_costo_teorico: number
+  total_variacion: number
+  variacion_pct: number
+}
+
+export type VentaAnalisisPayload = {
+  resumen: VentaAnalisisResumen
+  por_receta: VentaPorReceta[]
+  detalle: VentaAnalisisRow[]
+  ultimo_sync: string | null
+  vista: string
+  filas_leidas: number
+}
+
+export function buildRecetaCatalogo(rows: RecetaCostoRow[]): RecetaCatalogoItem[] {
+  const map = new Map<string, RecetaCatalogoItem>()
+  for (const r of rows) {
+    const key = r.receta_code || r.receta_nombre
+    if (!key) continue
+    map.set(key, {
+      receta_code: r.receta_code,
+      receta_nombre: r.receta_nombre || r.receta_code,
+      costo: r.costo,
+      flag_costo: r.flag_costo,
+    })
+  }
+  return [...map.values()].sort((a, b) =>
+    (a.receta_nombre || a.receta_code).localeCompare(b.receta_nombre || b.receta_code, 'es'),
+  )
+}
+
+export function mapIngredienteRows(raw: Record<string, unknown>[]): IngredienteRow[] {
+  const rows = raw.map((r) => {
+    const cantidad = toNumber(r.cantidad)
+    const costo_unitario = toNumber(r.costo_unitario)
+    let costo_linea = toNumber(r.costo_linea)
+    if (!costo_linea && cantidad && costo_unitario) {
+      costo_linea = cantidad * costo_unitario
+    }
+    return {
+      componente_code: String(r.componente_code ?? '').trim(),
+      componente_nombre: String(r.componente_nombre ?? r.componente_code ?? '').trim() || 'Componente',
+      cantidad,
+      costo_unitario,
+      costo_linea,
+      nivel: toNumber(r.nivel),
+      pct_costo: 0,
+    }
+  })
+
+  const total = rows.reduce((s, r) => s + r.costo_linea, 0)
+  return rows
+    .map((r) => ({
+      ...r,
+      pct_costo: total > 0 ? (r.costo_linea / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.costo_linea - a.costo_linea)
+}
+
+export function buildRecetaDetallePayload(
+  receta: RecetaCatalogoItem,
+  ingredientes: IngredienteRow[],
+  meta: { vista: string },
+): RecetaDetallePayload {
+  const costo_total = ingredientes.reduce((s, i) => s + i.costo_linea, 0) || receta.costo
+  return {
+    receta,
+    ingredientes,
+    resumen: {
+      total_ingredientes: ingredientes.length,
+      costo_total,
+      costo_promedio_ingrediente:
+        ingredientes.length > 0 ? costo_total / ingredientes.length : 0,
+    },
+    vista: meta.vista,
+  }
+}
+
+export function aggregateVentaAnalisis(
+  ventas: VentaMargenRow[],
+  recetasCosto: Map<string, RecetaCostoRow>,
+  meta: { vista: string; ultimo_sync: string | null },
+): VentaAnalisisPayload {
+  const detalle: VentaAnalisisRow[] = ventas.map((row) => {
+    const teoricoUnit = recetasCosto.get(row.receta_code)?.costo ?? 0
+    const qty = row.cantidad > 0 ? row.cantidad : 1
+    const costo_teorico = teoricoUnit * qty
+    const variacion = row.costo - costo_teorico
+    const variacion_pct = costo_teorico > 0 ? (variacion / costo_teorico) * 100 : 0
+    const margen_pct = row.venta > 0 ? (row.margen / row.venta) * 100 : 0
+    return {
+      ...row,
+      costo_teorico_unit: teoricoUnit,
+      costo_teorico,
+      variacion,
+      variacion_pct,
+      margen_pct,
+    }
+  })
+
+  const porRecetaMap = new Map<string, VentaPorReceta>()
+  for (const row of detalle) {
+    const key = row.receta_code || row.receta_nombre
+    if (!key) continue
+    const prev = porRecetaMap.get(key) ?? {
+      receta_code: row.receta_code,
+      receta_nombre: row.receta_nombre,
+      cantidad: 0,
+      venta: 0,
+      costo_produccion: 0,
+      costo_teorico: 0,
+      variacion: 0,
+      variacion_pct: 0,
+      margen: 0,
+      margen_pct: 0,
+      registros: 0,
+    }
+    prev.cantidad += row.cantidad > 0 ? row.cantidad : 1
+    prev.venta += row.venta
+    prev.costo_produccion += row.costo
+    prev.costo_teorico += row.costo_teorico
+    prev.variacion += row.variacion
+    prev.margen += row.margen
+    prev.registros += 1
+    porRecetaMap.set(key, prev)
+  }
+
+  const por_receta = [...porRecetaMap.values()]
+    .map((r) => ({
+      ...r,
+      variacion_pct: r.costo_teorico > 0 ? (r.variacion / r.costo_teorico) * 100 : 0,
+      margen_pct: r.venta > 0 ? (r.margen / r.venta) * 100 : 0,
+    }))
+    .sort((a, b) => b.venta - a.venta)
+
+  const total_venta = detalle.reduce((s, r) => s + r.venta, 0)
+  const total_costo = detalle.reduce((s, r) => s + r.costo, 0)
+  const total_margen = detalle.reduce((s, r) => s + r.margen, 0)
+  const total_costo_teorico = detalle.reduce((s, r) => s + r.costo_teorico, 0)
+  const total_variacion = detalle.reduce((s, r) => s + r.variacion, 0)
+
+  return {
+    resumen: {
+      total_venta,
+      total_costo,
+      total_margen,
+      total_registros: detalle.length,
+      margen_pct: total_venta > 0 ? (total_margen / total_venta) * 100 : 0,
+      total_costo_teorico,
+      total_variacion,
+      variacion_pct: total_costo_teorico > 0 ? (total_variacion / total_costo_teorico) * 100 : 0,
+    },
+    por_receta,
+    detalle: detalle.sort((a, b) => {
+      const da = a.fecha ? new Date(a.fecha).getTime() : 0
+      const db = b.fecha ? new Date(b.fecha).getTime() : 0
+      return db - da
+    }),
+    ultimo_sync: meta.ultimo_sync,
+    vista: meta.vista,
+    filas_leidas: detalle.length,
+  }
+}
+
 export function mapVentaMargenRows(raw: Record<string, unknown>[]): VentaMargenRow[] {
   return raw.map((r) => ({
     empresa: String(r.empresa ?? '').trim(),

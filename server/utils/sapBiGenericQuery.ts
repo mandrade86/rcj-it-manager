@@ -13,6 +13,8 @@ export type SapBiFieldMap = Record<string, string>
 export type SapBiGenericFilters = {
   cliente?: string
   receta?: string
+  /** Si true, filtra receta por igualdad exacta (dropdown). */
+  recetaExact?: boolean
   desde?: string
   hasta?: string
 }
@@ -112,8 +114,13 @@ function applyFilters(
     params.push(`%${filters.cliente.trim()}%`)
   }
   if (filters.receta?.trim() && colReceta) {
-    where.push(`${colReceta} LIKE ?`)
-    params.push(`%${filters.receta.trim()}%`)
+    if (filters.recetaExact) {
+      where.push(`${colReceta} = ?`)
+      params.push(filters.receta.trim())
+    } else {
+      where.push(`${colReceta} LIKE ?`)
+      params.push(`%${filters.receta.trim()}%`)
+    }
   }
   if (filters.desde?.trim() && colFecha) {
     const d = new Date(filters.desde)
@@ -172,8 +179,13 @@ async function queryMssqlGeneric(
       request.input('cliente', sql.NVarChar, `%${filters.cliente.trim()}%`)
     }
     if (filters.receta?.trim() && colReceta) {
-      where.push(`${colReceta} LIKE @receta`)
-      request.input('receta', sql.NVarChar, `%${filters.receta.trim()}%`)
+      if (filters.recetaExact) {
+        where.push(`${colReceta} = @receta`)
+        request.input('receta', sql.NVarChar, filters.receta.trim())
+      } else {
+        where.push(`${colReceta} LIKE @receta`)
+        request.input('receta', sql.NVarChar, `%${filters.receta.trim()}%`)
+      }
     }
     if (filters.desde?.trim() && colFecha) {
       const d = new Date(filters.desde)

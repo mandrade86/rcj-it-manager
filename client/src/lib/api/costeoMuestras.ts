@@ -1,9 +1,12 @@
 import type {
   CosteoMuestrasPayload,
   CosteoUltimoSync,
+  RecetaCatalogoPayload,
   RecetaCostoPayload,
+  RecetaDetallePayload,
   SapBiColumnMapping,
   SapBiCosteoConfig,
+  VentaAnalisisPayload,
   VentaMargenPayload,
 } from '@/types/costeoMuestras'
 
@@ -118,4 +121,34 @@ export async function fetchRecetasCosto(params?: { receta?: string }): Promise<R
   const res = await fetch(`/api/costeo-muestras/recetas${suffix}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<RecetaCostoPayload>
+}
+
+export async function fetchRecetasCatalogo(): Promise<RecetaCatalogoPayload> {
+  const res = await fetch('/api/costeo-muestras/recetas/catalogo')
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<RecetaCatalogoPayload>
+}
+
+export async function fetchRecetaDetalle(receta: string): Promise<RecetaDetallePayload> {
+  const q = new URLSearchParams({ receta })
+  const res = await fetch(`/api/costeo-muestras/recetas/detalle?${q.toString()}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<RecetaDetallePayload>
+}
+
+export async function fetchVentasAnalisis(params?: {
+  cliente?: string
+  receta?: string
+  desde?: string
+  hasta?: string
+}): Promise<VentaAnalisisPayload> {
+  const q = new URLSearchParams()
+  if (params?.cliente) q.set('cliente', params.cliente)
+  if (params?.receta) q.set('receta', params.receta)
+  if (params?.desde) q.set('desde', params.desde)
+  if (params?.hasta) q.set('hasta', params.hasta)
+  const suffix = q.toString() ? `?${q.toString()}` : ''
+  const res = await fetch(`/api/costeo-muestras/ventas-analisis${suffix}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<VentaAnalisisPayload>
 }
