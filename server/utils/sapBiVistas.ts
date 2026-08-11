@@ -29,9 +29,17 @@ export const RECETA_COSTO_CANDIDATES: Record<string, string[]> = {
   receta_code: ['RecetaCode', 'ItemCode', 'CodReceta', 'CodArticulo', 'CodProducto', 'Cod_Receta'],
   receta_nombre: ['ItemName', 'Descripcion', 'NombreReceta', 'NomReceta', 'RecetaNombre', 'DescReceta'],
   costo: ['CostoTeorico', 'Costo', 'CostoTotal', 'CostoReal', 'CostoLinea'],
-  costo_unitario: ['CostoUnitario', 'CostoUnit', 'PrecioUnit', 'UnitCost', 'CostoTeorico'],
+  costo_unitario: ['CostoUnitario', 'CostoUnit', 'PrecioUnit', 'UnitCost'],
   flag_costo: ['FlagCosto', 'Flag_Costo', 'EstadoCosto'],
   cantidad: ['Cantidad', 'Quantity', 'Qty'],
+  componente_code: [
+    'ComponenteCode', 'CompCode', 'CodComponente', 'CodigoComponente', 'CompItemCode',
+    'ItemCodeComp', 'ItemCodeHijo', 'ChildCode', 'InsumoCode', 'CodInsumo',
+  ],
+  componente_nombre: [
+    'ComponenteNombre', 'NomComponente', 'NombreComponente', 'CompItemName',
+    'ItemNameComp', 'DescripcionComponente', 'NombreInsumo', 'DescComponente',
+  ],
 }
 
 /** Fallback estático si aún no se detectaron columnas. */
@@ -42,6 +50,8 @@ export const CAMPOS_RECETA_COSTO: Record<string, string> = {
   costo_unitario: 'CostoUnitario',
   flag_costo: 'FlagCosto',
   cantidad: 'Cantidad',
+  componente_code: 'ComponenteCode',
+  componente_nombre: 'ComponenteNombre',
 }
 
 export function suggestRecetaCostoFields(columns: string[]): Record<string, string> {

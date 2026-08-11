@@ -40,6 +40,7 @@ import type { RecetaCatalogoItem, RecetaDetallePayload } from '@/types/costeoMue
 
 import { BiChartTooltip } from './BiChartTooltip'
 import { BI_CHART, ingredientColor } from './chartTheme'
+import { hasSelectValue } from './selectHelpers'
 
 function formatPct(v: number): string {
   return `${v.toFixed(1)}%`
@@ -63,8 +64,11 @@ export function RecetasAnalisisTab({ onError }: Props) {
     try {
       const { catalogo: items } = await fetchRecetasCatalogo()
       setCatalogo(items)
-      if (items.length > 0) {
-        setSeleccion((prev) => prev || items[0]!.receta_code)
+      const first = items.find((r) => hasSelectValue(r.receta_code))
+      if (first) {
+        setSeleccion((prev) => (hasSelectValue(prev) ? prev : first.receta_code))
+      } else {
+        setSeleccion('')
       }
     } catch (e) {
       onError((e as Error).message)
@@ -96,21 +100,26 @@ export function RecetasAnalisisTab({ onError }: Props) {
     if (seleccion) void loadDetalle(seleccion)
   }, [seleccion, loadDetalle])
 
+  const catalogoValido = useMemo(
+    () => catalogo.filter((r) => hasSelectValue(r.receta_code)),
+    [catalogo],
+  )
+
   const catalogoFiltrado = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
-    if (!q) return catalogo
-    return catalogo.filter(
+    if (!q) return catalogoValido
+    return catalogoValido.filter(
       (r) =>
         r.receta_code.toLowerCase().includes(q) ||
         r.receta_nombre.toLowerCase().includes(q),
     )
-  }, [catalogo, busqueda])
+  }, [catalogoValido, busqueda])
 
   const pieData = useMemo(() => {
     if (!detalle) return []
     return detalle.ingredientes.slice(0, 8).map((i, idx) => ({
       name: i.componente_nombre.length > 22 ? `${i.componente_nombre.slice(0, 20)}…` : i.componente_nombre,
-      value: i.costo_linea,
+      value: i.costo_teorico,
       fullName: i.componente_nombre,
       fill: ingredientColor(idx),
     }))
@@ -120,7 +129,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
     if (!detalle) return []
     return detalle.ingredientes.slice(0, 12).map((i) => ({
       name: i.componente_nombre.length > 18 ? `${i.componente_nombre.slice(0, 16)}…` : i.componente_nombre,
-      costo: i.costo_linea,
+      costo: i.costo_teorico,
       fullName: i.componente_nombre,
     }))
   }, [detalle])
@@ -145,7 +154,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
             Análisis de costo por receta — vista analista
           </CardTitle>
           <p className="text-xs text-[var(--text-muted)]">
-            Seleccione una receta para ver explosión BOM: ingredientes, cantidades y costo por línea.
+            Seleccione una receta para ver costo teórico desde VW_BI_RECETA_COSTO (cantidad × costo unitario).
           </p>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
@@ -164,7 +173,10 @@ export function RecetasAnalisisTab({ onError }: Props) {
           </div>
           <div>
             <Label>Receta</Label>
-            <Select value={seleccion} onValueChange={setSeleccion}>
+            <Select
+              value={hasSelectValue(seleccion) ? seleccion : undefined}
+              onValueChange={setSeleccion}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder="Seleccione receta" />
               </SelectTrigger>
@@ -316,10 +328,8 @@ export function RecetasAnalisisTab({ onError }: Props) {
                   <TableRow>
                     <TableHead>Código</TableHead>
                     <TableHead>Ingrediente</TableHead>
-                    <TableHead className="text-right">Nivel</TableHead>
                     <TableHead className="text-right">Cantidad</TableHead>
                     <TableHead className="text-right">Costo unit.</TableHead>
-                    <TableHead className="text-right">Costo línea</TableHead>
                     <TableHead className="text-right">% del total</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -328,10 +338,8 @@ export function RecetasAnalisisTab({ onError }: Props) {
                     <TableRow key={`${ing.componente_code}-${i}`}>
                       <TableCell className="font-mono text-xs">{ing.componente_code || '—'}</TableCell>
                       <TableCell>{ing.componente_nombre}</TableCell>
-                      <TableCell className="text-right">{ing.nivel || '—'}</TableCell>
                       <TableCell className="text-right">{ing.cantidad.toLocaleString('es-HN')}</TableCell>
                       <TableCell className="text-right">{formatLps(ing.costo_unitario)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatLps(ing.costo_linea)}</TableCell>
                       <TableCell className="text-right">
                         <span
                           className="rounded px-1.5 py-0.5 text-xs font-medium text-white"
@@ -345,7 +353,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
                 </TableBody>
                 <TableFooter>
                   <TableRow className="bg-[var(--gray-lt)] font-semibold">
-                    <TableCell colSpan={5}>Total receta</TableCell>
+                    <TableCell colSpan={3}>Total receta</TableCell>
                     <TableCell className="text-right">{formatLps(detalle.resumen.costo_total)}</TableCell>
                     <TableCell className="text-right">100%</TableCell>
                   </TableRow>

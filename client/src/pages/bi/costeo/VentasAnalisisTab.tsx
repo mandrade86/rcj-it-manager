@@ -53,6 +53,7 @@ import type {
 
 import { BiChartTooltip } from './BiChartTooltip'
 import { BI_CHART } from './chartTheme'
+import { hasSelectValue } from './selectHelpers'
 
 function formatPct(v: number): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
@@ -93,7 +94,9 @@ export function VentasAnalisisTab({ onError }: Props) {
       setCatalogoClientes(payload.clientes)
       setFiltroCodigoCliente((prev) => {
         if (prev === TODOS_CLIENTES) return prev
-        return payload.clientes.some((c) => c.codigo_cliente === prev) ? prev : TODOS_CLIENTES
+        return payload.clientes.some((c) => c.codigo_cliente === prev && hasSelectValue(c.codigo_cliente))
+          ? prev
+          : TODOS_CLIENTES
       })
     } catch (e) {
       onError((e as Error).message)
@@ -128,6 +131,16 @@ export function VentasAnalisisTab({ onError }: Props) {
   useEffect(() => {
     void load()
   }, [load])
+
+  const recetasSelect = useMemo(
+    () => catalogoRecetas.filter((r) => hasSelectValue(r.receta_code)),
+    [catalogoRecetas],
+  )
+
+  const clientesSelect = useMemo(
+    () => catalogoClientes.filter((c) => hasSelectValue(c.codigo_cliente)),
+    [catalogoClientes],
+  )
 
   const chartComparativa = useMemo(() => {
     if (!data) return []
@@ -213,7 +226,7 @@ export function VentasAnalisisTab({ onError }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODAS_RECETAS}>Todas las recetas</SelectItem>
-                {catalogoRecetas.map((r) => (
+                {recetasSelect.map((r) => (
                   <SelectItem key={r.receta_code} value={r.receta_code}>
                     {r.receta_nombre} ({r.receta_code})
                   </SelectItem>
@@ -233,7 +246,7 @@ export function VentasAnalisisTab({ onError }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODOS_CLIENTES}>Todos los clientes</SelectItem>
-                {catalogoClientes.map((c) => (
+                {clientesSelect.map((c) => (
                   <SelectItem key={c.codigo_cliente} value={c.codigo_cliente}>
                     {c.cliente} ({c.codigo_cliente})
                   </SelectItem>

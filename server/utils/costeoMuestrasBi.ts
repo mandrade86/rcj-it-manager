@@ -75,13 +75,17 @@ export type RecetaCatalogoItem = {
   flag_costo: string
 }
 
+function calcCostoTeoricoLps(cantidad: number, costoUnitario: number, costoFallback = 0): number {
+  if (cantidad > 0 && costoUnitario > 0) return cantidad * costoUnitario
+  return costoFallback || costoUnitario
+}
+
 export type IngredienteRow = {
   componente_code: string
   componente_nombre: string
   cantidad: number
   costo_unitario: number
-  costo_linea: number
-  nivel: number
+  costo_teorico: number
   pct_costo: number
 }
 
@@ -156,8 +160,9 @@ export type VentaCatalogoPayload = {
 export function buildClienteCatalogo(rows: VentaMargenRow[]): ClienteCatalogoItem[] {
   const map = new Map<string, ClienteCatalogoItem>()
   for (const row of rows) {
-    const key = row.codigo_cliente || row.cliente
-    if (!key) continue
+    const codigo = row.codigo_cliente.trim()
+    if (!codigo) continue
+    const key = codigo
     const prev = map.get(key) ?? {
       codigo_cliente: row.codigo_cliente,
       cliente: row.cliente,
@@ -176,8 +181,9 @@ export function buildClienteCatalogo(rows: VentaMargenRow[]): ClienteCatalogoIte
 export function buildRecetaVentaCatalogo(rows: VentaMargenRow[]): RecetaVentaCatalogoItem[] {
   const map = new Map<string, RecetaVentaCatalogoItem>()
   for (const row of rows) {
-    const key = row.receta_code || row.receta_nombre
-    if (!key) continue
+    const code = row.receta_code.trim()
+    if (!code) continue
+    const key = code
     const prev = map.get(key) ?? {
       receta_code: row.receta_code,
       receta_nombre: row.receta_nombre || row.receta_code,
@@ -196,46 +202,79 @@ export function buildRecetaVentaCatalogo(rows: VentaMargenRow[]): RecetaVentaCat
 export function buildRecetaCatalogo(rows: RecetaCostoRow[]): RecetaCatalogoItem[] {
   const map = new Map<string, RecetaCatalogoItem>()
   for (const r of rows) {
-    const key = r.receta_code || r.receta_nombre
-    if (!key) continue
-    map.set(key, {
-      receta_code: r.receta_code,
-      receta_nombre: r.receta_nombre || r.receta_code,
-      costo: r.costo,
-      flag_costo: r.flag_costo,
-    })
+    const code = r.receta_code.trim()
+    if (!code) continue
+    const key = code
+    const lineCost = calcCostoTeoricoLps(r.cantidad, r.costo_unitario, r.costo)
+    const prev = map.get(key)
+    if (prev) {
+      prev.costo += lineCost
+      if (!prev.flag_costo && r.flag_costo) prev.flag_costo = r.flag_costo
+    } else {
+      map.set(key, {
+        receta_code: r.receta_code,
+        receta_nombre: r.receta_nombre || r.receta_code,
+        costo: lineCost,
+        flag_costo: r.flag_costo,
+      })
+    }
   }
   return [...map.values()].sort((a, b) =>
     (a.receta_nombre || a.receta_code).localeCompare(b.receta_nombre || b.receta_code, 'es'),
   )
 }
 
+/** Líneas de VW_BI_RECETA_COSTO: costo teórico = cantidad × costo unitario (Lps). */
+export function mapRecetaCostoIngredienteRows(raw: Record<string, unknown>[]): IngredienteRow[] {
+  const rows = raw.map((r) => {
+    const cantidad = toNumber(r.cantidad)
+    const costo_unitario = toNumber(r.costo_unitario)
+    const costo_teorico = calcCostoTeoricoLps(cantidad, costo_unitario, toNumber(r.costo))
+    const componente_code = String(r.componente_code ?? '').trim()
+    const componente_nombre = String(
+      r.componente_nombre ?? r.componente_code ?? r.receta_nombre ?? '',
+    ).trim() || 'Componente'
+    return {
+      componente_code,
+      componente_nombre,
+      cantidad,
+      costo_unitario,
+      costo_teorico,
+      pct_costo: 0,
+    }
+  })
+
+  const total = rows.reduce((s, r) => s + r.costo_teorico, 0)
+  return rows
+    .map((r) => ({
+      ...r,
+      pct_costo: total > 0 ? (r.costo_teorico / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.costo_teorico - a.costo_teorico)
+}
+
 export function mapIngredienteRows(raw: Record<string, unknown>[]): IngredienteRow[] {
   const rows = raw.map((r) => {
     const cantidad = toNumber(r.cantidad)
     const costo_unitario = toNumber(r.costo_unitario)
-    let costo_linea = toNumber(r.costo_linea)
-    if (!costo_linea && cantidad && costo_unitario) {
-      costo_linea = cantidad * costo_unitario
-    }
+    const costo_teorico = calcCostoTeoricoLps(cantidad, costo_unitario, toNumber(r.costo_linea))
     return {
       componente_code: String(r.componente_code ?? '').trim(),
       componente_nombre: String(r.componente_nombre ?? r.componente_code ?? '').trim() || 'Componente',
       cantidad,
       costo_unitario,
-      costo_linea,
-      nivel: toNumber(r.nivel),
+      costo_teorico,
       pct_costo: 0,
     }
   })
 
-  const total = rows.reduce((s, r) => s + r.costo_linea, 0)
+  const total = rows.reduce((s, r) => s + r.costo_teorico, 0)
   return rows
     .map((r) => ({
       ...r,
-      pct_costo: total > 0 ? (r.costo_linea / total) * 100 : 0,
+      pct_costo: total > 0 ? (r.costo_teorico / total) * 100 : 0,
     }))
-    .sort((a, b) => b.costo_linea - a.costo_linea)
+    .sort((a, b) => b.costo_teorico - a.costo_teorico)
 }
 
 export function buildRecetaDetallePayload(
@@ -243,7 +282,7 @@ export function buildRecetaDetallePayload(
   ingredientes: IngredienteRow[],
   meta: { vista: string },
 ): RecetaDetallePayload {
-  const costo_total = ingredientes.reduce((s, i) => s + i.costo_linea, 0) || receta.costo
+  const costo_total = ingredientes.reduce((s, i) => s + i.costo_teorico, 0) || receta.costo
   return {
     receta,
     ingredientes,
@@ -390,14 +429,16 @@ export function aggregateVentasMargen(
 
 export function mapRecetaCostoRows(raw: Record<string, unknown>[]): RecetaCostoRow[] {
   return raw.map((r) => {
-    const costo = toNumber(r.costo) || toNumber(r.costo_unitario)
+    const cantidad = toNumber(r.cantidad)
+    const costo_unitario = toNumber(r.costo_unitario)
+    const costo = calcCostoTeoricoLps(cantidad, costo_unitario, toNumber(r.costo))
     return {
       receta_code: String(r.receta_code ?? '').trim(),
       receta_nombre: String(r.receta_nombre ?? '').trim(),
       costo,
-      costo_unitario: toNumber(r.costo_unitario) || costo,
+      costo_unitario: costo_unitario || costo,
       flag_costo: String(r.flag_costo ?? '').trim(),
-      cantidad: toNumber(r.cantidad),
+      cantidad,
     }
   })
 }
@@ -411,8 +452,11 @@ export function aggregateRecetasCosto(
     const key = row.receta_code || row.receta_nombre
     if (!key) continue
     const prev = byReceta.get(key)
-    if (!prev || row.costo > prev.costo) {
-      byReceta.set(key, row)
+    if (prev) {
+      prev.costo += row.costo
+      if (!prev.flag_costo && row.flag_costo) prev.flag_costo = row.flag_costo
+    } else {
+      byReceta.set(key, { ...row })
     }
   }
 

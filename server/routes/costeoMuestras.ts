@@ -11,6 +11,7 @@ import {
   buildRecetaDetallePayload,
   buildRecetaVentaCatalogo,
   mapIngredienteRows,
+  mapRecetaCostoIngredienteRows,
   mapRecetaCostoRows,
   mapVentaMargenRows,
   type RecetaCatalogoItem,
@@ -345,10 +346,10 @@ costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
     }
 
     const costoFields = await getRecetaCostoFields(cfg)
-    const [costoRaw, explosion] = await Promise.all([
-      querySapBiGeneric(cfg, VISTA_RECETA_COSTO, costoFields, { receta: recetaCode, recetaExact: true }),
-      getExplosionFields(cfg),
-    ])
+    const costoRaw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, costoFields, {
+      receta: recetaCode,
+      recetaExact: true,
+    })
 
     const recetas = buildRecetaCatalogo(mapRecetaCostoRows(costoRaw))
     const receta: RecetaCatalogoItem = recetas[0] ?? {
@@ -358,18 +359,14 @@ costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
       flag_costo: '',
     }
 
-    const rawIng = await querySapBiGeneric(cfg, explosion.vista, explosion.fields, {
-      receta: recetaCode,
-      recetaExact: true,
-    })
-    const ingredientes = mapIngredienteRows(rawIng)
+    const ingredientes = mapRecetaCostoIngredienteRows(costoRaw)
     const payload = buildRecetaDetallePayload(receta, ingredientes, {
-      vista: `${cfg.schema}.${explosion.vista}`,
+      vista: `${cfg.schema}.${VISTA_RECETA_COSTO}`,
     })
     res.json(payload)
   } catch (err) {
     const msg = (err as Error).message
-    clearExplosionFieldsCache()
+    clearRecetaCostoFieldsCache()
     res.status(502).json({ error: `Error al consultar detalle de receta: ${msg}` })
   }
 })
@@ -392,7 +389,17 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
 
     const ventas = mapVentaMargenRows(ventasRaw)
     const recetasMap = new Map(
-      mapRecetaCostoRows(recetasRaw).map((r) => [r.receta_code, r] as const),
+      buildRecetaCatalogo(mapRecetaCostoRows(recetasRaw)).map((r) => [
+        r.receta_code,
+        {
+          receta_code: r.receta_code,
+          receta_nombre: r.receta_nombre,
+          costo: r.costo,
+          costo_unitario: r.costo,
+          flag_costo: r.flag_costo,
+          cantidad: 1,
+        },
+      ] as const),
     )
     const ultimo_sync = await getUltimoSyncCosteo()
     const payload = aggregateVentaAnalisis(ventas, recetasMap, {

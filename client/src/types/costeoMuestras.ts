@@ -128,8 +128,7 @@ export type IngredienteRow = {
   componente_nombre: string
   cantidad: number
   costo_unitario: number
-  costo_linea: number
-  nivel: number
+  costo_teorico: number
   pct_costo: number
 }
 
