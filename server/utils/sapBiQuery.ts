@@ -312,10 +312,14 @@ export async function querySapBiView(
   return queryMssql(cfg, filters)
 }
 
-export async function listViewColumns(cfg: SapBiCosteoConfig): Promise<string[]> {
+export async function listViewColumns(
+  cfg: SapBiCosteoConfig,
+  viewNameOverride?: string,
+): Promise<string[]> {
   if (!cfg.password?.trim()) {
     throw new Error('Contraseña SAP no configurada')
   }
+  const viewName = viewNameOverride?.trim() || cfg.viewName
   const schema = effectiveSchema(cfg)
   if (cfg.driver === 'hana') {
     const conn = await hanaConnect(cfg)
@@ -325,14 +329,14 @@ export async function listViewColumns(cfg: SapBiCosteoConfig): Promise<string[]>
         `SELECT COLUMN_NAME FROM SYS.VIEW_COLUMNS
          WHERE SCHEMA_NAME = ? AND VIEW_NAME = ?
          ORDER BY POSITION`,
-        [schema.toUpperCase(), cfg.viewName.toUpperCase()],
+        [schema.toUpperCase(), viewName.toUpperCase()],
       )
       const names = meta
         .map((r) => String(r.COLUMN_NAME ?? r.column_name ?? '').trim())
         .filter(Boolean)
       if (names.length) return names
 
-      const view = qualifiedViewName(schema, cfg.viewName, 'hana')
+      const view = qualifiedViewName(schema, viewName, 'hana')
       const sample = await hanaExec(conn, `SELECT * FROM ${view} LIMIT 1`)
       if (sample[0]) return Object.keys(sample[0])
       return []
@@ -360,7 +364,7 @@ export async function listViewColumns(cfg: SapBiCosteoConfig): Promise<string[]>
     const s = schema || 'dbo'
     const result = await pool.request()
       .input('schema', sql.NVarChar, s)
-      .input('view', sql.NVarChar, cfg.viewName)
+      .input('view', sql.NVarChar, viewName)
       .query(
         `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
          WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @view
@@ -370,7 +374,7 @@ export async function listViewColumns(cfg: SapBiCosteoConfig): Promise<string[]>
       .map((r) => r.COLUMN_NAME)
       .filter(Boolean)
     if (names.length) return names
-    const view = qualifiedViewName(s, cfg.viewName, 'mssql')
+    const view = qualifiedViewName(s, viewName, 'mssql')
     const top = await pool.request().query(`SELECT TOP 1 * FROM ${view}`)
     const row = top.recordset?.[0] as Record<string, unknown> | undefined
     return row ? Object.keys(row) : []

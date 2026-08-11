@@ -10,11 +10,13 @@ import {
 } from '../utils/costeoMuestrasBi.js'
 import { querySapBiGeneric } from '../utils/sapBiGenericQuery.js'
 import {
-  CAMPOS_RECETA_COSTO,
   CAMPOS_VENTA_COSTO,
+  clearRecetaCostoFieldsCache,
+  getRecetaCostoFields,
   VISTA_RECETA_COSTO,
   VISTA_VENTA_COSTO,
 } from '../utils/sapBiVistas.js'
+import { listViewColumns } from '../utils/sapBiQuery.js'
 import {
   getUltimoSyncCosteo,
   isSapBiConfigured,
@@ -239,7 +241,8 @@ costeoMuestrasRouter.get('/recetas', canView, async (req, res) => {
     }
 
     const { receta } = parseQueryFilters(req)
-    const raw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, CAMPOS_RECETA_COSTO, { receta })
+    const fields = await getRecetaCostoFields(cfg)
+    const raw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, fields, { receta })
     const rows = mapRecetaCostoRows(raw)
     const ultimo_sync = await getUltimoSyncCosteo()
     const payload = aggregateRecetasCosto(rows, {
@@ -248,7 +251,23 @@ costeoMuestrasRouter.get('/recetas', canView, async (req, res) => {
     })
     res.json(payload)
   } catch (err) {
-    res.status(502).json({ error: `Error al consultar costos por receta: ${(err as Error).message}` })
+    const msg = (err as Error).message
+    if (/invalid column name/i.test(msg)) {
+      clearRecetaCostoFieldsCache()
+      try {
+        const cfg = await loadSapBiCosteoConfig()
+        const columnas = await listViewColumns(cfg, VISTA_RECETA_COSTO)
+        res.status(502).json({
+          error:
+            `Error al consultar costos por receta: ${msg}. `
+            + `Columnas en ${VISTA_RECETA_COSTO}: ${columnas.join(', ')}.`,
+        })
+        return
+      } catch {
+        // fall through
+      }
+    }
+    res.status(502).json({ error: `Error al consultar costos por receta: ${msg}` })
   }
 })
 
