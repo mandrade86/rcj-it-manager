@@ -8,12 +8,12 @@ const CANDIDATES: Record<keyof SapBiColumnMapping, string[]> = {
     'CardCode', 'CODCLIENTE', 'CodCliente', 'COD_CLIENTE', 'CodigoCliente',
   ],
   muestra: [
-    'CodReceta', 'CODRECETA', 'Cod_Receta', 'Receta', 'CodArticulo', 'COD_ARTICULO',
-    'Articulo', 'ItemCode', 'CodProducto', 'Producto',
+    'RecetaCode', 'RECETACODE', 'CodReceta', 'CODRECETA', 'Cod_Receta', 'Receta',
+    'CodArticulo', 'COD_ARTICULO', 'Articulo', 'CodProducto', 'Producto', 'ItemCode',
   ],
   descripcion: [
-    'Descripcion', 'DESCRIPCION', 'DescReceta', 'NombreReceta', 'NomReceta',
-    'ItemName', 'RecetaNombre', 'NombreArticulo',
+    'RecetaNombre', 'RECETANOMBRE', 'DescReceta', 'NombreReceta', 'NomReceta',
+    'Descripcion', 'DESCRIPCION', 'ItemName', 'NombreArticulo',
   ],
   costo: [
     'CostoReal', 'COSTO_REAL', 'Costo', 'CostoTotal', 'COSTO', 'LineTotal',

@@ -35,16 +35,18 @@ export type SapBiCosteoConfigPublic = Omit<SapBiCosteoConfig, 'password'> & {
   configured: boolean
 }
 
-export const DEFAULT_COLUMN_MAPPING: SapBiColumnMapping = {
+export const VW_BI_VENTA_COSTO_MAPPING: SapBiColumnMapping = {
   cliente: 'CardName',
   codigo_cliente: 'CardCode',
-  muestra: '',
-  descripcion: '',
+  muestra: 'RecetaCode',
+  descripcion: 'RecetaNombre',
   costo: 'CostoReal',
-  cantidad: '',
-  fecha: '',
+  cantidad: 'Cantidad',
+  fecha: 'Fecha',
   moneda: '',
 }
+
+export const DEFAULT_COLUMN_MAPPING: SapBiColumnMapping = { ...VW_BI_VENTA_COSTO_MAPPING }
 
 /** Vistas SAP BI creadas en la BD de compañía (referencia para configuración). */
 export const SAP_BI_VISTAS_CATALOGO = [
@@ -188,6 +190,34 @@ export async function ensureSapBiCosteoConfigFromEnv(): Promise<void> {
     { upsert: true },
   )
   console.log('SAP BI costeo: configuración inicial cargada desde variables de entorno.')
+}
+
+const LEGACY_BI_COLUMNS = new Set(['ItemCode', 'ItemName', 'Quantity', 'DocDate', 'DocCur'])
+
+function mappingUsesLegacyColumns(m: SapBiColumnMapping): boolean {
+  return [
+    m.muestra, m.descripcion, m.cantidad, m.fecha, m.moneda,
+  ].some((col) => col?.trim() && LEGACY_BI_COLUMNS.has(col.trim()))
+}
+
+/** Corrige mapeo guardado con columnas SAP B1 genéricas → VW_BI_VENTA_COSTO real. */
+export async function ensureSapBiCosteoColumnMapping(): Promise<void> {
+  const doc = await Config.findOne({ clave: SAP_BI_COSTEO_CONFIG_KEY }).lean()
+  if (!doc?.valor?.trim()) return
+
+  const cfg = parseConfigJson(doc.valor)
+  if (cfg.viewName !== 'VW_BI_VENTA_COSTO') return
+  if (!mappingUsesLegacyColumns(cfg.columnMapping)) return
+
+  const next: SapBiCosteoConfig = {
+    ...cfg,
+    columnMapping: { ...VW_BI_VENTA_COSTO_MAPPING },
+  }
+  await Config.findOneAndUpdate(
+    { clave: SAP_BI_COSTEO_CONFIG_KEY },
+    { valor: JSON.stringify(next) },
+  )
+  console.log('SAP BI: mapeo migrado a columnas VW_BI_VENTA_COSTO (RecetaCode, RecetaNombre, …).')
 }
 
 export async function saveSapBiCosteoConfig(

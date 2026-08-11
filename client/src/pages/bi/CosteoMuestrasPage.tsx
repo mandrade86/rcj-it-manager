@@ -61,11 +61,11 @@ import type { CosteoMuestrasPayload, SapBiColumnMapping, SapBiCosteoConfig } fro
 const DEFAULT_MAPPING: SapBiColumnMapping = {
   cliente: 'CardName',
   codigo_cliente: 'CardCode',
-  muestra: '',
-  descripcion: '',
+  muestra: 'RecetaCode',
+  descripcion: 'RecetaNombre',
   costo: 'CostoReal',
-  cantidad: '',
-  fecha: '',
+  cantidad: 'Cantidad',
+  fecha: 'Fecha',
   moneda: '',
 }
 

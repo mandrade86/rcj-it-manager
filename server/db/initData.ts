@@ -27,7 +27,7 @@ import {
   DEFAULT_EHR_LOGIN_URL,
   normalizeEhrLoginUrl,
 } from '../utils/ehrAuth.js'
-import { ensureSapBiCosteoConfigFromEnv } from '../utils/sapBiCosteoConfig.js'
+import { ensureSapBiCosteoConfigFromEnv, ensureSapBiCosteoColumnMapping } from '../utils/sapBiCosteoConfig.js'
 import {
   CONFIG_CLAVE_EHR_COMPANY_LIST,
   DEFAULT_EHR_COMPANY_LIST_URL,
@@ -930,6 +930,7 @@ export async function ensureSapBiCosteoPermisos(): Promise<void> {
     { $addToSet: { permisos: PERMISO_BI_COSTEO_VER } },
   )
   await ensureSapBiCosteoConfigFromEnv()
+  await ensureSapBiCosteoColumnMapping()
 }
 
 export async function ensureITArquitecturaData(): Promise<void> {
