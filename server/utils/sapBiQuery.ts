@@ -1,6 +1,10 @@
 import sql from 'mssql'
 import hana from '@sap/hana-client'
 
+import {
+  formatInvalidColumnHint,
+  suggestColumnMapping,
+} from './sapBiColumnDetect.js'
 import type { SapBiCosteoConfig, SapBiDriver } from './sapBiCosteoConfig.js'
 import {
   qualifiedViewName,
@@ -275,6 +279,17 @@ export async function testSapBiConnection(cfg: SapBiCosteoConfig): Promise<{
     }
   } catch (err) {
     const msg = (err as Error).message
+    if (/invalid column name/i.test(msg)) {
+      try {
+        const { columnas } = await detectViewColumnMapping(cfg)
+        return { ok: false, message: formatInvalidColumnHint(msg, columnas, cfg.columnMapping) }
+      } catch {
+        return {
+          ok: false,
+          message: `${msg}. Use «Detectar columnas» y corrija el mapeo (ItemCode no existe en VW_BI_VENTA_COSTO).`,
+        }
+      }
+    }
     if (/ETIMEOUT|ECONNREFUSED|ENOTFOUND|ESOCKET|Failed to connect|connection failed|NIECONNREFUSED/i.test(msg)) {
       return {
         ok: false,
@@ -295,4 +310,79 @@ export async function querySapBiView(
     return queryHana(cfg, filters)
   }
   return queryMssql(cfg, filters)
+}
+
+export async function listViewColumns(cfg: SapBiCosteoConfig): Promise<string[]> {
+  if (!cfg.password?.trim()) {
+    throw new Error('Contraseña SAP no configurada')
+  }
+  const schema = effectiveSchema(cfg)
+  if (cfg.driver === 'hana') {
+    const conn = await hanaConnect(cfg)
+    try {
+      const meta = await hanaExec(
+        conn,
+        `SELECT COLUMN_NAME FROM SYS.VIEW_COLUMNS
+         WHERE SCHEMA_NAME = ? AND VIEW_NAME = ?
+         ORDER BY POSITION`,
+        [schema.toUpperCase(), cfg.viewName.toUpperCase()],
+      )
+      const names = meta
+        .map((r) => String(r.COLUMN_NAME ?? r.column_name ?? '').trim())
+        .filter(Boolean)
+      if (names.length) return names
+
+      const view = qualifiedViewName(schema, cfg.viewName, 'hana')
+      const sample = await hanaExec(conn, `SELECT * FROM ${view} LIMIT 1`)
+      if (sample[0]) return Object.keys(sample[0])
+      return []
+    } finally {
+      await hanaDisconnect(conn)
+    }
+  }
+
+  const pool = new sql.ConnectionPool({
+    server: cfg.host,
+    port: cfg.port,
+    database: cfg.database,
+    user: cfg.username,
+    password: cfg.password ?? '',
+    options: {
+      encrypt: cfg.encrypt,
+      trustServerCertificate: cfg.trustServerCertificate,
+      enableArithAbort: true,
+    },
+    connectionTimeout: 20000,
+    requestTimeout: 60000,
+  })
+  await pool.connect()
+  try {
+    const s = schema || 'dbo'
+    const result = await pool.request()
+      .input('schema', sql.NVarChar, s)
+      .input('view', sql.NVarChar, cfg.viewName)
+      .query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @view
+         ORDER BY ORDINAL_POSITION`,
+      )
+    const names = (result.recordset as { COLUMN_NAME: string }[])
+      .map((r) => r.COLUMN_NAME)
+      .filter(Boolean)
+    if (names.length) return names
+    const view = qualifiedViewName(s, cfg.viewName, 'mssql')
+    const top = await pool.request().query(`SELECT TOP 1 * FROM ${view}`)
+    const row = top.recordset?.[0] as Record<string, unknown> | undefined
+    return row ? Object.keys(row) : []
+  } finally {
+    await pool.close()
+  }
+}
+
+export async function detectViewColumnMapping(cfg: SapBiCosteoConfig): Promise<{
+  columnas: string[]
+  sugerido: ReturnType<typeof suggestColumnMapping>
+}> {
+  const columnas = await listViewColumns(cfg)
+  return { columnas, sugerido: suggestColumnMapping(columnas) }
 }

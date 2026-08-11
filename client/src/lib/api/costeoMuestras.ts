@@ -71,6 +71,21 @@ export async function fetchCosteoDatos(params?: {
   return res.json() as Promise<CosteoMuestrasPayload>
 }
 
+export async function fetchCosteoVistaColumnas(): Promise<{
+  columnas: string[]
+  sugerido: Partial<SapBiColumnMapping>
+}> {
+  const res = await fetch('/api/costeo-muestras/vista-columnas')
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<{ columnas: string[]; sugerido: Partial<SapBiColumnMapping> }>
+}
+
+export async function applyCosteoColumnMapping(): Promise<SapBiCosteoConfig> {
+  const res = await fetch('/api/costeo-muestras/vista-columnas/aplicar', { method: 'POST' })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<SapBiCosteoConfig>
+}
+
 export async function fetchCosteoUltimoSync(): Promise<CosteoUltimoSync> {
   const res = await fetch('/api/costeo-muestras/ultimo-sync')
   if (!res.ok) throw new Error(await parseError(res))

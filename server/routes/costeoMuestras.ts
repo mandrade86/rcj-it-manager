@@ -11,7 +11,7 @@ import {
   toPublicConfig,
   type SapBiCosteoConfig,
 } from '../utils/sapBiCosteoConfig.js'
-import { querySapBiView, testSapBiConnection } from '../utils/sapBiQuery.js'
+import { querySapBiView, testSapBiConnection, detectViewColumnMapping } from '../utils/sapBiQuery.js'
 
 export const costeoMuestrasRouter = Router()
 
@@ -128,6 +128,47 @@ costeoMuestrasRouter.get('/datos', canView, async (req, res, next) => {
     res.json(payload)
   } catch (err) {
     res.status(502).json({ error: `Error al consultar SAP: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.get('/vista-columnas', canConfig, async (_req, res, next) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg)) {
+      res.status(400).json({ error: 'Complete conexión SAP y nombre de vista.' })
+      return
+    }
+    if (!cfg.password?.trim()) {
+      res.status(400).json({ error: 'Contraseña SAP no configurada.' })
+      return
+    }
+    const result = await detectViewColumnMapping(cfg)
+    res.json(result)
+  } catch (err) {
+    res.status(502).json({ error: `No se pudieron leer columnas: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.post('/vista-columnas/aplicar', canConfig, async (_req, res, next) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!cfg.password?.trim()) {
+      res.status(400).json({ error: 'Contraseña SAP no configurada.' })
+      return
+    }
+    const { sugerido } = await detectViewColumnMapping(cfg)
+    if (!sugerido.cliente || !sugerido.costo) {
+      res.status(400).json({
+        error: 'No se detectaron columnas de cliente y costo. Revise el mapeo manualmente.',
+        sugerido,
+      })
+      return
+    }
+    const saved = await saveSapBiCosteoConfig({ columnMapping: sugerido })
+    cachedRows = null
+    res.json(saved)
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message })
   }
 })
 

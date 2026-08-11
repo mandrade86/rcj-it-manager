@@ -38,12 +38,12 @@ export type SapBiCosteoConfigPublic = Omit<SapBiCosteoConfig, 'password'> & {
 export const DEFAULT_COLUMN_MAPPING: SapBiColumnMapping = {
   cliente: 'CardName',
   codigo_cliente: 'CardCode',
-  muestra: 'ItemCode',
-  descripcion: 'ItemName',
+  muestra: '',
+  descripcion: '',
   costo: 'CostoReal',
-  cantidad: 'Quantity',
-  fecha: 'DocDate',
-  moneda: 'DocCur',
+  cantidad: '',
+  fecha: '',
+  moneda: '',
 }
 
 /** Vistas SAP BI creadas en la BD de compañía (referencia para configuración). */

@@ -46,8 +46,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  applyCosteoColumnMapping,
   fetchCosteoConfig,
   fetchCosteoDatos,
+  fetchCosteoVistaColumnas,
   saveCosteoConfig,
   syncCosteoMuestras,
   testCosteoConnection,
@@ -59,12 +61,12 @@ import type { CosteoMuestrasPayload, SapBiColumnMapping, SapBiCosteoConfig } fro
 const DEFAULT_MAPPING: SapBiColumnMapping = {
   cliente: 'CardName',
   codigo_cliente: 'CardCode',
-  muestra: 'ItemCode',
-  descripcion: 'ItemName',
+  muestra: '',
+  descripcion: '',
   costo: 'CostoReal',
-  cantidad: 'Quantity',
-  fecha: 'DocDate',
-  moneda: 'DocCur',
+  cantidad: '',
+  fecha: '',
+  moneda: '',
 }
 
 const VISTAS_SAP_CATALOGO = [
@@ -127,7 +129,7 @@ export function CosteoMuestrasPage() {
     port: 30015,
     database: 'RCJ_BI',
     schema: 'RCJ_BI',
-    viewName: '',
+    viewName: 'VW_BI_VENTA_COSTO',
     username: 'B2User',
     password: '',
     encrypt: true,
@@ -136,6 +138,8 @@ export function CosteoMuestrasPage() {
   })
   const [configSaving, setConfigSaving] = useState(false)
   const [configTesting, setConfigTesting] = useState(false)
+  const [configDetecting, setConfigDetecting] = useState(false)
+  const [vistaColumnas, setVistaColumnas] = useState<string[]>([])
   const [configMsg, setConfigMsg] = useState<string | null>(null)
 
   const loadDatos = useCallback(async (refresh = false) => {
@@ -233,6 +237,54 @@ export function CosteoMuestrasPage() {
       setConfigMsg((e as Error).message)
     } finally {
       setConfigTesting(false)
+    }
+  }
+
+  const handleDetectColumns = async () => {
+    setConfigDetecting(true)
+    setConfigMsg(null)
+    try {
+      await saveCosteoConfig({
+        ...configForm,
+        password: configForm.password || undefined,
+      })
+      const { columnas, sugerido } = await fetchCosteoVistaColumnas()
+      setVistaColumnas(columnas)
+      setConfigForm((f) => ({
+        ...f,
+        columnMapping: { ...DEFAULT_MAPPING, ...sugerido },
+      }))
+      setConfigMsg(
+        columnas.length
+          ? `Detectadas ${columnas.length} columnas. Revise el mapeo y guarde.`
+          : 'No se encontraron columnas.',
+      )
+    } catch (e) {
+      setConfigMsg((e as Error).message)
+    } finally {
+      setConfigDetecting(false)
+    }
+  }
+
+  const handleApplyDetectAndSave = async () => {
+    setConfigDetecting(true)
+    setConfigMsg(null)
+    try {
+      await saveCosteoConfig({
+        ...configForm,
+        password: configForm.password || undefined,
+      })
+      const saved = await applyCosteoColumnMapping()
+      setConfig(saved)
+      setConfigForm((f) => ({
+        ...f,
+        columnMapping: { ...DEFAULT_MAPPING, ...saved.columnMapping },
+      }))
+      setConfigMsg('Mapeo detectado y guardado. Pruebe la conexión.')
+    } catch (e) {
+      setConfigMsg((e as Error).message)
+    } finally {
+      setConfigDetecting(false)
     }
   }
 
@@ -604,7 +656,36 @@ export function CosteoMuestrasPage() {
           </div>
 
           <div className="mt-4">
-            <p className="mb-2 text-sm font-medium">Mapeo de columnas de la vista</p>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium">Mapeo de columnas de la vista</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={configDetecting}
+                onClick={() => void handleDetectColumns()}
+              >
+                {configDetecting ? <Loader2 className="mr-1 size-3 animate-spin" /> : null}
+                Detectar columnas
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={configDetecting}
+                onClick={() => void handleApplyDetectAndSave()}
+              >
+                Detectar y guardar
+              </Button>
+            </div>
+            {vistaColumnas.length > 0 && (
+              <p className="mb-2 text-xs text-[var(--text-muted)]">
+                Columnas en {configForm.viewName}: {vistaColumnas.join(', ')}
+              </p>
+            )}
+            <p className="mb-2 text-xs text-amber-800">
+              Si aparece «invalid column name: ItemCode», deje vacío muestra/descripcion o use Detectar columnas.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {(Object.keys(DEFAULT_MAPPING) as (keyof SapBiColumnMapping)[]).map((key) => (
                 <div key={key}>
