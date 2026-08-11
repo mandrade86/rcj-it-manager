@@ -27,6 +27,7 @@ import {
   DEFAULT_EHR_LOGIN_URL,
   normalizeEhrLoginUrl,
 } from '../utils/ehrAuth.js'
+import { ensureSapBiCosteoConfigFromEnv } from '../utils/sapBiCosteoConfig.js'
 import {
   CONFIG_CLAVE_EHR_COMPANY_LIST,
   DEFAULT_EHR_COMPANY_LIST_URL,
@@ -821,6 +822,7 @@ const ROLES_INICIALES = [
       'maestros:ver', 'maestros:editar', 'empleados:ver', 'empleados:editar',
       'usuarios:ver', 'usuarios:editar', 'roles:ver', 'roles:editar',
       'it:arquitectura:ver', 'it:arquitectura:editar',
+      'bi:costeo:ver', 'bi:costeo:config',
     ],
   },
   {
@@ -914,6 +916,21 @@ export async function ensureKpisIniciales(): Promise<void> {
 
 const PERMISOS_ARQ_IT_EDIT = ['it:arquitectura:ver', 'it:arquitectura:editar'] as const
 const PERMISO_ARQ_IT_VER = 'it:arquitectura:ver'
+
+const PERMISOS_BI_COSTEO_EDIT = ['bi:costeo:ver', 'bi:costeo:config'] as const
+const PERMISO_BI_COSTEO_VER = 'bi:costeo:ver'
+
+export async function ensureSapBiCosteoPermisos(): Promise<void> {
+  await Rol.updateMany(
+    { nombre: { $in: ['Jefe IT', 'Coordinador'] } },
+    { $addToSet: { permisos: { $each: [...PERMISOS_BI_COSTEO_EDIT] } } },
+  )
+  await Rol.updateMany(
+    { nombre: 'Consulta' },
+    { $addToSet: { permisos: PERMISO_BI_COSTEO_VER } },
+  )
+  await ensureSapBiCosteoConfigFromEnv()
+}
 
 export async function ensureITArquitecturaData(): Promise<void> {
   await Rol.updateMany(

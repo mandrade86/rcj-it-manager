@@ -94,4 +94,5 @@ echo "  Parar:      docker compose -f ${COMPOSE_FILE} down"
 if [[ "$ENV_TARGET" == "prod" ]]; then
   echo "  Apache:     sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf"
   echo "              sudo a2ensite portal.rcjcorp.hn.conf && sudo apachectl configtest && sudo systemctl reload apache2"
+  echo "  SAP BI:     docker compose -f ${COMPOSE_FILE} exec app bash scripts/test-sap-bi-connect.sh"
 fi

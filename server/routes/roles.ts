@@ -34,6 +34,8 @@ export const PERMISOS_DISPONIBLES = [
   { clave: 'roles:editar', descripcion: 'Roles — crear/editar' },
   { clave: 'it:arquitectura:ver', descripcion: 'Arquitectura IT — ver' },
   { clave: 'it:arquitectura:editar', descripcion: 'Arquitectura IT — editar' },
+  { clave: 'bi:costeo:ver', descripcion: 'BI Costeo muestras — ver dashboard' },
+  { clave: 'bi:costeo:config', descripcion: 'BI Costeo muestras — configurar conexión SAP' },
 ]
 
 rolesRouter.get('/permisos-disponibles', (_req, res) => {

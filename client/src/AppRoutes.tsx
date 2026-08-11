@@ -30,6 +30,7 @@ import { ProveedoresCapacitacionPage } from '@/pages/maestros/ProveedoresCapacit
 import { RolesPage } from '@/pages/maestros/RolesPage'
 import { UsuariosPage } from '@/pages/maestros/UsuariosPage'
 import { ArquitecturaDashboardPage } from '@/pages/it/ArquitecturaDashboardPage'
+import { CosteoMuestrasPage } from '@/pages/bi/CosteoMuestrasPage'
 import { ManualGuidePage } from '@/pages/manual/ManualGuidePage'
 import { ManualHubPage } from '@/pages/manual/ManualHubPage'
 
@@ -83,6 +84,10 @@ export function AppRoutes() {
 
           <Route element={<ProtectedRoute permiso="kpis:ver" />}>
             <Route path="kpis" element={<KpisPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="bi:costeo:ver" />}>
+            <Route path="bi/costeo-muestras" element={<CosteoMuestrasPage />} />
           </Route>
 
           <Route element={<ProtectedRoute permiso="it:arquitectura:ver" />}>

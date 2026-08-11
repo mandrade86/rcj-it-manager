@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Factory,
   FileText,
+  FlaskConical,
   FolderKanban,
   GraduationCap,
   HelpCircle,
@@ -27,6 +28,7 @@ import {
   Layers,
   Server,
   Store,
+  PieChart,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -189,6 +191,7 @@ export function AppSidebar() {
 
   const adminItems = adminNav.filter((i) => hasPermiso(i.permiso))
   const mostrarArqIT = hasPermiso('it:arquitectura:ver') || hasPermiso('*')
+  const mostrarBiCosteo = hasPermiso('bi:costeo:ver') || hasPermiso('*')
 
   const isAdmin = hasPermiso('*')
   const llevaGastos = Boolean(user?.departamento_lleva_gastos)
@@ -262,6 +265,15 @@ export function AppSidebar() {
           {navGroups.map((group) => (
             <NavGroup key={group.id} group={group} collapsed={collapsed} />
           ))}
+
+          {mostrarBiCosteo && (
+            <>
+              <GroupLabel icon={PieChart} label="Business Intelligence" collapsed={collapsed} />
+              <div className="flex flex-col gap-0.5">
+                <NavItem to="/bi/costeo-muestras" label="Costeo muestras" icon={FlaskConical} collapsed={collapsed} />
+              </div>
+            </>
+          )}
 
           {mostrarArqIT && (
             <>

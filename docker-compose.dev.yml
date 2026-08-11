@@ -37,6 +37,16 @@ services:
       AD_DOMAIN: ${AD_DOMAIN:-RCJ}
       AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
       EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehrapi.rcjcorp.hn/api/Login}
+      SAP_BI_DRIVER: ${SAP_BI_DRIVER:-hana}
+      SAP_BI_HOST: ${SAP_BI_HOST:-172.16.146.16}
+      SAP_BI_PORT: ${SAP_BI_PORT:-30015}
+      SAP_BI_DATABASE: ${SAP_BI_DATABASE:-RCJ_BI}
+      SAP_BI_SCHEMA: ${SAP_BI_SCHEMA:-RCJ_BI}
+      SAP_BI_VIEW: ${SAP_BI_VIEW:-VW_BI_VENTA_COSTO}
+      SAP_BI_USERNAME: ${SAP_BI_USERNAME:-B2User}
+      SAP_BI_PASSWORD: ${SAP_BI_PASSWORD:-}
+      SAP_BI_ENCRYPT: ${SAP_BI_ENCRYPT:-true}
+      SAP_BI_TRUST_CERT: ${SAP_BI_TRUST_CERT:-true}
     volumes:
       - ./data:/app/data
     depends_on:

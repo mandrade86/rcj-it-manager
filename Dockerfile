@@ -18,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY server ./server
+COPY scripts ./scripts
 COPY --from=client-build /build/client/dist ./client/dist
 
 ENV NODE_ENV=production

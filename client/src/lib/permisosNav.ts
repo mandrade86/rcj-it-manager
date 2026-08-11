@@ -21,6 +21,7 @@ export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/admin/usuarios': 'usuarios:ver',
   '/admin/roles': 'roles:ver',
   '/it/arquitectura': 'it:arquitectura:ver',
+  '/bi/costeo-muestras': 'bi:costeo:ver',
 }
 
 export function permisoParaRuta(pathname: string): string | string[] | undefined {

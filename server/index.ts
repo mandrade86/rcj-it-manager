@@ -16,6 +16,7 @@ import {
   ensurePerfilesPuesto,
   ensurePlantillasCarrera,
   ensureITArquitecturaData,
+  ensureSapBiCosteoPermisos,
   ensureRolesYAdmin,
   ensureRubricasPorPerfil,
   ensureRubricasPorPuesto,
@@ -31,6 +32,7 @@ import { itArquitecturaRouter } from './routes/itArquitectura.js'
 import { kpiRegistrosRouter } from './routes/kpiRegistros.js'
 import { kpisRouter } from './routes/kpis.js'
 import { metasRouter } from './routes/metas.js'
+import { costeoMuestrasRouter } from './routes/costeoMuestras.js'
 import { capacitacionColaboradoresRouter } from './routes/capacitacionColaboradores.js'
 import { capacitacionesRouter } from './routes/capacitaciones.js'
 import { colaboradoresRouter } from './routes/colaboradores.js'
@@ -93,6 +95,7 @@ app.use('/api/roles', rolesRouter)
 app.use('/api/usuarios', usuariosRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/gastos', gastosRouter)
+app.use('/api/costeo-muestras', costeoMuestrasRouter)
 app.use('/api/it', itArquitecturaRouter)
 app.use('/api/kpi-registros', kpiRegistrosRouter)
 app.use('/api/kpis', kpisRouter)
@@ -147,6 +150,14 @@ function logAuthMode() {
   )
 }
 
+async function runStartupMigrations() {
+  try {
+    await ensureSapBiCosteoPermisos()
+  } catch (err) {
+    console.error('Error en migraciones ligeras (la API sigue activa):', err)
+  }
+}
+
 async function runStartupTasks() {
   try {
     await ensureDepartamentos()
@@ -182,6 +193,7 @@ async function main() {
 
   void connectDb()
     .then(() => {
+      void runStartupMigrations()
       if (INIT_DATA_ON_START) {
         void runStartupTasks()
       } else {
