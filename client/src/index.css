@@ -518,3 +518,11 @@
     padding: 0;
   }
 }
+
+/* BI costeo — composición de costos: solo primera letra mayúscula (texto HTML) */
+.bi-sentence-case {
+  text-transform: lowercase;
+}
+.bi-sentence-case::first-letter {
+  text-transform: uppercase;
+}

@@ -2,7 +2,22 @@ import type { CosteoMuestraRow } from './sapBiQuery.js'
 
 function toNumber(value: unknown): number {
   if (value == null || value === '') return 0
-  const n = Number(value)
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (typeof value === 'bigint') return Number(value)
+  const raw = String(value).trim()
+  if (!raw) return 0
+  // SAP a veces envía "1,234.56" o "1.234,56"
+  let normalized = raw.replace(/\s/g, '')
+  if (normalized.includes(',') && normalized.includes('.')) {
+    if (normalized.lastIndexOf(',') > normalized.lastIndexOf('.')) {
+      normalized = normalized.replace(/\./g, '').replace(',', '.')
+    } else {
+      normalized = normalized.replace(/,/g, '')
+    }
+  } else if (normalized.includes(',')) {
+    normalized = normalized.replace(',', '.')
+  }
+  const n = Number(normalized)
   return Number.isFinite(n) ? n : 0
 }
 
@@ -26,6 +41,8 @@ export type VentaMargenRow = {
   venta: number
   costo: number
   margen: number
+  factura: string
+  orden_produccion: string
 }
 
 export type VentaMargenResumen = {
@@ -84,6 +101,7 @@ export type IngredienteRow = {
   componente_code: string
   componente_nombre: string
   cantidad: number
+  unidad: string
   costo_unitario: number
   costo_teorico: number
   pct_costo: number
@@ -100,12 +118,88 @@ export type RecetaDetallePayload = {
   vista: string
 }
 
+export type ProduccionLinea = {
+  fecha: string | null
+  periodo: string
+  orden: string
+  cantidad: number
+  costo: number
+  almacen: string
+  estado: string
+  receta_code: string
+  receta_nombre: string
+}
+
+export type RecetaMatrizItem = {
+  receta_code: string
+  receta_nombre: string
+  total_ingredientes: number
+  costo_total: number
+  flag_costo: string
+  ingredientes: IngredienteRow[]
+  /** Cantidad producida (suma VW_BI_PRODUCCION). */
+  cantidad_producida: number
+  /** Costo real de producción. */
+  costo_produccion: number
+  /** Costo teórico × cantidad producida (si hay qty; si no, costo_total). */
+  costo_teorico_prod: number
+  variacion: number
+  variacion_pct: number
+  ordenes: number
+  produccion_detalle: ProduccionLinea[]
+}
+
+export type RecetasMatrizPayload = {
+  recetas: RecetaMatrizItem[]
+  total_recetas: number
+  vista: string
+  vista_produccion?: string
+  campos_mapeados?: Record<string, string>
+  campos_produccion?: Record<string, string>
+  /** true si cantidad = CostoLinea / CostoUnitario (vista sin columna qty). */
+  cantidad_derivada?: boolean
+  produccion_ok?: boolean
+  produccion_error?: string | null
+  resumen_produccion?: {
+    total_costo_teorico: number
+    total_costo_produccion: number
+    total_variacion: number
+    variacion_pct: number
+    total_cantidad_producida: number
+    recetas_con_produccion: number
+  }
+}
+
 export type VentaAnalisisRow = VentaMargenRow & {
   costo_teorico_unit: number
   costo_teorico: number
   variacion: number
   variacion_pct: number
   margen_pct: number
+  /** Ingredientes BOM de la receta (detalle). */
+  ingredientes: IngredienteRow[]
+  /** Órdenes de producción relacionadas. */
+  produccion: ProduccionLinea[]
+}
+
+export type VentaOpRelacion = {
+  factura: string
+  fecha_venta: string | null
+  periodo: string
+  codigo_cliente: string
+  cliente: string
+  receta_code: string
+  receta_nombre: string
+  cantidad_venta: number
+  venta: number
+  costo_venta: number
+  orden_produccion: string
+  fecha_op: string | null
+  cantidad_op: number
+  costo_op: number
+  almacen: string
+  estado_op: string
+  match: 'orden' | 'receta_periodo' | 'receta' | 'sin_op'
 }
 
 export type VentaPorReceta = {
@@ -132,6 +226,10 @@ export type VentaAnalisisPayload = {
   resumen: VentaAnalisisResumen
   por_receta: VentaPorReceta[]
   detalle: VentaAnalisisRow[]
+  relacion_venta_op: VentaOpRelacion[]
+  campos_venta?: Record<string, string>
+  produccion_ok?: boolean
+  produccion_error?: string | null
   ultimo_sync: string | null
   vista: string
   filas_leidas: number
@@ -224,20 +322,189 @@ export function buildRecetaCatalogo(rows: RecetaCostoRow[]): RecetaCatalogoItem[
   )
 }
 
+/** Matriz: todas las recetas con ingredientes anidados (VW_BI_RECETA_COSTO). */
+export function buildRecetasMatriz(
+  raw: Record<string, unknown>[],
+  meta: { vista: string; campos_mapeados?: Record<string, string> },
+): RecetasMatrizPayload {
+  const byReceta = new Map<string, Record<string, unknown>[]>()
+  for (const row of raw) {
+    const code = String(row.receta_code ?? '').trim()
+    if (!code) continue
+    const list = byReceta.get(code) ?? []
+    list.push(row)
+    byReceta.set(code, list)
+  }
+
+  const recetas: RecetaMatrizItem[] = []
+  for (const [code, lines] of byReceta) {
+    const ingredientes = mapRecetaCostoIngredienteRows(lines)
+    const catalog = buildRecetaCatalogo(mapRecetaCostoRows(lines))[0]
+    const costo_total =
+      ingredientes.reduce((s, i) => s + i.costo_teorico, 0) || catalog?.costo || 0
+    recetas.push({
+      receta_code: code,
+      receta_nombre: catalog?.receta_nombre || String(lines[0]?.receta_nombre ?? code).trim() || code,
+      total_ingredientes: ingredientes.length,
+      costo_total,
+      flag_costo: catalog?.flag_costo || '',
+      ingredientes,
+      cantidad_producida: 0,
+      costo_produccion: 0,
+      costo_teorico_prod: 0,
+      variacion: 0,
+      variacion_pct: 0,
+      ordenes: 0,
+      produccion_detalle: [],
+    })
+  }
+
+  recetas.sort((a, b) =>
+    (a.receta_nombre || a.receta_code).localeCompare(b.receta_nombre || b.receta_code, 'es'),
+  )
+
+  const campos = meta.campos_mapeados ?? {}
+  const cantidad_derivada = !campos.cantidad && Boolean(campos.costo && campos.costo_unitario)
+
+  return {
+    recetas,
+    total_recetas: recetas.length,
+    vista: meta.vista,
+    campos_mapeados: meta.campos_mapeados,
+    cantidad_derivada,
+    produccion_ok: false,
+    produccion_error: null,
+  }
+}
+
+export function mapProduccionRows(raw: Record<string, unknown>[]): ProduccionLinea[] {
+  return raw.map((r) => ({
+    fecha: toDateIso(r.fecha),
+    periodo: String(r.periodo ?? '').trim(),
+    orden: String(r.orden ?? '').trim(),
+    cantidad: toNumber(r.cantidad),
+    costo: toNumber(r.costo),
+    almacen: String(r.almacen ?? '').trim(),
+    estado: String(r.estado ?? '').trim(),
+    receta_code: String(r.receta_code ?? '').trim(),
+    receta_nombre: String(r.receta_nombre ?? '').trim(),
+  }))
+}
+
+/** Cruza teórico (BOM) con líneas de producción real por código de receta. */
+export function mergeProduccionIntoMatriz(
+  matriz: RecetasMatrizPayload,
+  produccionRaw: Record<string, unknown>[],
+  meta: { vista_produccion: string; campos_produccion?: Record<string, string> },
+): RecetasMatrizPayload {
+  const lineas = mapProduccionRows(produccionRaw)
+  const byReceta = new Map<string, ProduccionLinea[]>()
+  for (const row of lineas) {
+    const code = row.receta_code
+    if (!code) continue
+    const list = byReceta.get(code) ?? []
+    list.push(row)
+    byReceta.set(code, list)
+  }
+
+  const recetas = matriz.recetas.map((r) => {
+    const detalle = (byReceta.get(r.receta_code) ?? []).sort((a, b) => {
+      const da = a.fecha ? new Date(a.fecha).getTime() : 0
+      const db = b.fecha ? new Date(b.fecha).getTime() : 0
+      return db - da
+    })
+    const cantidad_producida = detalle.reduce((s, d) => s + (d.cantidad > 0 ? d.cantidad : 0), 0)
+    const costo_produccion = detalle.reduce((s, d) => s + d.costo, 0)
+    const unitTeorico = r.costo_total
+    const costo_teorico_prod = cantidad_producida > 0 ? unitTeorico * cantidad_producida : 0
+    const variacion = costo_produccion - costo_teorico_prod
+    const variacion_pct = costo_teorico_prod > 0 ? (variacion / costo_teorico_prod) * 100 : 0
+    const ordenes = new Set(detalle.map((d) => d.orden).filter(Boolean)).size || detalle.length
+
+    return {
+      ...r,
+      cantidad_producida,
+      costo_produccion,
+      costo_teorico_prod,
+      variacion,
+      variacion_pct,
+      ordenes,
+      produccion_detalle: detalle,
+    }
+  })
+
+  // Recetas que solo aparecen en producción (sin BOM en RECETA_COSTO)
+  for (const [code, detalle] of byReceta) {
+    if (recetas.some((r) => r.receta_code === code)) continue
+    const cantidad_producida = detalle.reduce((s, d) => s + (d.cantidad > 0 ? d.cantidad : 0), 0)
+    const costo_produccion = detalle.reduce((s, d) => s + d.costo, 0)
+    recetas.push({
+      receta_code: code,
+      receta_nombre: detalle[0]?.receta_nombre || code,
+      total_ingredientes: 0,
+      costo_total: 0,
+      flag_costo: '',
+      ingredientes: [],
+      cantidad_producida,
+      costo_produccion,
+      costo_teorico_prod: 0,
+      variacion: costo_produccion,
+      variacion_pct: 0,
+      ordenes: new Set(detalle.map((d) => d.orden).filter(Boolean)).size || detalle.length,
+      produccion_detalle: detalle,
+    })
+  }
+
+  recetas.sort((a, b) =>
+    (a.receta_nombre || a.receta_code).localeCompare(b.receta_nombre || b.receta_code, 'es'),
+  )
+
+  const total_costo_teorico = recetas.reduce((s, r) => s + r.costo_teorico_prod, 0)
+  const total_costo_produccion = recetas.reduce((s, r) => s + r.costo_produccion, 0)
+  const total_variacion = total_costo_produccion - total_costo_teorico
+  const total_cantidad_producida = recetas.reduce((s, r) => s + r.cantidad_producida, 0)
+  const recetas_con_produccion = recetas.filter((r) => r.produccion_detalle.length > 0).length
+
+  return {
+    ...matriz,
+    recetas,
+    total_recetas: recetas.length,
+    vista_produccion: meta.vista_produccion,
+    campos_produccion: meta.campos_produccion,
+    produccion_ok: true,
+    produccion_error: null,
+    resumen_produccion: {
+      total_costo_teorico,
+      total_costo_produccion,
+      total_variacion,
+      variacion_pct: total_costo_teorico > 0 ? (total_variacion / total_costo_teorico) * 100 : 0,
+      total_cantidad_producida,
+      recetas_con_produccion,
+    },
+  }
+}
+
 /** Líneas de VW_BI_RECETA_COSTO: costo teórico = cantidad × costo unitario (Lps). */
 export function mapRecetaCostoIngredienteRows(raw: Record<string, unknown>[]): IngredienteRow[] {
   const rows = raw.map((r) => {
-    const cantidad = toNumber(r.cantidad)
+    let cantidad = toNumber(r.cantidad)
     const costo_unitario = toNumber(r.costo_unitario)
-    const costo_teorico = calcCostoTeoricoLps(cantidad, costo_unitario, toNumber(r.costo))
+    const costoFallback = toNumber(r.costo)
+    // Si cantidad no vino mapeada pero hay costo total y unitario, estimar qty
+    if (!cantidad && costo_unitario > 0 && costoFallback > 0) {
+      cantidad = costoFallback / costo_unitario
+    }
+    const costo_teorico = calcCostoTeoricoLps(cantidad, costo_unitario, costoFallback)
     const componente_code = String(r.componente_code ?? '').trim()
     const componente_nombre = String(
       r.componente_nombre ?? r.componente_code ?? r.receta_nombre ?? '',
     ).trim() || 'Componente'
+    const unidad = String(r.unidad ?? r.unidad_medida ?? '').trim()
     return {
       componente_code,
       componente_nombre,
       cantidad,
+      unidad,
       costo_unitario,
       costo_teorico,
       pct_costo: 0,
@@ -255,13 +522,18 @@ export function mapRecetaCostoIngredienteRows(raw: Record<string, unknown>[]): I
 
 export function mapIngredienteRows(raw: Record<string, unknown>[]): IngredienteRow[] {
   const rows = raw.map((r) => {
-    const cantidad = toNumber(r.cantidad)
+    let cantidad = toNumber(r.cantidad)
     const costo_unitario = toNumber(r.costo_unitario)
-    const costo_teorico = calcCostoTeoricoLps(cantidad, costo_unitario, toNumber(r.costo_linea))
+    const costoFallback = toNumber(r.costo_linea)
+    if (!cantidad && costo_unitario > 0 && costoFallback > 0) {
+      cantidad = costoFallback / costo_unitario
+    }
+    const costo_teorico = calcCostoTeoricoLps(cantidad, costo_unitario, costoFallback)
     return {
       componente_code: String(r.componente_code ?? '').trim(),
       componente_nombre: String(r.componente_nombre ?? r.componente_code ?? '').trim() || 'Componente',
       cantidad,
+      unidad: String(r.unidad ?? r.unidad_medida ?? '').trim(),
       costo_unitario,
       costo_teorico,
       pct_costo: 0,
@@ -299,8 +571,26 @@ export function buildRecetaDetallePayload(
 export function aggregateVentaAnalisis(
   ventas: VentaMargenRow[],
   recetasCosto: Map<string, RecetaCostoRow>,
-  meta: { vista: string; ultimo_sync: string | null },
+  meta: {
+    vista: string
+    ultimo_sync: string | null
+    ingredientesPorReceta?: Map<string, IngredienteRow[]>
+    produccion?: ProduccionLinea[]
+    campos_venta?: Record<string, string>
+    produccion_ok?: boolean
+    produccion_error?: string | null
+  },
 ): VentaAnalisisPayload {
+  const ingredientesPorReceta = meta.ingredientesPorReceta ?? new Map<string, IngredienteRow[]>()
+  const produccion = meta.produccion ?? []
+  const prodByReceta = new Map<string, ProduccionLinea[]>()
+  for (const p of produccion) {
+    if (!p.receta_code) continue
+    const list = prodByReceta.get(p.receta_code) ?? []
+    list.push(p)
+    prodByReceta.set(p.receta_code, list)
+  }
+
   const detalle: VentaAnalisisRow[] = ventas.map((row) => {
     const teoricoUnit = recetasCosto.get(row.receta_code)?.costo ?? 0
     const qty = row.cantidad > 0 ? row.cantidad : 1
@@ -308,6 +598,11 @@ export function aggregateVentaAnalisis(
     const variacion = row.costo - costo_teorico
     const variacion_pct = costo_teorico > 0 ? (variacion / costo_teorico) * 100 : 0
     const margen_pct = row.venta > 0 ? (row.margen / row.venta) * 100 : 0
+    let prodLines = prodByReceta.get(row.receta_code) ?? []
+    if (row.orden_produccion) {
+      const byOrden = prodLines.filter((p) => p.orden === row.orden_produccion)
+      if (byOrden.length) prodLines = byOrden
+    }
     return {
       ...row,
       costo_teorico_unit: teoricoUnit,
@@ -315,6 +610,8 @@ export function aggregateVentaAnalisis(
       variacion,
       variacion_pct,
       margen_pct,
+      ingredientes: ingredientesPorReceta.get(row.receta_code) ?? [],
+      produccion: prodLines.slice(0, 50),
     }
   })
 
@@ -359,6 +656,12 @@ export function aggregateVentaAnalisis(
   const total_costo_teorico = detalle.reduce((s, r) => s + r.costo_teorico, 0)
   const total_variacion = detalle.reduce((s, r) => s + r.variacion, 0)
 
+  const detalleSorted = detalle.sort((a, b) => {
+    const da = a.fecha ? new Date(a.fecha).getTime() : 0
+    const db = b.fecha ? new Date(b.fecha).getTime() : 0
+    return db - da
+  })
+
   return {
     resumen: {
       total_venta,
@@ -371,11 +674,11 @@ export function aggregateVentaAnalisis(
       variacion_pct: total_costo_teorico > 0 ? (total_variacion / total_costo_teorico) * 100 : 0,
     },
     por_receta,
-    detalle: detalle.sort((a, b) => {
-      const da = a.fecha ? new Date(a.fecha).getTime() : 0
-      const db = b.fecha ? new Date(b.fecha).getTime() : 0
-      return db - da
-    }),
+    detalle: detalleSorted,
+    relacion_venta_op: buildRelacionVentaOp(detalleSorted, produccion),
+    campos_venta: meta.campos_venta,
+    produccion_ok: meta.produccion_ok,
+    produccion_error: meta.produccion_error ?? null,
     ultimo_sync: meta.ultimo_sync,
     vista: meta.vista,
     filas_leidas: detalle.length,
@@ -396,7 +699,105 @@ export function mapVentaMargenRows(raw: Record<string, unknown>[]): VentaMargenR
     venta: toNumber(r.venta),
     costo: toNumber(r.costo),
     margen: toNumber(r.margen),
+    factura: String(r.factura ?? '').trim(),
+    orden_produccion: String(r.orden_produccion ?? '').trim(),
   }))
+}
+
+function periodoKey(fecha: string | null, periodo: string): string {
+  if (periodo?.trim()) return periodo.trim().slice(0, 7)
+  if (fecha) return fecha.slice(0, 7)
+  return ''
+}
+
+export function buildRelacionVentaOp(
+  ventas: VentaAnalisisRow[],
+  produccion: ProduccionLinea[],
+): VentaOpRelacion[] {
+  const byOrden = new Map<string, ProduccionLinea[]>()
+  const byReceta = new Map<string, ProduccionLinea[]>()
+  for (const p of produccion) {
+    if (p.orden) {
+      const list = byOrden.get(p.orden) ?? []
+      list.push(p)
+      byOrden.set(p.orden, list)
+    }
+    if (p.receta_code) {
+      const list = byReceta.get(p.receta_code) ?? []
+      list.push(p)
+      byReceta.set(p.receta_code, list)
+    }
+  }
+
+  const out: VentaOpRelacion[] = []
+  for (const v of ventas) {
+    let matches: ProduccionLinea[] = []
+    let match: VentaOpRelacion['match'] = 'sin_op'
+
+    if (v.orden_produccion && byOrden.has(v.orden_produccion)) {
+      matches = byOrden.get(v.orden_produccion) ?? []
+      match = 'orden'
+    } else if (v.receta_code) {
+      const candidates = byReceta.get(v.receta_code) ?? []
+      const periodoV = periodoKey(v.fecha, v.periodo)
+      const samePeriod = periodoV
+        ? candidates.filter((p) => periodoKey(p.fecha, p.periodo) === periodoV)
+        : []
+      if (samePeriod.length) {
+        matches = samePeriod
+        match = 'receta_periodo'
+      } else if (candidates.length) {
+        matches = candidates.slice(0, 5)
+        match = 'receta'
+      }
+    }
+
+    if (matches.length === 0) {
+      out.push({
+        factura: v.factura,
+        fecha_venta: v.fecha,
+        periodo: v.periodo,
+        codigo_cliente: v.codigo_cliente,
+        cliente: v.cliente,
+        receta_code: v.receta_code,
+        receta_nombre: v.receta_nombre,
+        cantidad_venta: v.cantidad,
+        venta: v.venta,
+        costo_venta: v.costo,
+        orden_produccion: v.orden_produccion,
+        fecha_op: null,
+        cantidad_op: 0,
+        costo_op: 0,
+        almacen: '',
+        estado_op: '',
+        match: 'sin_op',
+      })
+      continue
+    }
+
+    for (const p of matches) {
+      out.push({
+        factura: v.factura,
+        fecha_venta: v.fecha,
+        periodo: v.periodo,
+        codigo_cliente: v.codigo_cliente,
+        cliente: v.cliente,
+        receta_code: v.receta_code,
+        receta_nombre: v.receta_nombre,
+        cantidad_venta: v.cantidad,
+        venta: v.venta,
+        costo_venta: v.costo,
+        orden_produccion: p.orden || v.orden_produccion,
+        fecha_op: p.fecha,
+        cantidad_op: p.cantidad,
+        costo_op: p.costo,
+        almacen: p.almacen,
+        estado_op: p.estado,
+        match,
+      })
+    }
+  }
+  return out
 }
 
 export function aggregateVentasMargen(
@@ -429,9 +830,13 @@ export function aggregateVentasMargen(
 
 export function mapRecetaCostoRows(raw: Record<string, unknown>[]): RecetaCostoRow[] {
   return raw.map((r) => {
-    const cantidad = toNumber(r.cantidad)
+    let cantidad = toNumber(r.cantidad)
     const costo_unitario = toNumber(r.costo_unitario)
-    const costo = calcCostoTeoricoLps(cantidad, costo_unitario, toNumber(r.costo))
+    const costoFallback = toNumber(r.costo)
+    if (!cantidad && costo_unitario > 0 && costoFallback > 0) {
+      cantidad = costoFallback / costo_unitario
+    }
+    const costo = calcCostoTeoricoLps(cantidad, costo_unitario, costoFallback)
     return {
       receta_code: String(r.receta_code ?? '').trim(),
       receta_nombre: String(r.receta_nombre ?? '').trim(),

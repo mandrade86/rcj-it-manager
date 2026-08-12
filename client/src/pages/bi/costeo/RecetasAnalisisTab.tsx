@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FlaskConical, Layers, Loader2, Search } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { FlaskConical, FileSpreadsheet, Layers, Loader2, Search } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -14,7 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,13 +34,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { fetchRecetaDetalle, fetchRecetasCatalogo } from '@/lib/api/costeoMuestras'
 import { formatLps } from '@/lib/format'
-import type { RecetaCatalogoItem, RecetaDetallePayload } from '@/types/costeoMuestras'
+import { exportRecetaDetalleExcel } from '@/lib/exportCosteoExcel'
+import { useCosteoMuestrasStore } from '@/store/costeoMuestrasStore'
 
 import { BiChartTooltip } from './BiChartTooltip'
 import { BI_CHART, ingredientColor } from './chartTheme'
-import { hasSelectValue } from './selectHelpers'
+import { hasSelectValue, sentenceCase } from './selectHelpers'
 
 function formatPct(v: number): string {
   return `${v.toFixed(1)}%`
@@ -51,57 +51,38 @@ type Props = {
 }
 
 export function RecetasAnalisisTab({ onError }: Props) {
-  const [loading, setLoading] = useState(true)
-  const [detalleLoading, setDetalleLoading] = useState(false)
-  const [catalogo, setCatalogo] = useState<RecetaCatalogoItem[]>([])
+  const catalogo = useCosteoMuestrasStore((s) => s.catalogoRecetas)
+  const catalogoLoading = useCosteoMuestrasStore((s) => s.catalogoLoading)
+  const seleccion = useCosteoMuestrasStore((s) => s.recetaSeleccion)
+  const setRecetaSeleccion = useCosteoMuestrasStore((s) => s.setRecetaSeleccion)
+  const loadCatalogoRecetas = useCosteoMuestrasStore((s) => s.loadCatalogoRecetas)
+  const loadDetalleStore = useCosteoMuestrasStore((s) => s.loadDetalle)
+  const detalles = useCosteoMuestrasStore((s) => s.detalles)
+  const detalleLoadingCode = useCosteoMuestrasStore((s) => s.detalleLoadingCode)
+  const cacheEpoch = useCosteoMuestrasStore((s) => s.cacheEpoch)
+
   const [busqueda, setBusqueda] = useState('')
-  const [seleccion, setSeleccion] = useState('')
-  const [detalle, setDetalle] = useState<RecetaDetallePayload | null>(null)
-
-  const loadCatalogo = useCallback(async () => {
-    setLoading(true)
-    onError(null)
-    try {
-      const { catalogo: items } = await fetchRecetasCatalogo()
-      setCatalogo(items)
-      const first = items.find((r) => hasSelectValue(r.receta_code))
-      if (first) {
-        setSeleccion((prev) => (hasSelectValue(prev) ? prev : first.receta_code))
-      } else {
-        setSeleccion('')
-      }
-    } catch (e) {
-      onError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }, [onError])
-
-  const loadDetalle = useCallback(async (code: string) => {
-    if (!code) return
-    setDetalleLoading(true)
-    onError(null)
-    try {
-      const payload = await fetchRecetaDetalle(code)
-      setDetalle(payload)
-    } catch (e) {
-      onError((e as Error).message)
-      setDetalle(null)
-    } finally {
-      setDetalleLoading(false)
-    }
-  }, [onError])
+  const detalle = seleccion ? detalles[seleccion] ?? null : null
 
   useEffect(() => {
-    void loadCatalogo()
-  }, [loadCatalogo])
+    onError(null)
+    void loadCatalogoRecetas().catch((e) => onError((e as Error).message))
+  }, [loadCatalogoRecetas, onError, cacheEpoch])
 
   useEffect(() => {
-    if (seleccion) void loadDetalle(seleccion)
-  }, [seleccion, loadDetalle])
+    if (!seleccion) return
+    if (detalles[seleccion]) return
+    onError(null)
+    void loadDetalleStore(seleccion).catch((e) => {
+      onError((e as Error).message)
+    })
+  }, [seleccion, detalles, loadDetalleStore, onError, cacheEpoch])
+
+  const loading = catalogoLoading && !catalogo
+  const detalleLoading = Boolean(seleccion) && detalleLoadingCode === seleccion && !detalles[seleccion]
 
   const catalogoValido = useMemo(
-    () => catalogo.filter((r) => hasSelectValue(r.receta_code)),
+    () => (catalogo ?? []).filter((r) => hasSelectValue(r.receta_code)),
     [catalogo],
   )
 
@@ -117,21 +98,27 @@ export function RecetasAnalisisTab({ onError }: Props) {
 
   const pieData = useMemo(() => {
     if (!detalle) return []
-    return detalle.ingredientes.slice(0, 8).map((i, idx) => ({
-      name: i.componente_nombre.length > 22 ? `${i.componente_nombre.slice(0, 20)}…` : i.componente_nombre,
-      value: i.costo_teorico,
-      fullName: i.componente_nombre,
-      fill: ingredientColor(idx),
-    }))
+    return detalle.ingredientes.slice(0, 8).map((i, idx) => {
+      const fullName = sentenceCase(i.componente_nombre)
+      return {
+        name: fullName.length > 22 ? `${fullName.slice(0, 20)}…` : fullName,
+        value: i.costo_teorico,
+        fullName,
+        fill: ingredientColor(idx),
+      }
+    })
   }, [detalle])
 
   const barData = useMemo(() => {
     if (!detalle) return []
-    return detalle.ingredientes.slice(0, 12).map((i) => ({
-      name: i.componente_nombre.length > 18 ? `${i.componente_nombre.slice(0, 16)}…` : i.componente_nombre,
-      costo: i.costo_teorico,
-      fullName: i.componente_nombre,
-    }))
+    return detalle.ingredientes.slice(0, 12).map((i) => {
+      const fullName = sentenceCase(i.componente_nombre)
+      return {
+        name: fullName.length > 18 ? `${fullName.slice(0, 16)}…` : fullName,
+        costo: i.costo_teorico,
+        fullName,
+      }
+    })
   }, [detalle])
 
   if (loading) {
@@ -143,19 +130,35 @@ export function RecetasAnalisisTab({ onError }: Props) {
     )
   }
 
-  const recetaSel = catalogo.find((r) => r.receta_code === seleccion)
+  const recetaSel = catalogoValido.find((r) => r.receta_code === seleccion)
 
   return (
     <div className="space-y-6">
       <Card className="border-l-4 border-l-[var(--lime)] bg-gradient-to-r from-[#EAF5D9]/80 to-white">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FlaskConical className="size-5 text-[var(--lime)]" />
-            Análisis de costo por receta — vista analista
-          </CardTitle>
-          <p className="text-xs text-[var(--text-muted)]">
-            Seleccione una receta para ver costo teórico desde VW_BI_RECETA_COSTO (cantidad × costo unitario).
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FlaskConical className="size-5 text-[var(--lime)]" />
+                Análisis de costo por receta — vista analista
+              </CardTitle>
+              <p className="text-xs text-[var(--text-muted)]">
+                Seleccione una receta para ver costo teórico desde VW_BI_RECETA_COSTO (cantidad × costo unitario).
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!detalle}
+              onClick={() => {
+                if (detalle) exportRecetaDetalleExcel(detalle)
+              }}
+            >
+              <FileSpreadsheet className="mr-1.5 size-3.5" />
+              Exportar Excel
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div>
@@ -175,7 +178,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
             <Label>Receta</Label>
             <Select
               value={hasSelectValue(seleccion) ? seleccion : undefined}
-              onValueChange={setSeleccion}
+              onValueChange={setRecetaSeleccion}
             >
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder="Seleccione receta" />
@@ -203,7 +206,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
         </div>
       ) : detalle ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Card className="border-t-4 border-t-[var(--navy)]">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-[var(--text-muted)]">Receta seleccionada</CardTitle>
@@ -233,22 +236,10 @@ export function RecetasAnalisisTab({ onError }: Props) {
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-t-4" style={{ borderTopColor: BI_CHART.teal }}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-[var(--text-muted)]">Flag costo</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {detalle.receta.flag_costo ? (
-                  <Badge className="bg-[var(--lime)] text-[var(--navy)]">{detalle.receta.flag_costo}</Badge>
-                ) : (
-                  <span className="text-sm text-[var(--text-muted)]">—</span>
-                )}
-              </CardContent>
-            </Card>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+            <Card className="bi-composicion-costo">
               <CardHeader>
                 <CardTitle className="text-base">Composición del costo (top 8)</CardTitle>
               </CardHeader>
@@ -329,6 +320,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
                     <TableHead>Código</TableHead>
                     <TableHead>Ingrediente</TableHead>
                     <TableHead className="text-right">Cantidad</TableHead>
+                    <TableHead>Unidad</TableHead>
                     <TableHead className="text-right">Costo unit.</TableHead>
                     <TableHead className="text-right">% del total</TableHead>
                   </TableRow>
@@ -337,8 +329,15 @@ export function RecetasAnalisisTab({ onError }: Props) {
                   {detalle.ingredientes.map((ing, i) => (
                     <TableRow key={`${ing.componente_code}-${i}`}>
                       <TableCell className="font-mono text-xs">{ing.componente_code || '—'}</TableCell>
-                      <TableCell>{ing.componente_nombre}</TableCell>
-                      <TableCell className="text-right">{ing.cantidad.toLocaleString('es-HN')}</TableCell>
+                      <TableCell>
+                        <span className="bi-sentence-case">{ing.componente_nombre}</span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {ing.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 6 })}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--text-muted)]">
+                        {ing.unidad || '—'}
+                      </TableCell>
                       <TableCell className="text-right">{formatLps(ing.costo_unitario)}</TableCell>
                       <TableCell className="text-right">
                         <span
@@ -353,7 +352,7 @@ export function RecetasAnalisisTab({ onError }: Props) {
                 </TableBody>
                 <TableFooter>
                   <TableRow className="bg-[var(--gray-lt)] font-semibold">
-                    <TableCell colSpan={3}>Total receta</TableCell>
+                    <TableCell colSpan={4}>Total receta</TableCell>
                     <TableCell className="text-right">{formatLps(detalle.resumen.costo_total)}</TableCell>
                     <TableCell className="text-right">100%</TableCell>
                   </TableRow>

@@ -4,6 +4,7 @@ import type {
   RecetaCatalogoPayload,
   RecetaCostoPayload,
   RecetaDetallePayload,
+  RecetasMatrizPayload,
   SapBiColumnMapping,
   SapBiCosteoConfig,
   VentaAnalisisPayload,
@@ -128,6 +129,12 @@ export async function fetchRecetasCatalogo(): Promise<RecetaCatalogoPayload> {
   const res = await fetch('/api/costeo-muestras/recetas/catalogo')
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<RecetaCatalogoPayload>
+}
+
+export async function fetchRecetasGeneral(): Promise<RecetasMatrizPayload> {
+  const res = await fetch('/api/costeo-muestras/recetas/general')
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<RecetasMatrizPayload>
 }
 
 export async function fetchRecetaDetalle(receta: string): Promise<RecetaDetallePayload> {

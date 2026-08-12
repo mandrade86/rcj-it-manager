@@ -9,21 +9,32 @@ import {
   buildClienteCatalogo,
   buildRecetaCatalogo,
   buildRecetaDetallePayload,
+  buildRecetasMatriz,
   buildRecetaVentaCatalogo,
   mapIngredienteRows,
+  mapProduccionRows,
   mapRecetaCostoIngredienteRows,
   mapRecetaCostoRows,
   mapVentaMargenRows,
+  mergeProduccionIntoMatriz,
+  type IngredienteRow,
   type RecetaCatalogoItem,
 } from '../utils/costeoMuestrasBi.js'
 import { querySapBiGeneric } from '../utils/sapBiGenericQuery.js'
 import {
-  CAMPOS_VENTA_COSTO,
   clearExplosionFieldsCache,
+  clearProduccionFieldsCache,
   clearRecetaCostoFieldsCache,
+  clearVentaCostoFieldsCache,
   getExplosionFields,
+  getProduccionFields,
   getRecetaCostoFields,
+  getVentaCostoFields,
+  refreshProduccionFields,
+  refreshRecetaCostoFields,
   suggestExplosionFields,
+  suggestRecetaCostoFields,
+  VISTA_PRODUCCION,
   VISTA_RECETA_COSTO,
   VISTA_RECETAS,
   VISTA_RECETAS_EXPLOSION,
@@ -104,6 +115,10 @@ costeoMuestrasRouter.post('/sync', canView, async (_req, res, next) => {
     }
     const rows = await querySapBiView(cfg, {})
     cachedRows = rows
+    clearRecetaCostoFieldsCache()
+    clearExplosionFieldsCache()
+    clearProduccionFieldsCache()
+    clearVentaCostoFieldsCache()
     const now = new Date().toISOString()
     await setUltimoSyncCosteo(now)
     res.json({
@@ -241,13 +256,14 @@ costeoMuestrasRouter.get('/ventas/catalogo', canView, async (req, res) => {
     const f = parseQueryFilters(req)
     const dateFilters = { desde: f.desde, hasta: f.hasta }
 
-    const rawRecetas = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, dateFilters)
+    const ventaFields = await getVentaCostoFields(cfg)
+    const rawRecetas = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, ventaFields, dateFilters)
     const recetas = buildRecetaVentaCatalogo(mapVentaMargenRows(rawRecetas))
 
     const rawClientes = await querySapBiGeneric(
       cfg,
       VISTA_VENTA_COSTO,
-      CAMPOS_VENTA_COSTO,
+      ventaFields,
       buildVentaSapFilters({ ...f, codigo_cliente: undefined, cliente: undefined }),
     )
     const clientes = buildClienteCatalogo(mapVentaMargenRows(rawClientes))
@@ -271,7 +287,8 @@ costeoMuestrasRouter.get('/ventas-margen', canView, async (req, res) => {
     }
 
     const f = parseQueryFilters(req)
-    const raw = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, buildVentaSapFilters(f))
+    const ventaFields = await getVentaCostoFields(cfg)
+    const raw = await querySapBiGeneric(cfg, VISTA_VENTA_COSTO, ventaFields, buildVentaSapFilters(f))
     const rows = mapVentaMargenRows(raw)
     const ultimo_sync = await getUltimoSyncCosteo()
     const payload = aggregateVentasMargen(rows, {
@@ -297,6 +314,64 @@ costeoMuestrasRouter.get('/recetas/catalogo', canView, async (_req, res) => {
     res.json({ catalogo, total: catalogo.length })
   } catch (err) {
     res.status(502).json({ error: `Error al cargar catálogo de recetas: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.get('/recetas/general', canView, async (_req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    // Refresca mapeo para no quedarnos con cache sin cantidad/unidad
+    const { campos } = await refreshRecetaCostoFields(cfg)
+    const raw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, campos, {})
+    let payload = buildRecetasMatriz(raw, {
+      vista: `${cfg.schema}.${VISTA_RECETA_COSTO}`,
+      campos_mapeados: campos,
+    })
+
+    try {
+      const { campos: camposProd } = await refreshProduccionFields(cfg)
+      const prodRaw = await querySapBiGeneric(cfg, VISTA_PRODUCCION, camposProd, {})
+      payload = mergeProduccionIntoMatriz(payload, prodRaw, {
+        vista_produccion: `${cfg.schema}.${VISTA_PRODUCCION}`,
+        campos_produccion: camposProd,
+      })
+    } catch (prodErr) {
+      clearProduccionFieldsCache()
+      payload = {
+        ...payload,
+        produccion_ok: false,
+        produccion_error: (prodErr as Error).message,
+      }
+    }
+
+    res.json(payload)
+  } catch (err) {
+    clearRecetaCostoFieldsCache()
+    res.status(502).json({ error: `Error al cargar matriz de recetas: ${(err as Error).message}` })
+  }
+})
+
+costeoMuestrasRouter.get('/recetas/costo-columnas', canView, async (_req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    const { columnas, campos } = await refreshRecetaCostoFields(cfg)
+    res.json({
+      vista: VISTA_RECETA_COSTO,
+      columnas,
+      sugerido: campos,
+      falta_cantidad: !campos.cantidad,
+      falta_unidad: !campos.unidad,
+    })
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message })
   }
 })
 
@@ -345,7 +420,7 @@ costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
       return
     }
 
-    const costoFields = await getRecetaCostoFields(cfg)
+    const { campos: costoFields } = await refreshRecetaCostoFields(cfg)
     const costoRaw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, costoFields, {
       receta: recetaCode,
       recetaExact: true,
@@ -380,10 +455,13 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
     }
 
     const f = parseQueryFilters(req)
-    const recetaFields = await getRecetaCostoFields(cfg)
+    const [ventaFields, recetaFields] = await Promise.all([
+      getVentaCostoFields(cfg),
+      getRecetaCostoFields(cfg),
+    ])
 
     const [ventasRaw, recetasRaw] = await Promise.all([
-      querySapBiGeneric(cfg, VISTA_VENTA_COSTO, CAMPOS_VENTA_COSTO, buildVentaSapFilters(f)),
+      querySapBiGeneric(cfg, VISTA_VENTA_COSTO, ventaFields, buildVentaSapFilters(f)),
       querySapBiGeneric(cfg, VISTA_RECETA_COSTO, recetaFields, {}),
     ])
 
@@ -401,13 +479,52 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
         },
       ] as const),
     )
+
+    const ingredientesPorReceta = new Map<string, IngredienteRow[]>()
+    const byCode = new Map<string, Record<string, unknown>[]>()
+    for (const row of recetasRaw) {
+      const code = String(row.receta_code ?? '').trim()
+      if (!code) continue
+      const list = byCode.get(code) ?? []
+      list.push(row)
+      byCode.set(code, list)
+    }
+    for (const [code, lines] of byCode) {
+      ingredientesPorReceta.set(code, mapRecetaCostoIngredienteRows(lines))
+    }
+
+    let produccion = mapProduccionRows([])
+    let produccion_ok = false
+    let produccion_error: string | null = null
+    try {
+      const prodFields = await getProduccionFields(cfg)
+      const prodRaw = await querySapBiGeneric(cfg, VISTA_PRODUCCION, prodFields, {
+        receta: f.receta,
+        recetaExact: f.recetaExact,
+        desde: f.desde,
+        hasta: f.hasta,
+      })
+      produccion = mapProduccionRows(prodRaw)
+      produccion_ok = true
+    } catch (e) {
+      clearProduccionFieldsCache()
+      produccion_error = (e as Error).message
+    }
+
     const ultimo_sync = await getUltimoSyncCosteo()
     const payload = aggregateVentaAnalisis(ventas, recetasMap, {
-      vista: `${cfg.schema}.${VISTA_VENTA_COSTO} + ${VISTA_RECETA_COSTO}`,
+      vista: `${cfg.schema}.${VISTA_VENTA_COSTO} + ${VISTA_RECETA_COSTO}`
+        + (produccion_ok ? ` + ${VISTA_PRODUCCION}` : ''),
       ultimo_sync,
+      ingredientesPorReceta,
+      produccion,
+      campos_venta: ventaFields,
+      produccion_ok,
+      produccion_error,
     })
     res.json(payload)
   } catch (err) {
+    clearVentaCostoFieldsCache()
     res.status(502).json({ error: `Error en análisis ventas/costos: ${(err as Error).message}` })
   }
 })

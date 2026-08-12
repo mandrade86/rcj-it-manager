@@ -31,9 +31,11 @@ import {
 } from '@/lib/api/costeoMuestras'
 import { formatDateDMY } from '@/lib/format'
 import { useAuthStore } from '@/store/authStore'
+import { useCosteoMuestrasStore } from '@/store/costeoMuestrasStore'
 import type { SapBiColumnMapping, SapBiCosteoConfig } from '@/types/costeoMuestras'
 
 import { RecetasAnalisisTab } from './costeo/RecetasAnalisisTab'
+import { GeneralRecetasTab } from './costeo/GeneralRecetasTab'
 import { VentasAnalisisTab } from './costeo/VentasAnalisisTab'
 
 const DEFAULT_MAPPING: SapBiColumnMapping = {
@@ -83,7 +85,7 @@ function formatSyncLabel(iso: string | null | undefined): string {
 export function CosteoMuestrasPage() {
   const canConfig = useAuthStore((s) => s.hasPermiso('bi:costeo:config') || s.hasPermiso('*'))
 
-  const [activeTab, setActiveTab] = useState('recetas')
+  const [activeTab, setActiveTab] = useState('general')
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -233,6 +235,7 @@ export function CosteoMuestrasPage() {
     setError(null)
     try {
       await syncCosteoMuestras()
+      useCosteoMuestrasStore.getState().invalidate()
       await loadConfig()
     } catch (e) {
       setError((e as Error).message)
@@ -242,37 +245,37 @@ export function CosteoMuestrasPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">BI — Costeo de muestras</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Análisis de costos por receta (BOM) y cruce teórico vs producción con margen para decisiones.
+          <h1 className="text-lg font-semibold text-[var(--text)]">BI — Costeo de muestras</h1>
+          <p className="text-xs text-[var(--text-muted)]">
+            Costos por receta (BOM) y margen teórico vs producción.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canConfig && (
-            <Button type="button" variant="outline" onClick={openConfig}>
-              <Settings2 className="mr-2 size-4" />
+            <Button type="button" variant="outline" size="sm" onClick={openConfig}>
+              <Settings2 className="mr-1.5 size-3.5" />
               Configuración SAP
             </Button>
           )}
-          <Button type="button" onClick={() => void handleSync()} disabled={syncing || !config?.configured}>
-            {syncing ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
+          <Button type="button" size="sm" onClick={() => void handleSync()} disabled={syncing || !config?.configured}>
+            {syncing ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 size-3.5" />}
             Sincronizar
           </Button>
         </div>
       </div>
 
       <Card className="border-[var(--border)] bg-[var(--blue-lt)]/40">
-        <CardContent className="flex flex-wrap items-center gap-3 py-4 text-sm">
-          <Cable className="size-4 text-[var(--navy)]" />
+        <CardContent className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs">
+          <Cable className="size-3.5 text-[var(--navy)]" />
           {config?.configured ? (
             <>
               <span>Esquema: <strong>{config.schema}</strong></span>
               <span className="text-[var(--text-muted)]">|</span>
               <span>Último sync: {formatSyncLabel(config.ultimo_sync)}</span>
-              <Badge variant="outline" className="bg-white">{config.driver.toUpperCase()}</Badge>
+              <Badge variant="outline" className="h-5 bg-white px-1.5 text-[10px]">{config.driver.toUpperCase()}</Badge>
             </>
           ) : (
             <span className="text-[var(--text-muted)]">Configure la conexión a SAP para comenzar.</span>
@@ -282,13 +285,13 @@ export function CosteoMuestrasPage() {
 
       {error && (
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="py-4 text-sm text-red-800">{error}</CardContent>
+          <CardContent className="py-2 text-sm text-red-800">{error}</CardContent>
         </Card>
       )}
 
       {!config?.configured && !loading && (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-[var(--text-muted)]">
+          <CardContent className="py-8 text-center text-sm text-[var(--text-muted)]">
             {canConfig
               ? 'Use el botón Configuración SAP para definir host, credenciales y vistas.'
               : 'El módulo aún no está configurado. Contacte al administrador de IT.'}
@@ -297,22 +300,27 @@ export function CosteoMuestrasPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
+        <div className="flex items-center justify-center py-12 text-[var(--text-muted)]">
           <Loader2 className="mr-2 size-5 animate-spin" />
           Cargando…
         </div>
       ) : config?.configured ? (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-lg grid-cols-2">
-            <TabsTrigger value="recetas">Costos por receta</TabsTrigger>
-            <TabsTrigger value="ventas">Ventas y margen</TabsTrigger>
+          <TabsList className="grid h-9 w-full max-w-xl grid-cols-3">
+            <TabsTrigger value="general" className="text-xs">General Recetas</TabsTrigger>
+            <TabsTrigger value="recetas" className="text-xs">Costos por receta</TabsTrigger>
+            <TabsTrigger value="ventas" className="text-xs">Ventas y margen</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="recetas" className="mt-6">
+          <TabsContent value="general" className="mt-3">
+            <GeneralRecetasTab onError={setError} />
+          </TabsContent>
+
+          <TabsContent value="recetas" className="mt-3">
             <RecetasAnalisisTab onError={setError} />
           </TabsContent>
 
-          <TabsContent value="ventas" className="mt-6">
+          <TabsContent value="ventas" className="mt-3">
             <VentasAnalisisTab onError={setError} />
           </TabsContent>
         </Tabs>
