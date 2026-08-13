@@ -94,7 +94,7 @@ export function CosteoMuestrasPage() {
   const [configOpen, setConfigOpen] = useState(false)
   const [configForm, setConfigForm] = useState({
     driver: 'hana' as 'mssql' | 'hana',
-    host: '172.16.146.16',
+    host: '',
     port: 30015,
     database: 'RCJ_BI',
     schema: 'RCJ_BI',

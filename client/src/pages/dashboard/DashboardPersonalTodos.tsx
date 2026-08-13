@@ -45,8 +45,12 @@ function saveTodos(userId: string, items: DashboardTodoItem[]) {
 }
 
 function newId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `t-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return `t-${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`
 }
 
 function reorder(items: DashboardTodoItem[], dragId: string, dropId: string): DashboardTodoItem[] {

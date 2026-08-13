@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 export const uploadCertificado = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['.pdf', '.png', '.jpg', '.jpeg']
     const ext = path.extname(file.originalname).toLowerCase()

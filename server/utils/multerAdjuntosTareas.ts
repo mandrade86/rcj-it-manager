@@ -33,7 +33,7 @@ const ALLOWED_EXT = [
 
 export const uploadAdjuntoTarea = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB (límite seguro Sonar S5693)
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase()
     if (ALLOWED_EXT.includes(ext)) {

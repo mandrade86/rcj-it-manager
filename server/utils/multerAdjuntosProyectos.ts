@@ -33,7 +33,7 @@ const ALLOWED_EXT = [
 
 export const uploadAdjuntoProyectoRiesgo = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase()
     if (ALLOWED_EXT.includes(ext)) {

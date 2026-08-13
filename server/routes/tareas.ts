@@ -30,7 +30,7 @@ export const tareasRouter = Router()
 
 const uploadTareasExcel = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok =
       file.originalname.toLowerCase().endsWith('.xlsx') ||

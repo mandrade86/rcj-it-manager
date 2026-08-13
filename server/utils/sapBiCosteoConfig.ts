@@ -87,7 +87,7 @@ export const SAP_BI_VISTAS_CATALOGO = [
 
 export const DEFAULT_SAP_BI_COSTEO_CONFIG: SapBiCosteoConfig = {
   driver: 'hana',
-  host: '172.16.146.16',
+  host: process.env.SAP_BI_HOST?.trim() || '',
   port: 30015,
   database: 'RCJ_BI',
   schema: 'RCJ_BI',
