@@ -43,10 +43,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { exportVentasAnalisisExcel } from '@/lib/exportCosteoExcel'
+import { fetchProduccionReceta, fetchRecetaDetalle } from '@/lib/api/costeoMuestras'
 import { formatDateDMY, formatLps } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { costeoCacheKey, useCosteoMuestrasStore } from '@/store/costeoMuestrasStore'
-import type { VentaAnalisisPayload, VentaAnalisisRow } from '@/types/costeoMuestras'
+import type {
+  IngredienteRow,
+  ProduccionLinea,
+  VentaAnalisisPayload,
+  VentaAnalisisRow,
+} from '@/types/costeoMuestras'
 
 import { BiChartTooltip } from './BiChartTooltip'
 import { BI_CHART } from './chartTheme'
@@ -323,6 +329,12 @@ export function VentasAnalisisTab({ onError }: Props) {
 
       {data && res ? (
         <>
+          {data.aviso ? (
+            <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              {data.aviso}
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Card className="border-t-4" style={{ borderTopColor: BI_CHART.sky }}>
               <CardHeader className="px-3 pb-1 pt-2">
@@ -589,7 +601,11 @@ export function VentasAnalisisTab({ onError }: Props) {
                 </TabsList>
 
                 <TabsContent value="lineas" className="mt-0 overflow-x-auto">
-                  <DetalleLineasTable rows={data.detalle} />
+                  <DetalleLineasTable
+                    rows={data.detalle}
+                    desde={filtroDesde}
+                    hasta={filtroHasta}
+                  />
                 </TabsContent>
 
                 <TabsContent value="relacion" className="mt-0 overflow-x-auto">
@@ -619,15 +635,62 @@ function matchBadge(match: string) {
   }
 }
 
-function DetalleLineasTable({ rows }: { rows: VentaAnalisisRow[] }) {
+function DetalleLineasTable({
+  rows,
+  desde,
+  hasta,
+}: {
+  rows: VentaAnalisisRow[]
+  desde?: string
+  hasta?: string
+}) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
-  const toggle = (i: number) => {
+  const [ingsByReceta, setIngsByReceta] = useState<Record<string, IngredienteRow[]>>({})
+  const [prodByKey, setProdByKey] = useState<Record<string, ProduccionLinea[]>>({})
+  const [loadingKey, setLoadingKey] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const toggle = (i: number, row: VentaAnalisisRow) => {
     setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(i)) next.delete(i)
-      else next.add(i)
+      else {
+        next.add(i)
+        void ensureDetalle(row)
+      }
       return next
     })
+  }
+
+  const ensureDetalle = async (row: VentaAnalisisRow) => {
+    const code = row.receta_code
+    if (!code) return
+    const prodKey = `${code}|${row.orden_produccion || ''}`
+    const needBom = !ingsByReceta[code]
+    const needProd = !prodByKey[prodKey]
+    if (!needBom && !needProd) return
+
+    setLoadingKey(prodKey)
+    setLoadError(null)
+    try {
+      if (needBom) {
+        const det = await fetchRecetaDetalle(code)
+        setIngsByReceta((prev) => ({ ...prev, [code]: det.ingredientes }))
+      }
+      if (needProd) {
+        const prod = await fetchProduccionReceta({
+          receta: code,
+          orden: row.orden_produccion || undefined,
+          desde: desde || undefined,
+          hasta: hasta || undefined,
+        })
+        setProdByKey((prev) => ({ ...prev, [prodKey]: prod.lineas }))
+      }
+    } catch (e) {
+      setLoadError((e as Error).message)
+    } finally {
+      setLoadingKey(null)
+    }
   }
 
   return (
@@ -651,13 +714,15 @@ function DetalleLineasTable({ rows }: { rows: VentaAnalisisRow[] }) {
       <TableBody>
         {rows.slice(0, 300).map((d, i) => {
           const open = expanded.has(i)
-          const ings = d.ingredientes ?? []
-          const prod = d.produccion ?? []
+          const prodKey = `${d.receta_code}|${d.orden_produccion || ''}`
+          const ings = ingsByReceta[d.receta_code] ?? []
+          const prodShow = (prodByKey[prodKey] ?? []).slice(0, 40)
+          const loading = loadingKey === prodKey
           return (
             <Fragment key={`${d.factura}-${d.receta_code}-${d.codigo_cliente}-${i}`}>
               <TableRow
                 className={cn('cursor-pointer', open && 'bg-[var(--blue-lt)]/40')}
-                onClick={() => toggle(i)}
+                onClick={() => toggle(i, d)}
               >
                 <TableCell className="px-1">
                   <button
@@ -665,7 +730,7 @@ function DetalleLineasTable({ rows }: { rows: VentaAnalisisRow[] }) {
                     className="inline-flex size-6 items-center justify-center rounded text-[var(--navy)]"
                     onClick={(e) => {
                       e.stopPropagation()
-                      toggle(i)
+                      toggle(i, d)
                     }}
                   >
                     {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -698,83 +763,96 @@ function DetalleLineasTable({ rows }: { rows: VentaAnalisisRow[] }) {
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={12} className="bg-[var(--gray-bg)] p-0">
                     <div className="grid gap-3 border-t border-[var(--border)] px-3 py-3 lg:grid-cols-2">
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
-                          Detalle receta (BOM) — {d.receta_code}
+                      {loading ? (
+                        <p className="col-span-2 flex items-center justify-center gap-2 py-6 text-xs text-[var(--text-muted)]">
+                          <Loader2 className="size-3.5 animate-spin" />
+                          Cargando BOM y producción…
                         </p>
-                        {ings.length === 0 ? (
-                          <p className="py-2 text-center text-xs text-[var(--text-muted)]">Sin ingredientes.</p>
-                        ) : (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="text-xs">Componente</TableHead>
-                                <TableHead className="text-right text-xs">Cant.</TableHead>
-                                <TableHead className="text-right text-xs">Costo</TableHead>
-                                <TableHead className="text-right text-xs">%</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {ings.slice(0, 40).map((ing, j) => (
-                                <TableRow key={`${ing.componente_code}-${j}`}>
-                                  <TableCell className="text-xs">
-                                    <span className="bi-sentence-case">{ing.componente_nombre}</span>
-                                    <div className="font-mono text-[10px] text-[var(--text-muted)]">
-                                      {ing.componente_code}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-right text-xs tabular-nums">
-                                    {ing.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 4 })}
-                                    {ing.unidad ? ` ${ing.unidad}` : ''}
-                                  </TableCell>
-                                  <TableCell className="text-right text-xs">{formatLps(ing.costo_teorico)}</TableCell>
-                                  <TableCell className="text-right text-xs">{ing.pct_costo.toFixed(1)}%</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        )}
-                      </div>
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
-                          Producción relacionada
-                          {d.orden_produccion ? ` · OP ${d.orden_produccion}` : ''}
-                        </p>
-                        {prod.length === 0 ? (
-                          <p className="py-2 text-center text-xs text-[var(--text-muted)]">
-                            Sin líneas de producción para esta receta.
-                          </p>
-                        ) : (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="text-xs">Orden</TableHead>
-                                <TableHead className="text-xs">Fecha</TableHead>
-                                <TableHead className="text-xs">Estado</TableHead>
-                                <TableHead className="text-right text-xs">Cant.</TableHead>
-                                <TableHead className="text-right text-xs">Costo</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {prod.slice(0, 40).map((p, j) => (
-                                <TableRow key={`${p.orden}-${j}`}>
-                                  <TableCell className="font-mono text-xs">{p.orden || '—'}</TableCell>
-                                  <TableCell className="text-xs">
-                                    {p.fecha ? formatDateDMY(p.fecha) : p.periodo || '—'}
-                                  </TableCell>
-                                  <TableCell className="text-xs">{p.estado || p.almacen || '—'}</TableCell>
-                                  <TableCell className="text-right text-xs">
-                                    {p.cantidad > 0
-                                      ? p.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 2 })
-                                      : '—'}
-                                  </TableCell>
-                                  <TableCell className="text-right text-xs">{formatLps(p.costo)}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        )}
-                      </div>
+                      ) : null}
+                      {loadError && !loading ? (
+                        <p className="col-span-2 py-2 text-center text-xs text-amber-800">{loadError}</p>
+                      ) : null}
+                      {!loading ? (
+                        <>
+                          <div>
+                            <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
+                              Detalle receta (BOM) — {d.receta_code}
+                            </p>
+                            {ings.length === 0 ? (
+                              <p className="py-2 text-center text-xs text-[var(--text-muted)]">Sin ingredientes.</p>
+                            ) : (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-xs">Componente</TableHead>
+                                    <TableHead className="text-right text-xs">Cant.</TableHead>
+                                    <TableHead className="text-right text-xs">Costo</TableHead>
+                                    <TableHead className="text-right text-xs">%</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {ings.slice(0, 40).map((ing, j) => (
+                                    <TableRow key={`${ing.componente_code}-${j}`}>
+                                      <TableCell className="text-xs">
+                                        <span className="bi-sentence-case">{ing.componente_nombre}</span>
+                                        <div className="font-mono text-[10px] text-[var(--text-muted)]">
+                                          {ing.componente_code}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs tabular-nums">
+                                        {ing.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 4 })}
+                                        {ing.unidad ? ` ${ing.unidad}` : ''}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs">{formatLps(ing.costo_teorico)}</TableCell>
+                                      <TableCell className="text-right text-xs">{ing.pct_costo.toFixed(1)}%</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            )}
+                          </div>
+                          <div>
+                            <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
+                              Producción relacionada
+                              {d.orden_produccion ? ` · OP ${d.orden_produccion}` : ''}
+                            </p>
+                            {prodShow.length === 0 ? (
+                              <p className="py-2 text-center text-xs text-[var(--text-muted)]">
+                                Sin líneas de producción para esta receta.
+                              </p>
+                            ) : (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-xs">Orden</TableHead>
+                                    <TableHead className="text-xs">Fecha</TableHead>
+                                    <TableHead className="text-xs">Estado</TableHead>
+                                    <TableHead className="text-right text-xs">Cant.</TableHead>
+                                    <TableHead className="text-right text-xs">Costo</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {prodShow.map((p, j) => (
+                                    <TableRow key={`${p.orden}-${j}`}>
+                                      <TableCell className="font-mono text-xs">{p.orden || '—'}</TableCell>
+                                      <TableCell className="text-xs">
+                                        {p.fecha ? formatDateDMY(p.fecha) : p.periodo || '—'}
+                                      </TableCell>
+                                      <TableCell className="text-xs">{p.estado || p.almacen || '—'}</TableCell>
+                                      <TableCell className="text-right text-xs">
+                                        {p.cantidad > 0
+                                          ? p.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 2 })
+                                          : '—'}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs">{formatLps(p.costo)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            )}
+                          </div>
+                        </>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>

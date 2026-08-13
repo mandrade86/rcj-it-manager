@@ -11,14 +11,13 @@ import {
   buildRecetaDetallePayload,
   buildRecetasMatriz,
   buildRecetaVentaCatalogo,
-  mapIngredienteRows,
   mapProduccionRows,
   mapRecetaCostoIngredienteRows,
   mapRecetaCostoRows,
   mapVentaMargenRows,
-  mergeProduccionIntoMatriz,
-  type IngredienteRow,
+  shrinkVentaAnalisisPayload,
   type RecetaCatalogoItem,
+  type VentaAnalisisPayload,
 } from '../utils/costeoMuestrasBi.js'
 import { querySapBiGeneric } from '../utils/sapBiGenericQuery.js'
 import {
@@ -30,7 +29,6 @@ import {
   getProduccionFields,
   getRecetaCostoFields,
   getVentaCostoFields,
-  refreshProduccionFields,
   refreshRecetaCostoFields,
   suggestExplosionFields,
   suggestRecetaCostoFields,
@@ -327,27 +325,10 @@ costeoMuestrasRouter.get('/recetas/general', canView, async (_req, res) => {
     // Refresca mapeo para no quedarnos con cache sin cantidad/unidad
     const { campos } = await refreshRecetaCostoFields(cfg)
     const raw = await querySapBiGeneric(cfg, VISTA_RECETA_COSTO, campos, {})
-    let payload = buildRecetasMatriz(raw, {
+    const payload = buildRecetasMatriz(raw, {
       vista: `${cfg.schema}.${VISTA_RECETA_COSTO}`,
       campos_mapeados: campos,
     })
-
-    try {
-      const { campos: camposProd } = await refreshProduccionFields(cfg)
-      const prodRaw = await querySapBiGeneric(cfg, VISTA_PRODUCCION, camposProd, {})
-      payload = mergeProduccionIntoMatriz(payload, prodRaw, {
-        vista_produccion: `${cfg.schema}.${VISTA_PRODUCCION}`,
-        campos_produccion: camposProd,
-      })
-    } catch (prodErr) {
-      clearProduccionFieldsCache()
-      payload = {
-        ...payload,
-        produccion_ok: false,
-        produccion_error: (prodErr as Error).message,
-      }
-    }
-
     res.json(payload)
   } catch (err) {
     clearRecetaCostoFieldsCache()
@@ -446,6 +427,71 @@ costeoMuestrasRouter.get('/recetas/detalle', canView, async (req, res) => {
   }
 })
 
+function isInvalidStringLength(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /Invalid string length/i.test(msg) || err instanceof RangeError
+}
+
+function sendVentaAnalisisJson(
+  res: import('express').Response,
+  payload: VentaAnalisisPayload,
+): void {
+  let current = payload
+  for (const level of [0, 1, 2, 3] as const) {
+    if (level > 0) {
+      current = shrinkVentaAnalisisPayload(payload, level as 1 | 2 | 3)
+    }
+    try {
+      const body = JSON.stringify(current)
+      res.type('json').send(body)
+      return
+    } catch (err) {
+      if (!isInvalidStringLength(err)) throw err
+      if (level === 3) throw err
+    }
+  }
+}
+
+costeoMuestrasRouter.get('/produccion', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    const receta = typeof req.query.receta === 'string' ? req.query.receta.trim() : ''
+    const orden = typeof req.query.orden === 'string' ? req.query.orden.trim() : ''
+    if (!receta && !orden) {
+      res.status(400).json({ error: 'Indique receta u orden de producción.' })
+      return
+    }
+    const desde = typeof req.query.desde === 'string' ? req.query.desde.trim() : undefined
+    const hasta = typeof req.query.hasta === 'string' ? req.query.hasta.trim() : undefined
+    const prodFields = await getProduccionFields(cfg)
+    const prodRaw = await querySapBiGeneric(cfg, VISTA_PRODUCCION, prodFields, {
+      receta: receta || undefined,
+      recetaExact: Boolean(receta),
+      desde,
+      hasta,
+    })
+    let lineas = mapProduccionRows(prodRaw)
+    if (orden) {
+      lineas = lineas.filter((p) => p.orden === orden)
+    }
+    lineas = [...lineas]
+      .sort((a, b) => {
+        const da = a.fecha ? new Date(a.fecha).getTime() : 0
+        const db = b.fecha ? new Date(b.fecha).getTime() : 0
+        return db - da
+      })
+      .slice(0, 40)
+    res.json({ lineas, total: lineas.length })
+  } catch (err) {
+    clearProduccionFieldsCache()
+    res.status(502).json({ error: `Error al consultar producción: ${(err as Error).message}` })
+  }
+})
+
 costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
   try {
     const cfg = await loadSapBiCosteoConfig()
@@ -480,18 +526,8 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
       ] as const),
     )
 
-    const ingredientesPorReceta = new Map<string, IngredienteRow[]>()
-    const byCode = new Map<string, Record<string, unknown>[]>()
-    for (const row of recetasRaw) {
-      const code = String(row.receta_code ?? '').trim()
-      if (!code) continue
-      const list = byCode.get(code) ?? []
-      list.push(row)
-      byCode.set(code, list)
-    }
-    for (const [code, lines] of byCode) {
-      ingredientesPorReceta.set(code, mapRecetaCostoIngredienteRows(lines))
-    }
+    // Solo costos unitarios de catálogo; BOM se carga al expandir (evita Invalid string length)
+    const recetasEnVenta = new Set(ventas.map((v) => v.receta_code).filter(Boolean))
 
     let produccion = mapProduccionRows([])
     let produccion_ok = false
@@ -504,7 +540,9 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
         desde: f.desde,
         hasta: f.hasta,
       })
-      produccion = mapProduccionRows(prodRaw)
+      produccion = mapProduccionRows(prodRaw).filter(
+        (p) => !p.receta_code || recetasEnVenta.has(p.receta_code),
+      )
       produccion_ok = true
     } catch (e) {
       clearProduccionFieldsCache()
@@ -516,13 +554,12 @@ costeoMuestrasRouter.get('/ventas-analisis', canView, async (req, res) => {
       vista: `${cfg.schema}.${VISTA_VENTA_COSTO} + ${VISTA_RECETA_COSTO}`
         + (produccion_ok ? ` + ${VISTA_PRODUCCION}` : ''),
       ultimo_sync,
-      ingredientesPorReceta,
       produccion,
       campos_venta: ventaFields,
       produccion_ok,
       produccion_error,
     })
-    res.json(payload)
+    sendVentaAnalisisJson(res, payload)
   } catch (err) {
     clearVentaCostoFieldsCache()
     res.status(502).json({ error: `Error en análisis ventas/costos: ${(err as Error).message}` })

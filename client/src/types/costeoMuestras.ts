@@ -205,8 +205,6 @@ export type VentaAnalisisRow = VentaMargenRow & {
   variacion: number
   variacion_pct: number
   margen_pct: number
-  ingredientes?: IngredienteRow[]
-  produccion?: ProduccionLinea[]
 }
 
 export type VentaOpRelacion = {
@@ -256,6 +254,8 @@ export type VentaAnalisisPayload = {
   }
   por_receta: VentaPorReceta[]
   detalle: VentaAnalisisRow[]
+  ingredientes_por_receta?: Record<string, IngredienteRow[]>
+  produccion_por_receta?: Record<string, ProduccionLinea[]>
   relacion_venta_op?: VentaOpRelacion[]
   campos_venta?: Record<string, string>
   produccion_ok?: boolean
@@ -263,6 +263,8 @@ export type VentaAnalisisPayload = {
   ultimo_sync: string | null
   vista: string
   filas_leidas: number
+  detalle_truncado?: boolean
+  aviso?: string | null
 }
 
 export type ClienteCatalogoItem = {

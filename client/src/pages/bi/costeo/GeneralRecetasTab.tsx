@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/table'
 import { usePagination } from '@/hooks/usePagination'
 import { exportGeneralRecetasExcel } from '@/lib/exportCosteoExcel'
-import { formatDateDMY, formatLps } from '@/lib/format'
+import { formatLps } from '@/lib/format'
 import type { MaestroSortDir } from '@/lib/maestroList'
 import { cn } from '@/lib/utils'
 import { useCosteoMuestrasStore } from '@/store/costeoMuestrasStore'
@@ -37,7 +37,7 @@ function formatPct(v: number): string {
   return `${v.toFixed(1)}%`
 }
 
-type SortKey = 'codigo' | 'nombre' | 'ingredientes' | 'costo' | 'produccion' | 'variacion'
+type SortKey = 'codigo' | 'nombre' | 'ingredientes' | 'costo'
 
 type Props = {
   onError: (msg: string | null) => void
@@ -116,10 +116,6 @@ export function GeneralRecetasTab({ onError }: Props) {
           return (a.total_ingredientes - b.total_ingredientes) * dir
         case 'costo':
           return (a.costo_total - b.costo_total) * dir
-        case 'produccion':
-          return ((a.costo_produccion ?? 0) - (b.costo_produccion ?? 0)) * dir
-        case 'variacion':
-          return ((a.variacion ?? 0) - (b.variacion ?? 0)) * dir
         case 'nombre':
         default:
           return (
@@ -176,8 +172,7 @@ export function GeneralRecetasTab({ onError }: Props) {
                 General recetas — matriz de costos
               </CardTitle>
               <p className="text-xs text-[var(--text-muted)]">
-                Cruce BOM teórico (VW_BI_RECETA_COSTO) vs producción real (VW_BI_PRODUCCION).
-                Expanda la flecha para ver ingredientes y detalle de órdenes.
+                Matriz BOM teórico desde VW_BI_RECETA_COSTO. Expanda la flecha para ver ingredientes.
               </p>
             </div>
             <Button
@@ -188,7 +183,6 @@ export function GeneralRecetasTab({ onError }: Props) {
               onClick={() =>
                 exportGeneralRecetasExcel(recetasFiltradas, {
                   vista: data?.vista,
-                  vista_produccion: data?.vista_produccion,
                 })
               }
             >
@@ -285,21 +279,6 @@ export function GeneralRecetasTab({ onError }: Props) {
             </div>
           </div>
 
-          {data?.produccion_error ? (
-            <p className="text-xs text-amber-800">
-              No se pudo cruzar producción: {data.produccion_error}
-            </p>
-          ) : data?.produccion_ok && data.vista_produccion ? (
-            <p className="text-xs text-[var(--text-muted)]">
-              Producción: <span className="font-mono text-[10px]">{data.vista_produccion}</span>
-              {data.campos_produccion
-                ? ` · ${Object.entries(data.campos_produccion)
-                    .map(([k, v]) => `${k}→${v}`)
-                    .join(', ')}`
-                : ''}
-            </p>
-          ) : null}
-
           {data?.cantidad_derivada ? (
             <p className="text-xs text-[var(--navy)]">
               La vista no trae columna de cantidad: se calcula como{' '}
@@ -325,69 +304,6 @@ export function GeneralRecetasTab({ onError }: Props) {
           ) : null}
         </CardContent>
       </Card>
-
-      {data?.resumen_produccion ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-t-4" style={{ borderTopColor: BI_CHART.amber }}>
-            <CardHeader className="px-3 pb-1 pt-2">
-              <CardTitle className="text-[11px] text-[var(--text-muted)]">Teórico × producción</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-2">
-              <p className="text-base font-bold" style={{ color: BI_CHART.amber }}>
-                {formatLps(data.resumen_produccion.total_costo_teorico)}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-t-4" style={{ borderTopColor: BI_CHART.coral }}>
-            <CardHeader className="px-3 pb-1 pt-2">
-              <CardTitle className="text-[11px] text-[var(--text-muted)]">Costo producción real</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-2">
-              <p className="text-base font-bold" style={{ color: BI_CHART.coral }}>
-                {formatLps(data.resumen_produccion.total_costo_produccion)}
-              </p>
-            </CardContent>
-          </Card>
-          <Card
-            className="border-t-4"
-            style={{
-              borderTopColor:
-                data.resumen_produccion.total_variacion > 0 ? BI_CHART.red : BI_CHART.teal,
-            }}
-          >
-            <CardHeader className="px-3 pb-1 pt-2">
-              <CardTitle className="text-[11px] text-[var(--text-muted)]">Variación</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-2">
-              <p
-                className="text-base font-bold"
-                style={{
-                  color:
-                    data.resumen_produccion.total_variacion > 0 ? BI_CHART.red : BI_CHART.teal,
-                }}
-              >
-                {formatLps(data.resumen_produccion.total_variacion)}
-              </p>
-              <p className="text-[11px] text-[var(--text-muted)]">
-                {formatPct(data.resumen_produccion.variacion_pct)}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-t-4" style={{ borderTopColor: BI_CHART.navy }}>
-            <CardHeader className="px-3 pb-1 pt-2">
-              <CardTitle className="text-[11px] text-[var(--text-muted)]">Recetas con producción</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-2">
-              <p className="text-base font-bold" style={{ color: BI_CHART.navy }}>
-                {data.resumen_produccion.recetas_con_produccion}
-                <span className="ml-1 text-xs font-normal text-[var(--text-muted)]">
-                  / {data.total_recetas}
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
 
       <Card>
         <CardContent className="overflow-x-auto p-0">
@@ -419,23 +335,7 @@ export function GeneralRecetasTab({ onError }: Props) {
                 />
                 <MaestroSortableHead
                   column="costo"
-                  label="Costo unit. teórico"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={onSort}
-                  className="text-right"
-                />
-                <MaestroSortableHead
-                  column="produccion"
-                  label="Costo producción"
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={onSort}
-                  className="text-right"
-                />
-                <MaestroSortableHead
-                  column="variacion"
-                  label="Variación"
+                  label="Costo teórico"
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={onSort}
@@ -446,7 +346,7 @@ export function GeneralRecetasTab({ onError }: Props) {
             <TableBody>
               {pageRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-[var(--text-muted)]">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-[var(--text-muted)]">
                     No hay recetas para mostrar con los filtros actuales.
                   </TableCell>
                 </TableRow>
@@ -487,11 +387,6 @@ function RecetaMatrizRows({
   open: boolean
   onToggle: () => void
 }) {
-  const costoProd = receta.costo_produccion ?? 0
-  const variacion = receta.variacion ?? 0
-  const qtyProd = receta.cantidad_producida ?? 0
-  const detalleProd = receta.produccion_detalle ?? []
-
   return (
     <>
       <TableRow
@@ -525,139 +420,57 @@ function RecetaMatrizRows({
         <TableCell className="text-right font-medium" style={{ color: BI_CHART.amber }}>
           {formatLps(receta.costo_total)}
         </TableCell>
-        <TableCell className="text-right font-medium" style={{ color: BI_CHART.coral }}>
-          {detalleProd.length ? formatLps(costoProd) : '—'}
-          {qtyProd > 0 ? (
-            <div className="text-[10px] font-normal text-[var(--text-muted)]">
-              Qty {qtyProd.toLocaleString('es-HN', { maximumFractionDigits: 2 })}
-            </div>
-          ) : null}
-        </TableCell>
-        <TableCell
-          className="text-right font-medium"
-          style={{
-            color: !detalleProd.length
-              ? undefined
-              : variacion > 0
-                ? BI_CHART.red
-                : BI_CHART.teal,
-          }}
-        >
-          {detalleProd.length ? (
-            <>
-              {formatLps(variacion)}
-              <div className="text-[10px] font-normal text-[var(--text-muted)]">
-                {formatPct(receta.variacion_pct ?? 0)}
-              </div>
-            </>
-          ) : (
-            <span className="text-[var(--text-muted)]">—</span>
-          )}
-        </TableCell>
       </TableRow>
 
       {open ? (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={7} className="bg-[var(--gray-bg)] p-0">
-            <div className="space-y-4 border-t border-[var(--border)] px-4 py-3">
-              <div>
-                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">
-                  Ingredientes (BOM teórico) — {receta.receta_nombre}
+          <TableCell colSpan={5} className="bg-[var(--gray-bg)] p-0">
+            <div className="border-t border-[var(--border)] px-4 py-3">
+              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">
+                Ingredientes — {receta.receta_nombre}
+              </p>
+              {receta.ingredientes.length === 0 ? (
+                <p className="py-3 text-center text-sm text-[var(--text-muted)]">
+                  Sin ingredientes en la vista de costo.
                 </p>
-                {receta.ingredientes.length === 0 ? (
-                  <p className="py-3 text-center text-sm text-[var(--text-muted)]">
-                    Sin ingredientes en la vista de costo.
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Ingrediente</TableHead>
-                        <TableHead className="text-right">Cantidad</TableHead>
-                        <TableHead>Unidad</TableHead>
-                        <TableHead className="text-right">Costo unit.</TableHead>
-                        <TableHead className="text-right">Costo teórico</TableHead>
-                        <TableHead className="text-right">% del total</TableHead>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Ingrediente</TableHead>
+                      <TableHead className="text-right">Cantidad</TableHead>
+                      <TableHead>Unidad</TableHead>
+                      <TableHead className="text-right">Costo unit.</TableHead>
+                      <TableHead className="text-right">Costo teórico</TableHead>
+                      <TableHead className="text-right">% del total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {receta.ingredientes.map((ing, i) => (
+                      <TableRow key={`${ing.componente_code}-${i}`}>
+                        <TableCell className="font-mono text-xs">
+                          {ing.componente_code || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <span className="bi-sentence-case">{ing.componente_nombre}</span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {ing.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 6 })}
+                        </TableCell>
+                        <TableCell className="text-xs text-[var(--text-muted)]">
+                          {ing.unidad || '—'}
+                        </TableCell>
+                        <TableCell className="text-right">{formatLps(ing.costo_unitario)}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatLps(ing.costo_teorico)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs">{formatPct(ing.pct_costo)}</TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {receta.ingredientes.map((ing, i) => (
-                        <TableRow key={`${ing.componente_code}-${i}`}>
-                          <TableCell className="font-mono text-xs">
-                            {ing.componente_code || '—'}
-                          </TableCell>
-                          <TableCell>
-                            <span className="bi-sentence-case">{ing.componente_nombre}</span>
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {ing.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 6 })}
-                          </TableCell>
-                          <TableCell className="text-xs text-[var(--text-muted)]">
-                            {ing.unidad || '—'}
-                          </TableCell>
-                          <TableCell className="text-right">{formatLps(ing.costo_unitario)}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatLps(ing.costo_teorico)}
-                          </TableCell>
-                          <TableCell className="text-right text-xs">{formatPct(ing.pct_costo)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">
-                  Detalle de producción
-                  {receta.ordenes ? ` · ${receta.ordenes} orden(es)` : ''}
-                  {qtyProd > 0
-                    ? ` · Qty ${qtyProd.toLocaleString('es-HN', { maximumFractionDigits: 2 })}`
-                    : ''}
-                  {detalleProd.length
-                    ? ` · Teórico proyectado ${formatLps(receta.costo_teorico_prod ?? 0)}`
-                    : ''}
-                </p>
-                {detalleProd.length === 0 ? (
-                  <p className="py-3 text-center text-sm text-[var(--text-muted)]">
-                    Sin líneas de producción para esta receta en VW_BI_PRODUCCION.
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Orden</TableHead>
-                        <TableHead>Almacén</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="text-right">Cantidad</TableHead>
-                        <TableHead className="text-right">Costo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {detalleProd.slice(0, 100).map((d, i) => (
-                        <TableRow key={`${d.orden}-${d.fecha}-${i}`}>
-                          <TableCell className="text-xs">
-                            {d.fecha ? formatDateDMY(d.fecha) : d.periodo || '—'}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{d.orden || '—'}</TableCell>
-                          <TableCell className="text-xs">{d.almacen || '—'}</TableCell>
-                          <TableCell className="text-xs">{d.estado || '—'}</TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {d.cantidad > 0
-                              ? d.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 4 })
-                              : '—'}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatLps(d.costo)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </div>
           </TableCell>
         </TableRow>

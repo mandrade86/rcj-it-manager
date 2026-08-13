@@ -37,10 +37,10 @@ function sheetFromRows(rows: Record<string, unknown>[], name: string): XLSX.Work
   return ws
 }
 
-/** Exporta matriz General Recetas (resumen + ingredientes). */
+/** Exporta matriz General Recetas (resumen + ingredientes BOM teórico). */
 export function exportGeneralRecetasExcel(
   recetas: RecetaMatrizItem[],
-  meta?: { vista?: string; vista_produccion?: string },
+  meta?: { vista?: string },
 ): void {
   const wb = XLSX.utils.book_new()
 
@@ -48,13 +48,7 @@ export function exportGeneralRecetasExcel(
     Código: r.receta_code,
     Nombre: r.receta_nombre,
     Ingredientes: r.total_ingredientes,
-    'Costo unit. teórico (Lps)': r.costo_total,
-    'Cantidad producida': r.cantidad_producida ?? 0,
-    'Costo teórico × qty (Lps)': r.costo_teorico_prod ?? 0,
-    'Costo producción (Lps)': r.costo_produccion ?? 0,
-    'Variación (Lps)': r.variacion ?? 0,
-    'Variación %': r.variacion_pct ?? 0,
-    Órdenes: r.ordenes ?? 0,
+    'Costo teórico (Lps)': r.costo_total,
     Flag: r.flag_costo || '',
   }))
 
@@ -75,33 +69,11 @@ export function exportGeneralRecetasExcel(
     }
   }
 
-  const produccion: Record<string, unknown>[] = []
-  for (const r of recetas) {
-    for (const d of r.produccion_detalle ?? []) {
-      produccion.push({
-        'Código receta': r.receta_code,
-        'Nombre receta': r.receta_nombre,
-        Fecha: d.fecha || '',
-        Periodo: d.periodo || '',
-        Orden: d.orden,
-        Almacén: d.almacen,
-        Estado: d.estado,
-        Cantidad: d.cantidad,
-        'Costo (Lps)': d.costo,
-      })
-    }
-  }
-
   XLSX.utils.book_append_sheet(wb, sheetFromRows(resumen, 'Recetas'), 'Recetas')
   XLSX.utils.book_append_sheet(
     wb,
     sheetFromRows(ingredientes.length ? ingredientes : [{ Nota: 'Sin ingredientes' }], 'Ingredientes'),
     'Ingredientes',
-  )
-  XLSX.utils.book_append_sheet(
-    wb,
-    sheetFromRows(produccion.length ? produccion : [{ Nota: 'Sin producción' }], 'Produccion'),
-    'Produccion',
   )
 
   if (meta?.vista) {
@@ -111,7 +83,6 @@ export function exportGeneralRecetasExcel(
         [
           {
             Vista: meta.vista,
-            'Vista producción': meta.vista_produccion || '',
             Exportado: new Date().toISOString(),
           },
         ],

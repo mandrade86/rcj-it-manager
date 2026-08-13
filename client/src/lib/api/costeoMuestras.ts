@@ -1,6 +1,7 @@
 import type {
   CosteoMuestrasPayload,
   CosteoUltimoSync,
+  ProduccionLinea,
   RecetaCatalogoPayload,
   RecetaCostoPayload,
   RecetaDetallePayload,
@@ -142,6 +143,22 @@ export async function fetchRecetaDetalle(receta: string): Promise<RecetaDetalleP
   const res = await fetch(`/api/costeo-muestras/recetas/detalle?${q.toString()}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<RecetaDetallePayload>
+}
+
+export async function fetchProduccionReceta(params: {
+  receta?: string
+  orden?: string
+  desde?: string
+  hasta?: string
+}): Promise<{ lineas: ProduccionLinea[]; total: number }> {
+  const q = new URLSearchParams()
+  if (params.receta) q.set('receta', params.receta)
+  if (params.orden) q.set('orden', params.orden)
+  if (params.desde) q.set('desde', params.desde)
+  if (params.hasta) q.set('hasta', params.hasta)
+  const res = await fetch(`/api/costeo-muestras/produccion?${q.toString()}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<{ lineas: ProduccionLinea[]; total: number }>
 }
 
 export async function fetchVentasCatalogo(params?: {

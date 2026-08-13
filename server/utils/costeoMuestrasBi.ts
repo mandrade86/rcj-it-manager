@@ -176,10 +176,6 @@ export type VentaAnalisisRow = VentaMargenRow & {
   variacion: number
   variacion_pct: number
   margen_pct: number
-  /** Ingredientes BOM de la receta (detalle). */
-  ingredientes: IngredienteRow[]
-  /** Órdenes de producción relacionadas. */
-  produccion: ProduccionLinea[]
 }
 
 export type VentaOpRelacion = {
@@ -226,6 +222,9 @@ export type VentaAnalisisPayload = {
   resumen: VentaAnalisisResumen
   por_receta: VentaPorReceta[]
   detalle: VentaAnalisisRow[]
+  /** BOM/OP se cargan al expandir (lazy); se dejan vacíos para no romper el JSON. */
+  ingredientes_por_receta: Record<string, IngredienteRow[]>
+  produccion_por_receta: Record<string, ProduccionLinea[]>
   relacion_venta_op: VentaOpRelacion[]
   campos_venta?: Record<string, string>
   produccion_ok?: boolean
@@ -233,6 +232,8 @@ export type VentaAnalisisPayload = {
   ultimo_sync: string | null
   vista: string
   filas_leidas: number
+  detalle_truncado?: boolean
+  aviso?: string | null
 }
 
 export type ClienteCatalogoItem = {
@@ -568,28 +569,78 @@ export function buildRecetaDetallePayload(
   }
 }
 
+const MAX_DETALLE_VENTA = 1_200
+const MAX_RELACION_VENTA_OP = 600
+const MAX_POR_RECETA = 200
+const MAX_MATCHES_POR_VENTA = 2
+const MAX_STR = 160
+
+function clipStr(v: string, max = MAX_STR): string {
+  const s = String(v ?? '')
+  return s.length <= max ? s : s.slice(0, max)
+}
+
+function slimVentaAnalisisRow(row: VentaAnalisisRow): VentaAnalisisRow {
+  return {
+    empresa: clipStr(row.empresa, 40),
+    fecha: row.fecha,
+    periodo: clipStr(row.periodo, 20),
+    codigo_cliente: clipStr(row.codigo_cliente, 40),
+    cliente: clipStr(row.cliente, 80),
+    grupo_cliente: clipStr(row.grupo_cliente, 40),
+    receta_code: clipStr(row.receta_code, 40),
+    receta_nombre: clipStr(row.receta_nombre, 80),
+    cantidad: row.cantidad,
+    venta: row.venta,
+    costo: row.costo,
+    margen: row.margen,
+    factura: clipStr(row.factura ?? '', 40),
+    orden_produccion: clipStr(row.orden_produccion ?? '', 40),
+    costo_teorico_unit: row.costo_teorico_unit,
+    costo_teorico: row.costo_teorico,
+    variacion: row.variacion,
+    variacion_pct: row.variacion_pct,
+    margen_pct: row.margen_pct,
+  }
+}
+
+/** Reduce payload si JSON.stringify falla por tamaño (Invalid string length). */
+export function shrinkVentaAnalisisPayload(
+  payload: VentaAnalisisPayload,
+  level: 1 | 2 | 3,
+): VentaAnalisisPayload {
+  const maxDet = level === 1 ? 400 : level === 2 ? 150 : 50
+  const maxRel = level === 1 ? 200 : level === 2 ? 80 : 0
+  const maxPor = level === 1 ? 80 : level === 2 ? 40 : 20
+  return {
+    ...payload,
+    por_receta: payload.por_receta.slice(0, maxPor),
+    detalle: payload.detalle.slice(0, maxDet),
+    relacion_venta_op: maxRel ? payload.relacion_venta_op.slice(0, maxRel) : [],
+    ingredientes_por_receta: {},
+    produccion_por_receta: {},
+    detalle_truncado: true,
+    aviso:
+      `Respuesta reducida (nivel ${level}) por tamaño: ` +
+      `${maxDet} líneas de detalle` +
+      (maxRel ? `, ${maxRel} relaciones venta↔OP` : '') +
+      '. Use filtros de cliente, receta o fechas.',
+  }
+}
+
 export function aggregateVentaAnalisis(
   ventas: VentaMargenRow[],
   recetasCosto: Map<string, RecetaCostoRow>,
   meta: {
     vista: string
     ultimo_sync: string | null
-    ingredientesPorReceta?: Map<string, IngredienteRow[]>
     produccion?: ProduccionLinea[]
     campos_venta?: Record<string, string>
     produccion_ok?: boolean
     produccion_error?: string | null
   },
 ): VentaAnalisisPayload {
-  const ingredientesPorReceta = meta.ingredientesPorReceta ?? new Map<string, IngredienteRow[]>()
   const produccion = meta.produccion ?? []
-  const prodByReceta = new Map<string, ProduccionLinea[]>()
-  for (const p of produccion) {
-    if (!p.receta_code) continue
-    const list = prodByReceta.get(p.receta_code) ?? []
-    list.push(p)
-    prodByReceta.set(p.receta_code, list)
-  }
 
   const detalle: VentaAnalisisRow[] = ventas.map((row) => {
     const teoricoUnit = recetasCosto.get(row.receta_code)?.costo ?? 0
@@ -598,21 +649,14 @@ export function aggregateVentaAnalisis(
     const variacion = row.costo - costo_teorico
     const variacion_pct = costo_teorico > 0 ? (variacion / costo_teorico) * 100 : 0
     const margen_pct = row.venta > 0 ? (row.margen / row.venta) * 100 : 0
-    let prodLines = prodByReceta.get(row.receta_code) ?? []
-    if (row.orden_produccion) {
-      const byOrden = prodLines.filter((p) => p.orden === row.orden_produccion)
-      if (byOrden.length) prodLines = byOrden
-    }
-    return {
+    return slimVentaAnalisisRow({
       ...row,
       costo_teorico_unit: teoricoUnit,
       costo_teorico,
       variacion,
       variacion_pct,
       margen_pct,
-      ingredientes: ingredientesPorReceta.get(row.receta_code) ?? [],
-      produccion: prodLines.slice(0, 50),
-    }
+    })
   })
 
   const porRecetaMap = new Map<string, VentaPorReceta>()
@@ -645,10 +689,12 @@ export function aggregateVentaAnalisis(
   const por_receta = [...porRecetaMap.values()]
     .map((r) => ({
       ...r,
+      receta_nombre: clipStr(r.receta_nombre, 80),
       variacion_pct: r.costo_teorico > 0 ? (r.variacion / r.costo_teorico) * 100 : 0,
       margen_pct: r.venta > 0 ? (r.margen / r.venta) * 100 : 0,
     }))
     .sort((a, b) => b.venta - a.venta)
+    .slice(0, MAX_POR_RECETA)
 
   const total_venta = detalle.reduce((s, r) => s + r.venta, 0)
   const total_costo = detalle.reduce((s, r) => s + r.costo, 0)
@@ -656,11 +702,24 @@ export function aggregateVentaAnalisis(
   const total_costo_teorico = detalle.reduce((s, r) => s + r.costo_teorico, 0)
   const total_variacion = detalle.reduce((s, r) => s + r.variacion, 0)
 
-  const detalleSorted = detalle.sort((a, b) => {
-    const da = a.fecha ? new Date(a.fecha).getTime() : 0
-    const db = b.fecha ? new Date(b.fecha).getTime() : 0
-    return db - da
-  })
+  const detalleSorted = [...detalle]
+    .sort((a, b) => {
+      const da = a.fecha ? new Date(a.fecha).getTime() : 0
+      const db = b.fecha ? new Date(b.fecha).getTime() : 0
+      return db - da
+    })
+    .slice(0, MAX_DETALLE_VENTA)
+
+  const detalle_truncado = detalle.length > detalleSorted.length
+  const aviso = detalle_truncado
+    ? `Mostrando ${detalleSorted.length.toLocaleString('es-HN')} de ${detalle.length.toLocaleString('es-HN')} líneas. Use filtros para ver el resto. BOM/OP se cargan al expandir.`
+    : null
+
+  // Solo producción de recetas presentes en el detalle mostrado (cruce OP más liviano)
+  const recetasDetalle = new Set(detalleSorted.map((r) => r.receta_code).filter(Boolean))
+  const produccionFiltrada = produccion.filter(
+    (p) => !p.receta_code || recetasDetalle.has(p.receta_code),
+  )
 
   return {
     resumen: {
@@ -675,32 +734,36 @@ export function aggregateVentaAnalisis(
     },
     por_receta,
     detalle: detalleSorted,
-    relacion_venta_op: buildRelacionVentaOp(detalleSorted, produccion),
+    ingredientes_por_receta: {},
+    produccion_por_receta: {},
+    relacion_venta_op: buildRelacionVentaOp(detalleSorted, produccionFiltrada),
     campos_venta: meta.campos_venta,
     produccion_ok: meta.produccion_ok,
     produccion_error: meta.produccion_error ?? null,
     ultimo_sync: meta.ultimo_sync,
     vista: meta.vista,
     filas_leidas: detalle.length,
+    detalle_truncado,
+    aviso,
   }
 }
 
 export function mapVentaMargenRows(raw: Record<string, unknown>[]): VentaMargenRow[] {
   return raw.map((r) => ({
-    empresa: String(r.empresa ?? '').trim(),
+    empresa: clipStr(String(r.empresa ?? '').trim(), 40),
     fecha: toDateIso(r.fecha),
-    periodo: String(r.periodo ?? '').trim(),
-    codigo_cliente: String(r.codigo_cliente ?? '').trim(),
-    cliente: String(r.cliente ?? '').trim() || 'Sin cliente',
-    grupo_cliente: String(r.grupo_cliente ?? '').trim(),
-    receta_code: String(r.receta_code ?? '').trim(),
-    receta_nombre: String(r.receta_nombre ?? '').trim(),
+    periodo: clipStr(String(r.periodo ?? '').trim(), 20),
+    codigo_cliente: clipStr(String(r.codigo_cliente ?? '').trim(), 40),
+    cliente: clipStr(String(r.cliente ?? '').trim() || 'Sin cliente', 80),
+    grupo_cliente: clipStr(String(r.grupo_cliente ?? '').trim(), 40),
+    receta_code: clipStr(String(r.receta_code ?? '').trim(), 40),
+    receta_nombre: clipStr(String(r.receta_nombre ?? '').trim(), 80),
     cantidad: toNumber(r.cantidad),
     venta: toNumber(r.venta),
     costo: toNumber(r.costo),
     margen: toNumber(r.margen),
-    factura: String(r.factura ?? '').trim(),
-    orden_produccion: String(r.orden_produccion ?? '').trim(),
+    factura: clipStr(String(r.factura ?? '').trim(), 40),
+    orden_produccion: clipStr(String(r.orden_produccion ?? '').trim(), 40),
   }))
 }
 
@@ -731,11 +794,13 @@ export function buildRelacionVentaOp(
 
   const out: VentaOpRelacion[] = []
   for (const v of ventas) {
+    if (out.length >= MAX_RELACION_VENTA_OP) break
+
     let matches: ProduccionLinea[] = []
     let match: VentaOpRelacion['match'] = 'sin_op'
 
     if (v.orden_produccion && byOrden.has(v.orden_produccion)) {
-      matches = byOrden.get(v.orden_produccion) ?? []
+      matches = (byOrden.get(v.orden_produccion) ?? []).slice(0, MAX_MATCHES_POR_VENTA)
       match = 'orden'
     } else if (v.receta_code) {
       const candidates = byReceta.get(v.receta_code) ?? []
@@ -744,10 +809,10 @@ export function buildRelacionVentaOp(
         ? candidates.filter((p) => periodoKey(p.fecha, p.periodo) === periodoV)
         : []
       if (samePeriod.length) {
-        matches = samePeriod
+        matches = samePeriod.slice(0, MAX_MATCHES_POR_VENTA)
         match = 'receta_periodo'
       } else if (candidates.length) {
-        matches = candidates.slice(0, 5)
+        matches = candidates.slice(0, 1)
         match = 'receta'
       }
     }
@@ -776,6 +841,7 @@ export function buildRelacionVentaOp(
     }
 
     for (const p of matches) {
+      if (out.length >= MAX_RELACION_VENTA_OP) break
       out.push({
         factura: v.factura,
         fecha_venta: v.fecha,
