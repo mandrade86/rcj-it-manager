@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { HomeRedirect } from '@/components/auth/HomeRedirect'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { SoloBiCosteoGuard } from '@/components/auth/SoloBiCosteoGuard'
 import { MaestrosRedirect } from '@/components/auth/MaestrosRedirect'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { CapacitacionesPage } from '@/pages/capacitaciones/CapacitacionesPage'
@@ -10,7 +12,6 @@ import { EvaluacionDesarrolloPage } from '@/pages/equipo/EvaluacionDesarrolloPag
 import { EvaluacionKpiPage } from '@/pages/equipo/EvaluacionKpiPage'
 import { EquipoPage } from '@/pages/equipo/EquipoPage'
 import { MiEvaluacionPage } from '@/pages/equipo/MiEvaluacionPage'
-import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ResumenDepartamentoPage } from '@/pages/resumen/ResumenDepartamentoPage'
 import { GastosPage } from '@/pages/gastos/GastosPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
@@ -41,14 +42,17 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
-          {/* Mi espacio — cualquier usuario autenticado */}
-          <Route path="mi-evaluacion" element={<MiEvaluacionPage />} />
-          <Route path="mis-capacitaciones" element={<MisCapacitacionesPage />} />
-          <Route path="manual" element={<ManualHubPage />} />
-          <Route path="manual/:slug" element={<ManualGuidePage />} />
+          <Route index element={<HomeRedirect />} />
+
+          {/* Mi espacio y ayuda — no disponible para perfil solo BI Costeo */}
+          <Route element={<SoloBiCosteoGuard />}>
+            <Route path="mi-evaluacion" element={<MiEvaluacionPage />} />
+            <Route path="mis-capacitaciones" element={<MisCapacitacionesPage />} />
+            <Route path="manual" element={<ManualHubPage />} />
+            <Route path="manual/:slug" element={<ManualGuidePage />} />
+          </Route>
 
           <Route element={<ProtectedRoute permiso="dashboard:ver" />}>
-            <Route index element={<DashboardPage />} />
             <Route path="resumen-departamento" element={<ResumenDepartamentoPage />} />
           </Route>
 
@@ -117,7 +121,7 @@ export function AppRoutes() {
             <Route path="admin/roles" element={<RolesPage />} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<HomeRedirect />} />
         </Route>
       </Route>
     </Routes>

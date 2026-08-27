@@ -7,12 +7,15 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { fetchAuthLoginConfig, loginApi, type AuthLoginConfig } from '@/lib/api/auth'
+import { resolvePostLoginPath } from '@/lib/permisosNav'
 import { useAuthStore } from '@/store/authStore'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const token = useAuthStore((s) => s.token)
+  const user = useAuthStore((s) => s.user)
+  const hasPermiso = useAuthStore((s) => s.hasPermiso)
   const setAuth = useAuthStore((s) => s.setAuth)
 
   const [usuario, setUsuario] = useState('')
@@ -41,7 +44,12 @@ export function LoginPage() {
       )
   }, [])
 
-  if (token) return <Navigate to={from} replace />
+  if (token) {
+    const dest = resolvePostLoginPath(from, hasPermiso, {
+      llevaGastos: Boolean(user?.departamento_lleva_gastos),
+    })
+    return <Navigate to={dest} replace />
+  }
 
   const subtitle =
     authConfig?.helpText ??
@@ -69,9 +77,13 @@ export function LoginPage() {
     setPassword(passwordVal)
     setLoading(true)
     try {
-      const { token: tok, user } = await loginApi(usuarioVal, passwordVal)
-      setAuth(tok, user)
-      navigate(from, { replace: true })
+      const { token: tok, user: loggedIn } = await loginApi(usuarioVal, passwordVal)
+      setAuth(tok, loggedIn)
+      const has = (p: string) => p === '*' ? loggedIn.permisos.includes('*') : loggedIn.permisos.includes(p)
+      const dest = resolvePostLoginPath(from, has, {
+        llevaGastos: Boolean(loggedIn.departamento_lleva_gastos),
+      })
+      navigate(dest, { replace: true })
     } catch (ex) {
       const msg = ex instanceof Error ? ex.message : 'No se pudo iniciar sesión'
       if (msg.includes('502') || msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')) {

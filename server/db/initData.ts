@@ -2,6 +2,7 @@
  * Initializes required reference data on every server start.
  * Safe to run multiple times — uses upsert.
  */
+import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 
 import { Config } from './models/Config.js'
@@ -845,6 +846,16 @@ const ROLES_INICIALES = [
       'it:arquitectura:ver',
     ],
   },
+  {
+    nombre: 'BI Costeo',
+    descripcion: 'Solo acceso al módulo BI Costeo de muestras (sin otros módulos)',
+    permisos: ['bi:costeo:ver'],
+  },
+  {
+    nombre: 'BI Costeo Admin',
+    descripcion: 'BI Costeo de muestras con permiso para configurar conexión SAP',
+    permisos: ['bi:costeo:ver', 'bi:costeo:config'],
+  },
 ]
 
 export async function ensureRolesYAdmin(): Promise<void> {
@@ -920,6 +931,51 @@ const PERMISO_ARQ_IT_VER = 'it:arquitectura:ver'
 const PERMISOS_BI_COSTEO_EDIT = ['bi:costeo:ver', 'bi:costeo:config'] as const
 const PERMISO_BI_COSTEO_VER = 'bi:costeo:ver'
 
+const ROLES_BI_COSTEO = [
+  {
+    nombre: 'BI Costeo',
+    descripcion: 'Solo acceso al módulo BI Costeo de muestras (sin otros módulos)',
+    permisos: [PERMISO_BI_COSTEO_VER],
+  },
+  {
+    nombre: 'BI Costeo Admin',
+    descripcion: 'BI Costeo de muestras con permiso para configurar conexión SAP',
+    permisos: [...PERMISOS_BI_COSTEO_EDIT],
+  },
+] as const
+
+const BI_COSTEO_DEMO_EMAIL = 'bi.costeo@rcjcorp.com'
+const BI_COSTEO_DEMO_PASSWORD = 'Costeo2026!'
+
+/** Usuario de prueba con rol BI Costeo (solo módulo costeo). Idempotente. */
+export async function ensureBiCosteoDemoUser(): Promise<void> {
+  if (process.env.BI_COSTEO_DEMO_USER === 'false') return
+
+  const rol = await Rol.findOne({ nombre: 'BI Costeo' }).select('_id').lean()
+  if (!rol?._id) return
+
+  const existing = await Usuario.findOne({ email: BI_COSTEO_DEMO_EMAIL }).select('_id').lean()
+  if (!existing) {
+    const hash = await bcrypt.hash(BI_COSTEO_DEMO_PASSWORD, 10)
+    await Usuario.create({
+      nombre: 'Demo BI Costeo',
+      email: BI_COSTEO_DEMO_EMAIL,
+      password: hash,
+      rol_id: rol._id,
+      activo: true,
+    })
+    console.log(
+      `Usuario demo BI Costeo: ${BI_COSTEO_DEMO_EMAIL} / ${BI_COSTEO_DEMO_PASSWORD} (rol: BI Costeo)`,
+    )
+    return
+  }
+
+  await Usuario.updateOne(
+    { email: BI_COSTEO_DEMO_EMAIL },
+    { $set: { rol_id: rol._id, activo: true } },
+  )
+}
+
 export async function ensureSapBiCosteoPermisos(): Promise<void> {
   await Rol.updateMany(
     { nombre: { $in: ['Jefe IT', 'Coordinador'] } },
@@ -929,8 +985,16 @@ export async function ensureSapBiCosteoPermisos(): Promise<void> {
     { nombre: 'Consulta' },
     { $addToSet: { permisos: PERMISO_BI_COSTEO_VER } },
   )
+  for (const r of ROLES_BI_COSTEO) {
+    await Rol.findOneAndUpdate(
+      { nombre: r.nombre },
+      { $setOnInsert: { descripcion: r.descripcion, permisos: [...r.permisos], activo: true } },
+      { upsert: true },
+    )
+  }
   await ensureSapBiCosteoConfigFromEnv()
   await ensureSapBiCosteoColumnMapping()
+  await ensureBiCosteoDemoUser()
 }
 
 export async function ensureITArquitecturaData(): Promise<void> {

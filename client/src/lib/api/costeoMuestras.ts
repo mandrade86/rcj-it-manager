@@ -11,6 +11,9 @@ import type {
   VentaAnalisisPayload,
   VentaCatalogoPayload,
   VentaMargenPayload,
+  EnlaceFacturaPayload,
+  OpVsRecetaPayload,
+  ProduccionOrdenDetalle,
 } from '@/types/costeoMuestras'
 
 async function parseError(res: Response): Promise<string> {
@@ -161,6 +164,13 @@ export async function fetchProduccionReceta(params: {
   return res.json() as Promise<{ lineas: ProduccionLinea[]; total: number }>
 }
 
+export async function fetchProduccionDetalle(orden: string): Promise<ProduccionOrdenDetalle> {
+  const q = new URLSearchParams({ orden: orden.trim() })
+  const res = await fetch(`/api/costeo-muestras/produccion/detalle?${q.toString()}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProduccionOrdenDetalle>
+}
+
 export async function fetchVentasCatalogo(params?: {
   receta?: string
   recetaExact?: boolean
@@ -197,4 +207,38 @@ export async function fetchVentasAnalisis(params?: {
   const res = await fetch(`/api/costeo-muestras/ventas-analisis${suffix}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<VentaAnalisisPayload>
+}
+
+export async function fetchOpVsReceta(params: {
+  codigo_cliente: string
+  desde?: string
+  hasta?: string
+}): Promise<OpVsRecetaPayload> {
+  const q = new URLSearchParams()
+  q.set('codigo_cliente', params.codigo_cliente)
+  if (params.desde) q.set('desde', params.desde)
+  if (params.hasta) q.set('hasta', params.hasta)
+  const res = await fetch(`/api/costeo-muestras/op-vs-receta?${q.toString()}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<OpVsRecetaPayload>
+}
+
+export async function fetchEnlaceFactura(params: {
+  codigo_cliente?: string
+  cliente?: string
+  factura?: string
+  facturaExact?: boolean
+  desde?: string
+  hasta?: string
+}): Promise<EnlaceFacturaPayload> {
+  const q = new URLSearchParams()
+  if (params.codigo_cliente) q.set('codigo_cliente', params.codigo_cliente)
+  if (params.cliente) q.set('cliente', params.cliente)
+  if (params.factura) q.set('factura', params.factura)
+  if (params.facturaExact) q.set('facturaExact', 'true')
+  if (params.desde) q.set('desde', params.desde)
+  if (params.hasta) q.set('hasta', params.hasta)
+  const res = await fetch(`/api/costeo-muestras/enlace-factura?${q.toString()}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<EnlaceFacturaPayload>
 }

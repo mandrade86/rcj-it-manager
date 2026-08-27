@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import { esPerfilSoloBiCosteo } from '@/lib/permisosNav'
 import { useAuthStore } from '@/store/authStore'
 
 const titles: Record<string, string> = {
@@ -31,6 +32,7 @@ const titles: Record<string, string> = {
   '/admin/usuarios': 'Administración · Usuarios',
   '/admin/roles': 'Administración · Roles y Permisos',
   '/manual': 'Centro de ayuda',
+  '/bi/costeo-muestras': 'BI · Costeo muestras',
 }
 
 function titleFromPath(pathname: string, search: string): string {
@@ -79,8 +81,10 @@ export function AppHeader() {
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const hasPermiso = useAuthStore((s) => s.hasPermiso)
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const [menuOpen, setMenuOpen] = useState(false)
+  const soloBiCosteo = esPerfilSoloBiCosteo(hasPermiso)
 
   const title = titleFromPath(pathname, search)
   const today = format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: es })
@@ -129,35 +133,37 @@ export function AppHeader() {
                 <p className="truncate text-sm font-medium">{user?.nombre}</p>
                 <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
               </div>
-              <div className="px-2 py-1">
-                <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Mi espacio
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="flex h-9 w-full items-center gap-2 justify-start rounded-md px-2 text-sm font-normal"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    navigate('/mi-evaluacion')
-                  }}
-                >
-                  <User className="size-4 text-[var(--navy)]" />
-                  Mi desempeño
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="flex h-9 w-full items-center gap-2 justify-start rounded-md px-2 text-sm font-normal"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    navigate('/mis-capacitaciones')
-                  }}
-                >
-                  <BookOpen className="size-4 text-[var(--navy)]" />
-                  Mis capacitaciones
-                </Button>
-              </div>
+              {!soloBiCosteo && (
+                <div className="px-2 py-1">
+                  <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Mi espacio
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="flex h-9 w-full items-center gap-2 justify-start rounded-md px-2 text-sm font-normal"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      navigate('/mi-evaluacion')
+                    }}
+                  >
+                    <User className="size-4 text-[var(--navy)]" />
+                    Mi desempeño
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="flex h-9 w-full items-center gap-2 justify-start rounded-md px-2 text-sm font-normal"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      navigate('/mis-capacitaciones')
+                    }}
+                  >
+                    <BookOpen className="size-4 text-[var(--navy)]" />
+                    Mis capacitaciones
+                  </Button>
+                </div>
+              )}
               <Button
                 type="button"
                 variant="ghost"

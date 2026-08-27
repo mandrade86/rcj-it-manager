@@ -113,7 +113,7 @@ app.use('/api/roles', rolesRouter)
 app.use('/api/usuarios', usuariosRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/gastos', gastosRouter)
-app.use('/api/costeo-muestras', costeoMuestrasRouter)
+app.use('/api/costeo-muestras', costeoMuestrasRouter) // BI: consumo real OP + OP vs receta
 app.use('/api/it', itArquitecturaRouter)
 app.use('/api/kpi-registros', kpiRegistrosRouter)
 app.use('/api/kpis', kpisRouter)

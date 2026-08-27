@@ -1,3 +1,29 @@
+/** Permisos de módulos distintos a BI Costeo (para detectar perfil solo costeo). */
+export const PERMISOS_FUERA_BI_COSTEO = [
+  'dashboard:ver',
+  'proyectos:ver',
+  'proyectos:ver-todos',
+  'proyectos:editar',
+  'equipo:ver',
+  'equipo:editar',
+  'capacitaciones:ver',
+  'capacitaciones:ver-todos',
+  'capacitaciones:editar',
+  'gastos:ver',
+  'kpis:ver',
+  'kpis:editar',
+  'maestros:ver',
+  'maestros:editar',
+  'empleados:ver',
+  'empleados:editar',
+  'usuarios:ver',
+  'usuarios:editar',
+  'roles:ver',
+  'roles:editar',
+  'it:arquitectura:ver',
+  'it:arquitectura:editar',
+] as const
+
 /** Permisos requeridos por ruta (cualquiera del arreglo basta). */
 export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/': 'dashboard:ver',
@@ -47,4 +73,43 @@ export function cumplePermiso(
   if (list.some(hasPermiso)) return true
   if (opts?.llevaGastos && list.includes('gastos:ver')) return true
   return false
+}
+
+/** Usuario con acceso únicamente al módulo BI Costeo (sin otros módulos ni admin). */
+export function esPerfilSoloBiCosteo(hasPermiso: (p: string) => boolean): boolean {
+  if (!hasPermiso('bi:costeo:ver')) return false
+  if (hasPermiso('*')) return false
+  return !PERMISOS_FUERA_BI_COSTEO.some(hasPermiso)
+}
+
+/** Ruta de inicio según permisos del usuario. */
+export function resolveDefaultRoute(
+  hasPermiso: (p: string) => boolean,
+  opts?: { llevaGastos?: boolean },
+): string {
+  if (hasPermiso('*') || hasPermiso('dashboard:ver')) return '/'
+  if (hasPermiso('bi:costeo:ver')) return '/bi/costeo-muestras'
+  if (hasPermiso('proyectos:ver')) return '/proyectos'
+  if (hasPermiso('equipo:ver')) return '/equipo'
+  if (hasPermiso('capacitaciones:ver')) return '/capacitaciones'
+  if (hasPermiso('kpis:ver')) return '/kpis'
+  if (cumplePermiso('gastos:ver', hasPermiso, opts)) return '/gastos'
+  if (hasPermiso('it:arquitectura:ver')) return '/it/arquitectura'
+  if (hasPermiso('maestros:ver')) return '/maestros'
+  if (hasPermiso('empleados:ver')) return '/maestros/empleados'
+  if (hasPermiso('usuarios:ver')) return '/admin/usuarios'
+  if (hasPermiso('roles:ver')) return '/admin/roles'
+  return '/'
+}
+
+/** Tras login: respeta `from` si el usuario tiene permiso; si no, va a su inicio. */
+export function resolvePostLoginPath(
+  from: string,
+  hasPermiso: (p: string) => boolean,
+  opts?: { llevaGastos?: boolean },
+): string {
+  const required = permisoParaRuta(from)
+  if (required && cumplePermiso(required, hasPermiso, opts)) return from
+  if (!required && from !== '/login') return from
+  return resolveDefaultRoute(hasPermiso, opts)
 }

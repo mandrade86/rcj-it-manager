@@ -4,10 +4,22 @@ import { listViewColumns } from './sapBiQuery.js'
 
 /** Vistas fijas RCJ_BI por pestaña del módulo BI. */
 export const VISTA_VENTA_COSTO = 'VW_BI_VENTA_COSTO'
+/** Preferida: ventas + Factura + OrdenProd (Opción A). */
+export const VISTA_VENTA_COSTO_OP = 'VW_BI_VENTA_COSTO_OP'
+export const VENTA_VISTAS_CANDIDATAS = [VISTA_VENTA_COSTO_OP, VISTA_VENTA_COSTO] as const
 export const VISTA_RECETA_COSTO = 'VW_BI_RECETA_COSTO'
 export const VISTA_RECETAS_EXPLOSION = 'VW_BI_RECETAS_EXPLOSION'
 export const VISTA_RECETAS = 'VW_BI_RECETAS'
 export const VISTA_PRODUCCION = 'VW_BI_PRODUCCION'
+/** Preferida: 1 fila por componente de OP (WOR1 plan + IssuedQty). */
+export const VISTA_PRODUCCION_DETALLE_QTY = 'VW_BI_PRODUCCION_DETALLE_QTY'
+/** Fallback: consumo por emisiones / movimientos. */
+export const VISTA_CONSUMO_REAL_PRODUCCION = 'VW_BI_CONSUMO_REAL_PRODUCCION'
+
+export const CONSUMO_VISTAS_CANDIDATAS = [
+  VISTA_PRODUCCION_DETALLE_QTY,
+  VISTA_CONSUMO_REAL_PRODUCCION,
+] as const
 
 /** alias lógico → columna en VW_BI_VENTA_COSTO */
 export const CAMPOS_VENTA_COSTO: Record<string, string> = {
@@ -105,46 +117,79 @@ export function suggestVentaCostoFields(columns: string[]): Record<string, strin
 }
 
 let cachedVentaFields: Record<string, string> | null = null
+let cachedVentaVista: string | null = null
 let cachedVentaKey = ''
 
 export function clearVentaCostoFieldsCache(): void {
   cachedVentaFields = null
+  cachedVentaVista = null
   cachedVentaKey = ''
 }
 
-export async function getVentaCostoFields(cfg: SapBiCosteoConfig): Promise<Record<string, string>> {
-  const key = `${cfg.host}:${cfg.port}:${cfg.schema}:${VISTA_VENTA_COSTO}`
-  if (cachedVentaFields && cachedVentaKey === key) return cachedVentaFields
-  const columnas = await listViewColumns(cfg, VISTA_VENTA_COSTO)
-  if (!columnas.length) {
-    // fallback estático si no se pueden listar columnas
-    cachedVentaFields = { ...CAMPOS_VENTA_COSTO }
+export type VentaCostoSource = {
+  vista: string
+  fields: Record<string, string>
+}
+
+/** Prefiere VW_BI_VENTA_COSTO_OP (con OrdenProd); fallback VW_BI_VENTA_COSTO. */
+export async function getVentaCostoSource(cfg: SapBiCosteoConfig): Promise<VentaCostoSource> {
+  const key = `${cfg.host}:${cfg.port}:${cfg.schema}:venta`
+  if (cachedVentaFields && cachedVentaVista && cachedVentaKey === key) {
+    return { vista: cachedVentaVista, fields: cachedVentaFields }
+  }
+
+  let best: VentaCostoSource | null = null
+  for (const vista of VENTA_VISTAS_CANDIDATAS) {
+    try {
+      const columnas = await listViewColumns(cfg, vista)
+      if (!columnas.length) continue
+      const fields = suggestVentaCostoFields(columnas)
+      const src = { vista, fields }
+      if (fields.orden_produccion) {
+        cachedVentaFields = fields
+        cachedVentaVista = vista
+        cachedVentaKey = key
+        return src
+      }
+      if (!best) best = src
+    } catch {
+      // probar siguiente
+    }
+  }
+  if (best) {
+    cachedVentaFields = best.fields
+    cachedVentaVista = best.vista
     cachedVentaKey = key
-    return cachedVentaFields
+    return best
   }
-  try {
-    cachedVentaFields = suggestVentaCostoFields(columnas)
-  } catch {
-    cachedVentaFields = { ...CAMPOS_VENTA_COSTO }
-  }
+
+  const fields = { ...CAMPOS_VENTA_COSTO }
+  cachedVentaFields = fields
+  cachedVentaVista = VISTA_VENTA_COSTO
   cachedVentaKey = key
-  return cachedVentaFields
+  return { vista: VISTA_VENTA_COSTO, fields }
+}
+
+export async function getVentaCostoFields(cfg: SapBiCosteoConfig): Promise<Record<string, string>> {
+  const src = await getVentaCostoSource(cfg)
+  return src.fields
 }
 
 /** Candidatos por alias lógico en VW_BI_RECETA_COSTO (nombres distintos a VW_BI_VENTA_COSTO). */
 export const RECETA_COSTO_CANDIDATES: Record<string, string[]> = {
   receta_code: ['RecetaCode', 'ItemCode', 'CodReceta', 'CodArticulo', 'CodProducto', 'Cod_Receta'],
   receta_nombre: ['ItemName', 'Descripcion', 'NombreReceta', 'NomReceta', 'RecetaNombre', 'DescReceta'],
-  costo: ['CostoTeorico', 'Costo', 'CostoTotal', 'CostoReal', 'CostoLinea'],
+  costo: ['CostoLinea', 'CostoTeorico', 'Costo', 'CostoTotal', 'CostoReal'],
   costo_unitario: ['CostoUnitario', 'CostoUnit', 'PrecioUnit', 'UnitCost', 'AvgPrice', 'AvgPrice1'],
   flag_costo: ['FlagCosto', 'Flag_Costo', 'EstadoCosto'],
   cantidad: [
     'CantidadPorUnidad', 'Cantidad_Por_Unidad', 'QtyPerUnit', 'QtyPerUom', 'QuantityPerUnit',
-    'Cantidad', 'Quantity', 'Qty', 'Qntty', 'Qauntity', 'BaseQty', 'Cant', 'CantidadBase',
+    'NumPerMsr', 'Quantity', 'Cantidad', 'Qty', 'Qntty',
     'CantidadBom', 'CantBom', 'CantComp', 'CantidadComp', 'CompQty', 'QtyPer', 'QuantityPer',
     'CantidadBaseBom', 'InvQty', 'CantidadLinea', 'CantLinea', 'QtyLinea', 'LineQty',
-    'CantidadInsumo', 'QtyInsumo', 'CantidadUM', 'NumPerMsr', 'BaseNum', 'Factor',
-    'QuantityBOM', 'PlannedQty', 'IssuedQty',
+    'CantidadInsumo', 'QtyInsumo', 'CantidadUM', 'BaseNum', 'Factor',
+    'QuantityBOM',
+    /* No usar campos de OP/emisión como cantidad BOM: BaseQty, PlannedQty, IssuedQty */
   ],
   unidad: [
     'Unidad', 'UnidadMedida', 'Uom', 'UoM', 'UOM', 'UomCode', 'UomName', 'NomUom',
@@ -164,7 +209,7 @@ export const RECETA_COSTO_CANDIDATES: Record<string, string[]> = {
 export const CAMPOS_RECETA_COSTO: Record<string, string> = {
   receta_code: 'RecetaCode',
   receta_nombre: 'ItemName',
-  costo: 'CostoTeorico',
+  costo: 'CostoLinea',
   costo_unitario: 'CostoUnitario',
   flag_costo: 'FlagCosto',
   cantidad: 'CantidadPorUnidad',
@@ -426,34 +471,84 @@ export async function refreshRecetaCostoFields(cfg: SapBiCosteoConfig): Promise<
 export const PRODUCCION_CANDIDATES: Record<string, string[]> = {
   receta_code: [
     'RecetaCode', 'ItemCode', 'CodReceta', 'CodigoReceta', 'CodArticulo', 'CodProducto',
-    'ProductCode', 'Articulo', 'Producto',
+    'ProductCode', 'Articulo', 'Producto', 'ItemCodePT',
   ],
   receta_nombre: [
     'RecetaNombre', 'ItemName', 'NombreReceta', 'NomReceta', 'Descripcion', 'ProductName',
+    'ProductoTerminado',
   ],
   cantidad: [
-    'Cantidad', 'CantidadProducida', 'CantProducida', 'CompletedQty', 'CmpltQty',
-    'PlannedQty', 'Qty', 'Quantity', 'CantidadBase', 'InvQty',
+    'CantProducida', 'CantidadProducida', 'CompletedQty', 'CmpltQty',
+    'Cantidad', 'Qty', 'Quantity', 'CantidadBase', 'InvQty', 'CantPlanificada', 'PlannedQty',
   ],
   costo: [
-    'CostoReal', 'CostoProduccion', 'Costo', 'CostoTotal', 'TotalCost', 'CostoLinea',
-    'ProductionCost', 'RealCost',
+    'CostoProduccion', 'CostoReal', 'Costo', 'CostoTotal', 'TotalCost', 'CostoLinea',
+    'ProductionCost', 'RealCost', 'CostoUnitProducido',
   ],
-  fecha: ['Fecha', 'DocDate', 'PostDate', 'FechaProd', 'FechaProduccion', 'DueDate'],
+  fecha: ['Fecha', 'DocDate', 'PostDate', 'FechaProd', 'FechaProduccion', 'DueDate', 'FechaContab'],
+  /** Número de OP visible al usuario (DocNum). */
   orden: [
-    'Orden', 'OrdenProd', 'OrdenProduccion', 'DocNum', 'WONum', 'ProductionOrder',
-    'OrdenFab', 'NumOrden', 'DocEntry',
+    'OrdenNum', 'DocNum', 'Orden', 'OrdenProd', 'OrdenProduccion', 'WONum', 'ProductionOrder',
+    'OrdenFab', 'NumOrden',
   ],
-  almacen: ['Almacen', 'WhsCode', 'Warehouse', 'CodAlmacen', 'WarehouseCode'],
+  /** DocEntry interno para cruzar con consumo. */
+  orden_id: ['OrdenId', 'DocEntry', 'AbsEntry'],
+  almacen: ['Almacen', 'WhsCode', 'Warehouse', 'CodAlmacen', 'WarehouseCode', 'AlmacenPT'],
   estado: ['Estado', 'Status', 'StatusName', 'EstadoOrden', 'WOStatus'],
   periodo: ['Periodo', 'Period', 'AnioMes'],
+  /** Cliente de la OP (CardCode / nombre según vista). */
+  codigo_cliente: [
+    'CardCode', 'CodigoCliente', 'CodCliente', 'ClienteCode', 'CustomerCode',
+  ],
+  cliente: [
+    'ClienteOrden', 'CardName', 'Cliente', 'NombreCliente', 'CustomerName', 'ClienteNombre',
+  ],
+  componente_code: [
+    'ComponenteCode', 'CodComponente', 'CompCode', 'ChildCode', 'InsumoCode',
+    'MaterialCode', 'ItemCodeComp', 'CodigoComponente', 'CompItem',
+  ],
+  componente_nombre: [
+    'ComponenteNombre', 'NomComponente', 'CompName', 'ChildName', 'InsumoNombre',
+    'MaterialName', 'NombreComponente', 'CompItemName',
+  ],
+  unidad: ['Unidad', 'Uom', 'UoM', 'UnidadMedida', 'InvntryUom', 'Unit'],
+}
+
+/** Candidatos VW_BI_CONSUMO_REAL_PRODUCCION. */
+export const CONSUMO_REAL_CANDIDATES: Record<string, string[]> = {
+  orden: ['DocNum', 'OrdenNum', 'Orden', 'WONum'],
+  orden_id: ['DocEntry', 'OrdenId', 'AbsEntry'],
+  receta_code: ['ItemCodePT', 'RecetaCode', 'ProductoTerminado', 'ItemCode'],
+  receta_nombre: ['ProductoTerminado', 'RecetaNombre', 'ItemName'],
+  componente_code: [
+    'ComponenteCode', 'CodComponente', 'CompCode', 'ChildCode', 'InsumoCode', 'MaterialCode',
+  ],
+  componente_nombre: [
+    'ComponenteNombre', 'NomComponente', 'CompName', 'ChildName', 'InsumoNombre', 'MaterialName',
+  ],
+  cantidad: [
+    'CantEmitida', 'CantEmitidaMovs', 'CantEmitidaSAP', 'IssuedQty', 'CantidadEmitida',
+    'Cantidad', 'Qty',
+  ],
+  cantidad_plan: ['CantPlanComponente', 'PlannedQty', 'CantPlanificada'],
+  cantidad_base: ['CantBaseComponente', 'BaseQty', 'CantidadBase', 'QtyPerUnit'],
+  cantidad_producto: ['CantProducidaPT', 'CmpltQty', 'CantProducida', 'CompletedQty', 'CantPlanificadaPT'],
+  costo: [
+    'CostoRealComponente', 'CostoReal', 'CostoEmitido', 'CostoLinea', 'Costo',
+  ],
+  costo_plan: ['CostoPlanComponente', 'CostoPlan', 'CostoTeorico'],
+  fecha: ['FechaContab', 'Fecha', 'DocDate', 'PostDate'],
+  almacen: ['AlmacenPT', 'Almacen', 'WhsCode', 'Warehouse'],
+  estado: ['Status', 'Estado', 'StatusName'],
+  unidad: ['Unidad', 'Uom', 'UoM'],
 }
 
 const PROD_RECETA_PATTERNS = [/receta.*code/i, /^itemcode$/i, /cod.*receta/i, /^producto$/i]
 const PROD_CANTIDAD_PATTERNS = [/cantidad/i, /completed.?qty/i, /cmplt.?qty/i, /planned.?qty/i, /^qty$/i, /quantity/i]
 const PROD_COSTO_PATTERNS = [/costo.*real/i, /costo.*prod/i, /^costo$/i, /production.?cost/i, /real.?cost/i]
 const PROD_FECHA_PATTERNS = [/^fecha$/i, /doc.?date/i, /post.?date/i, /fecha.*prod/i]
-const PROD_ORDEN_PATTERNS = [/orden/i, /doc.?num/i, /wo.?num/i, /production.?order/i]
+const PROD_ORDEN_PATTERNS = [/orden.?num/i, /doc.?num/i, /^orden$/i, /wo.?num/i, /production.?order/i]
+const PROD_ORDEN_ID_PATTERNS = [/orden.?id/i, /doc.?entry/i, /abs.?entry/i]
 
 export function suggestProduccionFields(columns: string[]): Record<string, string> {
   const fields: Record<string, string> = {}
@@ -490,7 +585,36 @@ export function suggestProduccionFields(columns: string[]): Record<string, strin
   }
   if (!fields.orden) {
     const col = findColumnByPatterns(columns, PROD_ORDEN_PATTERNS, used)
-    if (col) fields.orden = col
+    if (col) {
+      fields.orden = col
+      used.add(col)
+    }
+  }
+  if (!fields.orden_id) {
+    const col = findColumnByPatterns(columns, PROD_ORDEN_ID_PATTERNS, used)
+    if (col) {
+      fields.orden_id = col
+      used.add(col)
+    }
+  }
+  if (!fields.componente_code) {
+    const col = findColumnByPatterns(
+      columns,
+      [/componente/i, /comp.?code/i, /insumo/i, /child.?code/i, /material.?code/i],
+      used,
+    )
+    if (col) {
+      fields.componente_code = col
+      used.add(col)
+    }
+  }
+  if (!fields.componente_nombre) {
+    const col = findColumnByPatterns(
+      columns,
+      [/comp.*nom/i, /nom.*comp/i, /insumo.*nom/i, /child.?name/i],
+      used,
+    )
+    if (col) fields.componente_nombre = col
   }
 
   if (!fields.receta_code) {
@@ -508,12 +632,71 @@ export function suggestProduccionFields(columns: string[]): Record<string, strin
   return fields
 }
 
+export function suggestConsumoRealFields(
+  columns: string[],
+  vistaLabel = 'vista de consumo',
+): Record<string, string> {
+  const fields: Record<string, string> = {}
+  for (const [alias, candidates] of Object.entries(CONSUMO_REAL_CANDIDATES)) {
+    const col = findColumnInList(columns, candidates)
+    if (col) fields[alias] = col
+  }
+  const used = new Set(Object.values(fields))
+  if (!fields.componente_code) {
+    const col = findColumnByPatterns(
+      columns,
+      [/componente/i, /comp.?code/i, /insumo/i, /child.?code/i, /material.?code/i],
+      used,
+    )
+    if (col) {
+      fields.componente_code = col
+      used.add(col)
+    }
+  }
+  if (!fields.cantidad) {
+    const col = findColumnByPatterns(
+      columns,
+      [/emitida/i, /issued/i, /consumo/i, /cantidad/i, /^qty$/i],
+      used,
+    )
+    if (col) {
+      fields.cantidad = col
+      used.add(col)
+    }
+  }
+  if (!fields.orden && !fields.orden_id) {
+    const col = findColumnByPatterns(columns, [/doc.?num/i, /orden/i, /doc.?entry/i], used)
+    if (col) fields.orden = col
+  }
+  if (!fields.componente_code) {
+    throw new Error(
+      `No se detectó código de componente en ${vistaLabel}. `
+      + `Columnas: ${columns.join(', ')}`,
+    )
+  }
+  if (!fields.cantidad && !fields.costo) {
+    throw new Error(
+      `No se detectó cantidad ni costo emitido en ${vistaLabel}. `
+      + `Columnas: ${columns.join(', ')}`,
+    )
+  }
+  return fields
+}
+
 let cachedProduccionFields: Record<string, string> | null = null
 let cachedProduccionKey = ''
+let cachedConsumoFields: Record<string, string> | null = null
+let cachedConsumoVista: string | null = null
+let cachedConsumoKey = ''
+let cachedConsumoAvailable: boolean | null = null
 
 export function clearProduccionFieldsCache(): void {
   cachedProduccionFields = null
   cachedProduccionKey = ''
+  cachedConsumoFields = null
+  cachedConsumoVista = null
+  cachedConsumoKey = ''
+  cachedConsumoAvailable = null
 }
 
 export async function getProduccionFields(cfg: SapBiCosteoConfig): Promise<Record<string, string>> {
@@ -529,6 +712,52 @@ export async function getProduccionFields(cfg: SapBiCosteoConfig): Promise<Recor
   cachedProduccionFields = fields
   cachedProduccionKey = key
   return fields
+}
+
+export type ConsumoRealSource = {
+  vista: string
+  fields: Record<string, string>
+}
+
+/**
+ * Fuente de consumo por componente de OP.
+ * Prioriza VW_BI_PRODUCCION_DETALLE_QTY; fallback VW_BI_CONSUMO_REAL_PRODUCCION.
+ */
+export async function getConsumoRealSource(
+  cfg: SapBiCosteoConfig,
+): Promise<ConsumoRealSource | null> {
+  const key = `${cfg.host}:${cfg.port}:${cfg.schema}:consumo`
+  if (cachedConsumoAvailable === false && cachedConsumoKey === key) return null
+  if (cachedConsumoFields && cachedConsumoVista && cachedConsumoKey === key) {
+    return { vista: cachedConsumoVista, fields: cachedConsumoFields }
+  }
+
+  for (const vista of CONSUMO_VISTAS_CANDIDATAS) {
+    try {
+      const columnas = await listViewColumns(cfg, vista)
+      if (!columnas.length) continue
+      const fields = suggestConsumoRealFields(columnas, vista)
+      cachedConsumoFields = fields
+      cachedConsumoVista = vista
+      cachedConsumoKey = key
+      cachedConsumoAvailable = true
+      return { vista, fields }
+    } catch {
+      // probar siguiente vista
+    }
+  }
+
+  cachedConsumoAvailable = false
+  cachedConsumoKey = key
+  return null
+}
+
+/** @deprecated Prefer getConsumoRealSource; conserva compatibilidad. */
+export async function getConsumoRealFields(
+  cfg: SapBiCosteoConfig,
+): Promise<Record<string, string> | null> {
+  const src = await getConsumoRealSource(cfg)
+  return src?.fields ?? null
 }
 
 export async function refreshProduccionFields(cfg: SapBiCosteoConfig): Promise<{

@@ -177,6 +177,9 @@ export type ProduccionLinea = {
   estado: string
   receta_code: string
   receta_nombre: string
+  componente_code?: string
+  componente_nombre?: string
+  unidad?: string
 }
 
 export type RecetasMatrizPayload = {
@@ -230,7 +233,12 @@ export type VentaOpRelacion = {
 export type VentaPorReceta = {
   receta_code: string
   receta_nombre: string
+  /** Qty vendida (líneas de factura). */
   cantidad: number
+  /** Qty producida (cabeceras OP de la receta). */
+  qty_producida: number
+  var_qty: number
+  var_qty_pct: number
   venta: number
   costo_produccion: number
   costo_teorico: number
@@ -239,6 +247,9 @@ export type VentaPorReceta = {
   margen: number
   margen_pct: number
   registros: number
+  /** Costo real de las OP (cabeceras). Si 0, usar costo_produccion de venta. */
+  costo_op: number
+  ordenes: number
 }
 
 export type VentaAnalisisPayload = {
@@ -251,6 +262,8 @@ export type VentaAnalisisPayload = {
     total_costo_teorico: number
     total_variacion: number
     variacion_pct: number
+    total_qty_vendida: number
+    total_qty_producida: number
   }
   por_receta: VentaPorReceta[]
   detalle: VentaAnalisisRow[]
@@ -285,4 +298,174 @@ export type RecetaVentaCatalogoItem = {
 export type VentaCatalogoPayload = {
   clientes: ClienteCatalogoItem[]
   recetas: RecetaVentaCatalogoItem[]
+}
+
+export type OpVsRecetaIngrediente = {
+  componente_code: string
+  componente_nombre: string
+  unidad: string
+  qty_por_unidad: number
+  costo_unitario: number
+  qty_teorica: number
+  costo_teorico: number
+  qty_plan?: number | null
+  costo_plan?: number | null
+  /** Precio unitario en Real (mismo que BOM o derivado). */
+  precio_real?: number | null
+  qty_real: number | null
+  /** precio_real × qty_real */
+  costo_real: number | null
+  var_qty: number | null
+  var_qty_pct: number | null
+  var_costo: number | null
+  var_costo_pct: number | null
+  /** Ingrediente en receta sin par en OP, o componente OP que no está en la receta. */
+  alerta_receta?: 'falta_en_op' | 'extra_en_op' | null
+}
+
+export type ProduccionOrdenDetalle = {
+  orden: string
+  orden_id?: string
+  receta_code: string
+  receta_nombre: string
+  fecha: string | null
+  estado: string
+  almacen: string
+  cantidad: number
+  costo: number
+  costo_teorico: number
+  var_costo: number
+  var_costo_pct: number
+  costo_unitario_bom: number
+  lineas: ProduccionLinea[]
+  ingredientes: OpVsRecetaIngrediente[]
+  tiene_consumo_real: boolean
+  /** Componentes BOM con qty real registrada. */
+  ingredientes_con_consumo?: number
+  ingredientes_bom?: number
+  /** Filas con código distinto entre receta y OP. */
+  ingredientes_alerta_receta?: number
+  /** BOM desde VW_BI_RECETA_COSTO (puede diferir de WOR1). */
+  bom_maestro?: IngredienteRow[]
+  /** BOM reconstruido desde WOR1 (pestaña Contenido SAP). */
+  bom_op?: IngredienteRow[]
+  receta_fuente?: 'maestro' | 'op_wor1'
+  aviso_bom?: string | null
+  aviso: string | null
+  ultimo_sync?: string | null
+  vista?: string
+}
+
+export type OpVsRecetaOrden = {
+  orden: string
+  orden_id?: string
+  fecha: string | null
+  /** Cantidad producida (real OP). */
+  cantidad: number
+  /** Costo real de la OP. */
+  costo: number
+  /** Costo BOM × cantidad producida. */
+  costo_teorico: number
+  var_costo: number
+  var_costo_pct: number
+  estado: string
+  /** Ingredientes de la receta escalados a la qty de esta OP. */
+  ingredientes: OpVsRecetaIngrediente[]
+}
+
+export type OpVsRecetaMuestra = {
+  receta_code: string
+  receta_nombre: string
+  qty_vendida: number
+  venta_total: number
+  qty_producida: number
+  costo_op: number
+  costo_teorico: number
+  var_costo: number
+  var_costo_pct: number
+  var_qty: number
+  var_qty_pct: number
+  /** Costo BOM por 1 unidad de receta. */
+  costo_unitario_bom: number
+  ordenes: OpVsRecetaOrden[]
+  ingredientes: OpVsRecetaIngrediente[]
+  tiene_consumo_real: boolean
+}
+
+export type OpVsRecetaPayload = {
+  resumen: {
+    muestras: number
+    con_produccion: number
+    sin_produccion: number
+    con_consumo_real: number
+    qty_vendida: number
+    qty_producida: number
+    costo_teorico: number
+    costo_op: number
+    var_costo: number
+    var_costo_pct: number
+  }
+  muestras: OpVsRecetaMuestra[]
+  cliente: { codigo_cliente: string; cliente: string }
+  campos_produccion?: Record<string, string>
+  tiene_consumo_real: boolean
+  produccion_ok?: boolean
+  produccion_error?: string | null
+  ultimo_sync: string | null
+  vista: string
+  aviso?: string | null
+}
+
+export type EnlaceFacturaDetalle = VentaOpRelacion & {
+  costo_teorico: number
+  costo_teorico_unit: number
+  variacion_op_vs_teorico: number
+  variacion_op_vs_teorico_pct: number
+}
+
+export type EnlaceFacturaGrupo = {
+  factura: string
+  fecha: string | null
+  periodo: string
+  codigo_cliente: string
+  cliente: string
+  lineas_venta: number
+  venta_total: number
+  costo_venta_total: number
+  costo_teorico_total: number
+  costo_op_total: number
+  variacion_op_vs_teorico: number
+  variacion_op_vs_teorico_pct: number
+  cantidad_venta: number
+  cantidad_op: number
+  ordenes: string[]
+  match_mejor: 'orden' | 'receta_periodo' | 'receta' | 'sin_op'
+  detalle: EnlaceFacturaDetalle[]
+}
+
+export type EnlaceFacturaPayload = {
+  resumen: {
+    facturas: number
+    con_op: number
+    sin_op: number
+    por_orden: number
+    por_receta: number
+    venta_total: number
+    costo_venta_total: number
+    costo_teorico_total: number
+    costo_op_total: number
+    variacion_op_vs_teorico: number
+    variacion_op_vs_teorico_pct: number
+    lineas: number
+  }
+  facturas: EnlaceFacturaGrupo[]
+  campos_venta?: Record<string, string>
+  tiene_factura: boolean
+  tiene_orden_venta: boolean
+  produccion_ok?: boolean
+  produccion_error?: string | null
+  ultimo_sync: string | null
+  vista: string
+  filas_leidas: number
+  aviso?: string | null
 }

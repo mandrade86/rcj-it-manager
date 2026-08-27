@@ -36,6 +36,7 @@ import type { SapBiColumnMapping, SapBiCosteoConfig } from '@/types/costeoMuestr
 
 import { RecetasAnalisisTab } from './costeo/RecetasAnalisisTab'
 import { GeneralRecetasTab } from './costeo/GeneralRecetasTab'
+import { EnlaceFacturaTab } from './costeo/EnlaceFacturaTab'
 import { VentasAnalisisTab } from './costeo/VentasAnalisisTab'
 
 const DEFAULT_MAPPING: SapBiColumnMapping = {
@@ -55,6 +56,7 @@ const VISTAS_SAP_CATALOGO = [
     items: [
       { vista: 'VW_BI_VENTA_COSTO', desc: 'Venta, costo real y margen por cliente/receta' },
       { vista: 'VW_BI_PRODUCCION', desc: 'Producción y costo real por orden' },
+      { vista: 'VW_BI_CONSUMO_REAL_PRODUCCION', desc: 'Consumo real por componente de la OP' },
     ],
   },
   {
@@ -62,7 +64,7 @@ const VISTAS_SAP_CATALOGO = [
     items: [
       { vista: 'VW_BI_RECETAS', desc: 'BOM nivel 1' },
       { vista: 'VW_BI_RECETAS_EXPLOSION', desc: 'Explosión 3 niveles — ingredientes' },
-      { vista: 'VW_BI_RECETA_COSTO', desc: 'Costo teórico + FlagCosto' },
+      { vista: 'VW_BI_RECETA_COSTO', desc: 'Lista de materiales (OITT+ITT1) — teórico' },
     ],
   },
   {
@@ -306,10 +308,11 @@ export function CosteoMuestrasPage() {
         </div>
       ) : config?.configured ? (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-9 w-full max-w-xl grid-cols-3">
+          <TabsList className="grid h-9 w-full max-w-3xl grid-cols-4">
             <TabsTrigger value="general" className="text-xs">General Recetas</TabsTrigger>
             <TabsTrigger value="recetas" className="text-xs">Costos por receta</TabsTrigger>
-            <TabsTrigger value="ventas" className="text-xs">Ventas y margen</TabsTrigger>
+            <TabsTrigger value="ventas" className="text-xs">Venta-Producción</TabsTrigger>
+            <TabsTrigger value="enlace" className="text-xs">OP vs receta</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="mt-3">
@@ -322,6 +325,10 @@ export function CosteoMuestrasPage() {
 
           <TabsContent value="ventas" className="mt-3">
             <VentasAnalisisTab onError={setError} />
+          </TabsContent>
+
+          <TabsContent value="enlace" className="mt-3">
+            <EnlaceFacturaTab onError={setError} />
           </TabsContent>
         </Tabs>
       ) : null}

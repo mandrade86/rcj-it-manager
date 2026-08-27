@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, Fragment } from 'react'
 import {
   AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
@@ -52,6 +50,7 @@ import type {
   ProduccionLinea,
   VentaAnalisisPayload,
   VentaAnalisisRow,
+  VentaPorReceta,
 } from '@/types/costeoMuestras'
 
 import { BiChartTooltip } from './BiChartTooltip'
@@ -61,6 +60,23 @@ import { hasSelectValue } from './selectHelpers'
 
 function formatPct(v: number): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+}
+
+function formatQty(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(v)) return '—'
+  return v.toLocaleString('es-HN', { maximumFractionDigits: 2 })
+}
+
+function toneMargen(v: number): string {
+  if (v > 0) return 'text-[var(--lime)]'
+  if (v < 0) return 'text-red-600'
+  return 'text-[var(--text-muted)]'
+}
+
+function toneVarQty(v: number): string {
+  if (v < 0) return 'text-red-600'
+  if (v > 0) return 'text-teal-700'
+  return 'text-[var(--text-muted)]'
 }
 
 /** Etiquetas compactas sobre barras/líneas. */
@@ -225,6 +241,15 @@ export function VentasAnalisisTab({ onError }: Props) {
     return [...byPeriod.values()].sort((a, b) => a.periodo.localeCompare(b.periodo))
   }, [data])
 
+  if (loadingCatalogo && !catalogoPayload) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-16 text-[var(--text-muted)]">
+        <Loader2 className="size-6 animate-spin text-[var(--navy)]" />
+        <p className="text-sm">Cargando clientes…</p>
+      </div>
+    )
+  }
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-16 text-[var(--text-muted)]">
@@ -235,7 +260,6 @@ export function VentasAnalisisTab({ onError }: Props) {
   }
 
   const res = data?.resumen
-  const variacionAlza = (res?.total_variacion ?? 0) > 0
 
   return (
     <div className="space-y-4">
@@ -244,7 +268,7 @@ export function VentasAnalisisTab({ onError }: Props) {
           <div className="mr-auto flex min-w-0 items-center gap-1.5 pb-1.5 pr-2">
             <Scale className="size-4 shrink-0" style={{ color: BI_CHART.navy }} />
             <span className="text-sm font-semibold text-[var(--text)]">
-              Teórico vs producción
+              Venta vs producción
             </span>
           </div>
           <div className="w-[200px] max-w-full">
@@ -360,30 +384,31 @@ export function VentasAnalisisTab({ onError }: Props) {
                 <p className="text-base font-bold" style={{ color: BI_CHART.coral }}>{formatLps(res.total_costo)}</p>
               </CardContent>
             </Card>
-            <Card className="border-t-4" style={{ borderTopColor: variacionAlza ? BI_CHART.red : BI_CHART.teal }}>
+            <Card className="border-t-4" style={{ borderTopColor: ((res.total_qty_producida ?? 0) - (res.total_qty_vendida ?? 0)) < 0 ? BI_CHART.red : BI_CHART.teal }}>
               <CardHeader className="px-3 pb-1 pt-2">
                 <CardTitle className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                  {variacionAlza ? <ArrowUpRight className="size-3 text-red-600" /> : <ArrowDownRight className="size-3 text-teal-600" />}
-                  Variación vs teórico
+                  Variación qty (prod − venta)
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 pb-2">
-                <p className="text-base font-bold" style={{ color: variacionAlza ? BI_CHART.red : BI_CHART.teal }}>
-                  {formatLps(res.total_variacion)}
+                <p className={cn('text-base font-bold', toneVarQty((res.total_qty_producida ?? 0) - (res.total_qty_vendida ?? 0)))}>
+                  {formatQty((res.total_qty_producida ?? 0) - (res.total_qty_vendida ?? 0))}
                 </p>
-                <p className="text-[11px] text-[var(--text-muted)]">{formatPct(res.variacion_pct)}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Venta {formatQty(res.total_qty_vendida)} · Prod {formatQty(res.total_qty_producida)}
+                </p>
               </CardContent>
             </Card>
-            <Card className="border-t-4 border-t-[var(--lime)]">
+            <Card className="border-t-4" style={{ borderTopColor: (res.total_margen ?? 0) >= 0 ? BI_CHART.lime : BI_CHART.red }}>
               <CardHeader className="px-3 pb-1 pt-2">
                 <CardTitle className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                  <TrendingUp className="size-3 text-[var(--lime)]" />
+                  <TrendingUp className="size-3" style={{ color: (res.total_margen ?? 0) >= 0 ? BI_CHART.lime : BI_CHART.red }} />
                   Margen total
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 pb-2">
-                <p className="text-base font-bold text-[var(--lime)]">{formatLps(res.total_margen)}</p>
-                <p className="text-[11px] text-[var(--text-muted)]">{res.margen_pct.toFixed(1)}% s/ venta</p>
+                <p className={cn('text-base font-bold', toneMargen(res.total_margen))}>{formatLps(res.total_margen)}</p>
+                <p className={cn('text-[11px]', toneMargen(res.total_margen))}>{formatPct(res.margen_pct)} s/ venta</p>
               </CardContent>
             </Card>
           </div>
@@ -391,7 +416,7 @@ export function VentasAnalisisTab({ onError }: Props) {
           <div className="grid gap-3 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="px-3 py-2">
-                <CardTitle className="text-sm">Teórico vs producción vs venta (top 10)</CardTitle>
+                <CardTitle className="text-sm">Venta vs producción (top 10)</CardTitle>
               </CardHeader>
               <CardContent className="h-72 px-3 pb-3">
                 {chartComparativa.length === 0 ? (
@@ -520,53 +545,17 @@ export function VentasAnalisisTab({ onError }: Props) {
 
           <Card>
             <CardHeader className="px-3 py-2">
-              <CardTitle className="text-sm">Resumen por receta</CardTitle>
+              <CardTitle className="text-sm">Venta vs producción — por receta</CardTitle>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Compara qty y monto de venta contra producción. Margen = venta − costo producción
+                (verde positivo, rojo negativo). Expanda para ver el detalle de receta.
+              </p>
             </CardHeader>
             <CardContent className="overflow-x-auto px-3 pb-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Receta</TableHead>
-                    <TableHead className="text-right">Cant.</TableHead>
-                    <TableHead className="text-right">Venta</TableHead>
-                    <TableHead className="text-right">Teórico</TableHead>
-                    <TableHead className="text-right">Producción</TableHead>
-                    <TableHead className="text-right">Variación</TableHead>
-                    <TableHead className="text-right">Margen</TableHead>
-                    <TableHead className="text-right">Margen %</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.por_receta.map((r) => (
-                    <TableRow key={r.receta_code || r.receta_nombre}>
-                      <TableCell>
-                        <div className="font-medium">{r.receta_nombre}</div>
-                        <span className="font-mono text-[10px] text-[var(--text-muted)]">{r.receta_code}</span>
-                      </TableCell>
-                      <TableCell className="text-right">{r.cantidad.toLocaleString('es-HN')}</TableCell>
-                      <TableCell className="text-right">{formatLps(r.venta)}</TableCell>
-                      <TableCell className="text-right" style={{ color: BI_CHART.amber }}>{formatLps(r.costo_teorico)}</TableCell>
-                      <TableCell className="text-right" style={{ color: BI_CHART.coral }}>{formatLps(r.costo_produccion)}</TableCell>
-                      <TableCell className={`text-right font-medium ${r.variacion > 0 ? 'text-red-600' : 'text-teal-700'}`}>
-                        {formatLps(r.variacion)} ({formatPct(r.variacion_pct)})
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-[var(--lime)]">{formatLps(r.margen)}</TableCell>
-                      <TableCell className="text-right">{r.margen_pct.toFixed(1)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow className="bg-[var(--gray-lt)] font-semibold">
-                    <TableCell colSpan={2}>Total</TableCell>
-                    <TableCell className="text-right">{formatLps(res.total_venta)}</TableCell>
-                    <TableCell className="text-right">{formatLps(res.total_costo_teorico)}</TableCell>
-                    <TableCell className="text-right">{formatLps(res.total_costo)}</TableCell>
-                    <TableCell className="text-right">{formatLps(res.total_variacion)}</TableCell>
-                    <TableCell className="text-right text-[var(--lime)]">{formatLps(res.total_margen)}</TableCell>
-                    <TableCell className="text-right">{res.margen_pct.toFixed(1)}%</TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
+              <ResumenPorRecetaTable
+                rows={data.por_receta}
+                resumen={res}
+              />
             </CardContent>
           </Card>
 
@@ -597,7 +586,7 @@ export function VentasAnalisisTab({ onError }: Props) {
               <Tabs defaultValue="lineas">
                 <TabsList className="mb-3 h-9">
                   <TabsTrigger value="lineas" className="text-xs">Detalle por línea</TabsTrigger>
-                  <TabsTrigger value="relacion" className="text-xs">Venta ↔ Orden producción</TabsTrigger>
+                  <TabsTrigger value="relacion" className="text-xs">Venta-Producción</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="lineas" className="mt-0 overflow-x-auto">
@@ -619,6 +608,292 @@ export function VentasAnalisisTab({ onError }: Props) {
         </>
       ) : null}
     </div>
+  )
+}
+
+function ResumenPorRecetaTable({
+  rows,
+  resumen,
+}: {
+  rows: VentaPorReceta[]
+  resumen: VentaAnalisisPayload['resumen']
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [ingsByReceta, setIngsByReceta] = useState<Record<string, IngredienteRow[]>>({})
+  const [prodByReceta, setProdByReceta] = useState<Record<string, ProduccionLinea[]>>({})
+  const [loadingKey, setLoadingKey] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const ensureDetalle = async (code: string) => {
+    if (!code || (ingsByReceta[code] && prodByReceta[code])) return
+    setLoadingKey(code)
+    setLoadError(null)
+    try {
+      const [det, prod] = await Promise.all([
+        ingsByReceta[code] ? null : fetchRecetaDetalle(code),
+        prodByReceta[code] ? null : fetchProduccionReceta({ receta: code }),
+      ])
+      if (det) {
+        setIngsByReceta((prev) => ({ ...prev, [code]: det.ingredientes }))
+      }
+      if (prod) {
+        setProdByReceta((prev) => ({ ...prev, [code]: prod.lineas.filter((l) => !l.componente_code) }))
+      }
+    } catch (e) {
+      setLoadError((e as Error).message)
+    } finally {
+      setLoadingKey(null)
+    }
+  }
+
+  const toggle = (code: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else {
+        next.add(code)
+        void ensureDetalle(code)
+      }
+      return next
+    })
+  }
+
+  const qtyVendida = resumen.total_qty_vendida ?? rows.reduce((s, r) => s + r.cantidad, 0)
+  const qtyProducida = resumen.total_qty_producida ?? rows.reduce((s, r) => s + (r.qty_producida ?? 0), 0)
+  const varQtyTotal = qtyProducida - qtyVendida
+  const varQtyPct = qtyVendida > 0 ? (varQtyTotal / qtyVendida) * 100 : 0
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="bg-[var(--gray-lt)]">
+          <TableHead rowSpan={2} className="w-8 align-bottom" />
+          <TableHead rowSpan={2} className="align-bottom">Receta</TableHead>
+          <TableHead
+            colSpan={2}
+            className="border-l text-center text-[11px] font-semibold"
+            style={{ color: BI_CHART.lime }}
+          >
+            Venta
+          </TableHead>
+          <TableHead
+            colSpan={2}
+            className="border-l text-center text-[11px] font-semibold"
+            style={{ color: BI_CHART.coral }}
+          >
+            Producción
+          </TableHead>
+          <TableHead
+            colSpan={2}
+            className="border-l text-center text-[11px] font-semibold text-[var(--text-muted)]"
+          >
+            Variación venta–producción
+          </TableHead>
+          <TableHead
+            colSpan={2}
+            className="border-l text-center text-[11px] font-semibold"
+          >
+            Margen
+          </TableHead>
+        </TableRow>
+        <TableRow className="bg-[var(--gray-lt)]">
+          <TableHead className="border-l text-right text-[10px]">Qty</TableHead>
+          <TableHead className="text-right text-[10px]">Monto</TableHead>
+          <TableHead className="border-l text-right text-[10px]">Qty</TableHead>
+          <TableHead className="text-right text-[10px]">Costo</TableHead>
+          <TableHead className="border-l text-right text-[10px]">Qty</TableHead>
+          <TableHead className="text-right text-[10px]">Monto</TableHead>
+          <TableHead className="border-l text-right text-[10px]">Lps</TableHead>
+          <TableHead className="text-right text-[10px]">%</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => {
+          const key = r.receta_code || r.receta_nombre
+          const open = expanded.has(key)
+          const ings = ingsByReceta[r.receta_code] ?? []
+          const prod = prodByReceta[r.receta_code] ?? []
+          const loading = loadingKey === r.receta_code
+          const qtyProd = r.qty_producida ?? 0
+          const varQty = r.var_qty ?? qtyProd - r.cantidad
+          const varQtyPctRow = r.var_qty_pct ?? (r.cantidad > 0 ? (varQty / r.cantidad) * 100 : 0)
+          return (
+            <Fragment key={key}>
+              <TableRow
+                className={cn('cursor-pointer', open && 'bg-[var(--blue-lt)]/40')}
+                onClick={() => toggle(key)}
+              >
+                <TableCell className="px-1">
+                  {open ? (
+                    <ChevronDown className="size-3.5 text-[var(--navy)]" />
+                  ) : (
+                    <ChevronRight className="size-3.5 text-[var(--navy)]" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="font-medium">{r.receta_nombre}</div>
+                  <span className="font-mono text-[10px] text-[var(--text-muted)]">{r.receta_code}</span>
+                </TableCell>
+                <TableCell className="border-l text-right tabular-nums">{formatQty(r.cantidad)}</TableCell>
+                <TableCell className="text-right font-medium" style={{ color: BI_CHART.lime }}>
+                  {formatLps(r.venta)}
+                </TableCell>
+                <TableCell className="border-l text-right tabular-nums" style={{ color: BI_CHART.coral }}>
+                  {formatQty(qtyProd)}
+                </TableCell>
+                <TableCell className="text-right" style={{ color: BI_CHART.coral }}>
+                  {formatLps(r.costo_produccion)}
+                </TableCell>
+                <TableCell className={cn('border-l text-right font-medium', toneVarQty(varQty))}>
+                  {formatQty(varQty)}
+                  <div className="text-[10px] font-normal text-[var(--text-muted)]">
+                    {formatPct(varQtyPctRow)}
+                  </div>
+                </TableCell>
+                <TableCell className={cn('text-right font-medium', toneMargen(r.variacion))}>
+                  {formatLps(r.variacion)}
+                  <div className="text-[10px] font-normal text-[var(--text-muted)]">
+                    {formatPct(r.variacion_pct)}
+                  </div>
+                </TableCell>
+                <TableCell className={cn('border-l text-right font-semibold', toneMargen(r.margen))}>
+                  {formatLps(r.margen)}
+                </TableCell>
+                <TableCell className={cn('text-right font-semibold', toneMargen(r.margen))}>
+                  {formatPct(r.margen_pct)}
+                </TableCell>
+              </TableRow>
+              {open ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={10} className="bg-[var(--gray-bg)] p-0">
+                    <div className="grid gap-3 border-t border-[var(--border)] px-3 py-3 lg:grid-cols-2">
+                      {loading ? (
+                        <p className="col-span-2 flex items-center justify-center gap-2 py-6 text-xs text-[var(--text-muted)]">
+                          <Loader2 className="size-3.5 animate-spin" />
+                          Cargando detalle de receta…
+                        </p>
+                      ) : null}
+                      {loadError && !loading ? (
+                        <p className="col-span-2 py-2 text-center text-xs text-amber-800">{loadError}</p>
+                      ) : null}
+                      {!loading ? (
+                        <>
+                          <div>
+                            <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
+                              Detalle receta (BOM) — {r.receta_code}
+                            </p>
+                            {ings.length === 0 ? (
+                              <p className="py-2 text-center text-xs text-[var(--text-muted)]">
+                                Sin ingredientes.
+                              </p>
+                            ) : (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-xs">Componente</TableHead>
+                                    <TableHead className="text-right text-xs">Cant.</TableHead>
+                                    <TableHead className="text-right text-xs">Costo</TableHead>
+                                    <TableHead className="text-right text-xs">%</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {ings.slice(0, 40).map((ing, j) => (
+                                    <TableRow key={`${ing.componente_code}-${j}`}>
+                                      <TableCell className="text-xs">
+                                        <span className="bi-sentence-case">{ing.componente_nombre}</span>
+                                        <div className="font-mono text-[10px] text-[var(--text-muted)]">
+                                          {ing.componente_code}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs tabular-nums">
+                                        {ing.cantidad.toLocaleString('es-HN', { maximumFractionDigits: 4 })}
+                                        {ing.unidad ? ` ${ing.unidad}` : ''}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs">
+                                        {formatLps(ing.costo_teorico)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs">
+                                        {ing.pct_costo.toFixed(1)}%
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            )}
+                          </div>
+                          <div>
+                            <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
+                              Órdenes de producción ({r.ordenes || prod.length})
+                            </p>
+                            {prod.length === 0 ? (
+                              <p className="py-2 text-center text-xs text-[var(--text-muted)]">
+                                Sin OP para esta receta en el rango.
+                              </p>
+                            ) : (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-xs">OP</TableHead>
+                                    <TableHead className="text-xs">Fecha</TableHead>
+                                    <TableHead className="text-right text-xs">Qty</TableHead>
+                                    <TableHead className="text-right text-xs">Costo</TableHead>
+                                    <TableHead className="text-xs">Estado</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {prod.slice(0, 30).map((l, j) => (
+                                    <TableRow key={`${l.orden}-${j}`}>
+                                      <TableCell className="font-mono text-xs">{l.orden || '—'}</TableCell>
+                                      <TableCell className="text-xs">
+                                        {l.fecha ? formatDateDMY(l.fecha) : '—'}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs tabular-nums">
+                                        {formatQty(l.cantidad)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs">{formatLps(l.costo)}</TableCell>
+                                      <TableCell className="text-xs">{l.estado || '—'}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            )}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </Fragment>
+          )
+        })}
+      </TableBody>
+      <TableFooter>
+        <TableRow className="bg-[var(--gray-lt)] font-semibold">
+          <TableCell colSpan={2}>Total</TableCell>
+          <TableCell className="border-l text-right">{formatQty(qtyVendida)}</TableCell>
+          <TableCell className="text-right">{formatLps(resumen.total_venta)}</TableCell>
+          <TableCell className="border-l text-right">{formatQty(qtyProducida)}</TableCell>
+          <TableCell className="text-right">{formatLps(resumen.total_costo)}</TableCell>
+          <TableCell className={cn('border-l text-right', toneVarQty(varQtyTotal))}>
+            {formatQty(varQtyTotal)}
+            <div className="text-[10px] font-normal text-[var(--text-muted)]">{formatPct(varQtyPct)}</div>
+          </TableCell>
+          <TableCell className={cn('text-right', toneMargen(resumen.total_variacion))}>
+            {formatLps(resumen.total_variacion)}
+            <div className="text-[10px] font-normal text-[var(--text-muted)]">
+              {formatPct(resumen.variacion_pct)}
+            </div>
+          </TableCell>
+          <TableCell className={cn('border-l text-right', toneMargen(resumen.total_margen))}>
+            {formatLps(resumen.total_margen)}
+          </TableCell>
+          <TableCell className={cn('text-right', toneMargen(resumen.total_margen))}>
+            {formatPct(resumen.margen_pct)}
+          </TableCell>
+        </TableRow>
+      </TableFooter>
+    </Table>
   )
 }
 
@@ -757,7 +1032,7 @@ function DetalleLineasTable({
                 <TableCell className={`text-right ${d.variacion > 0 ? 'text-red-600' : 'text-teal-700'}`}>
                   {formatLps(d.variacion)}
                 </TableCell>
-                <TableCell className="text-right text-[var(--lime)]">{formatLps(d.margen)}</TableCell>
+                <TableCell className={cn('text-right font-medium', toneMargen(d.margen))}>{formatLps(d.margen)}</TableCell>
               </TableRow>
               {open ? (
                 <TableRow className="hover:bg-transparent">

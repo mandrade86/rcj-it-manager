@@ -54,13 +54,29 @@ export const SAP_BI_VISTAS_CATALOGO = [
     grupo: 'Cliente y producción',
     vistas: [
       {
-        nombre: 'VW_BI_VENTA_COSTO',
-        uso: 'Principal — costo y margen real por cliente (dashboard costeo muestras)',
+        nombre: 'VW_BI_VENTA_COSTO_OP',
+        uso: 'Ventas + Factura + OrdenProd (preferida para OP vs receta por cliente)',
         recomendada: true,
+      },
+      {
+        nombre: 'VW_BI_VENTA_COSTO',
+        uso: 'Costo y margen por cliente (sin OP; fallback)',
+        recomendada: false,
       },
       {
         nombre: 'VW_BI_PRODUCCION',
         uso: 'Producción y costo real por orden (OWOR); análisis por OP',
+        recomendada: false,
+      },
+      {
+        nombre: 'VW_BI_CONSUMO_REAL_PRODUCCION',
+        uso: 'Consumo real por componente emitido a la OP (qty/costo real vs plan)',
+        recomendada: false,
+      },
+      {
+        nombre: 'VW_BI_PRODUCCION_DETALLE_QTY',
+        uso:
+          'RECOMENDADA — 1 fila por componente de cada OP con qty plan + qty emitida (todos los MPL/CONS/SV). Completa huecos de consumo parcial.',
         recomendada: false,
       },
     ],
@@ -70,7 +86,7 @@ export const SAP_BI_VISTAS_CATALOGO = [
     vistas: [
       { nombre: 'VW_BI_RECETAS', uso: 'BOM nivel 1 normalizado', recomendada: false },
       { nombre: 'VW_BI_RECETAS_EXPLOSION', uso: 'Explosión multinivel (3 niveles)', recomendada: false },
-      { nombre: 'VW_BI_RECETA_COSTO', uso: 'Costo teórico actual (FlagCosto)', recomendada: false },
+      { nombre: 'VW_BI_RECETA_COSTO', uso: 'Lista de materiales (OITT+ITT1) — costo teórico por componente', recomendada: true },
     ],
   },
   {
@@ -91,7 +107,7 @@ export const DEFAULT_SAP_BI_COSTEO_CONFIG: SapBiCosteoConfig = {
   port: 30015,
   database: 'RCJ_BI',
   schema: 'RCJ_BI',
-  viewName: 'VW_BI_VENTA_COSTO',
+  viewName: 'VW_BI_VENTA_COSTO_OP',
   username: 'B2User',
   password: '',
   encrypt: true,

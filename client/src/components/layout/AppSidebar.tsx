@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { cumplePermiso } from '@/lib/permisosNav'
+import { cumplePermiso, esPerfilSoloBiCosteo } from '@/lib/permisosNav'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
 
@@ -213,6 +213,7 @@ export function AppSidebar() {
     .map((g) => ({ ...g, items: g.items.filter(puedeVerItem) }))
     .filter((g) => g.items.length > 0)
 
+  const soloBiCosteo = esPerfilSoloBiCosteo(hasPermiso)
   const mostrarDashboard = puedeVerItem(dashboardNav)
 
   return (
@@ -295,12 +296,16 @@ export function AppSidebar() {
             </>
           )}
 
-          <GroupLabel icon={BookMarked} label="Ayuda" collapsed={collapsed} />
-          <div className="flex flex-col gap-0.5">
-            {ayudaNav.map(({ to, label, icon, end }) => (
-              <NavItem key={to} to={to} label={label} icon={icon} end={end} collapsed={collapsed} />
-            ))}
-          </div>
+          {!soloBiCosteo && (
+            <>
+              <GroupLabel icon={BookMarked} label="Ayuda" collapsed={collapsed} />
+              <div className="flex flex-col gap-0.5">
+                {ayudaNav.map(({ to, label, icon, end }) => (
+                  <NavItem key={to} to={to} label={label} icon={icon} end={end} collapsed={collapsed} />
+                ))}
+              </div>
+            </>
+          )}
         </nav>
       </ScrollArea>
 

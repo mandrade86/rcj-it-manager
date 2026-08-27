@@ -10,12 +10,25 @@ import {
 
 export type SapBiFieldMap = Record<string, string>
 
+function opDocNum(value: string): string {
+  const raw = value.trim().replace(/\.0+$/, '')
+  const m = raw.match(/(\d+)\s*$/)
+  return m ? m[1]! : raw
+}
+
 export type SapBiGenericFilters = {
   cliente?: string
   codigo_cliente?: string
   receta?: string
   /** Si true, filtra receta por igualdad exacta (dropdown). */
   recetaExact?: boolean
+  /** Número de factura / folio (igualdad exacta si facturaExact, si no LIKE). */
+  factura?: string
+  facturaExact?: boolean
+  /** Orden de producción (igualdad exacta). */
+  orden?: string
+  /** DocEntry / OrdenId interno. */
+  orden_id?: string
   desde?: string
   hasta?: string
 }
@@ -112,6 +125,14 @@ function applyFilters(
     : null
   const colReceta = fields.receta_code ? quoteColumn(fields.receta_code, 'receta', driver) : null
   const colFecha = fields.fecha ? quoteColumn(fields.fecha, 'fecha', driver) : null
+  const colFactura = fields.factura ? quoteColumn(fields.factura, 'factura', driver) : null
+  const colOrden =
+    fields.orden_produccion
+      ? quoteColumn(fields.orden_produccion, 'orden_produccion', driver)
+      : fields.orden
+        ? quoteColumn(fields.orden, 'orden', driver)
+        : null
+  const colOrdenId = fields.orden_id ? quoteColumn(fields.orden_id, 'orden_id', driver) : null
 
   if (filters.codigo_cliente?.trim() && colCodigoCliente) {
     where.push(`${colCodigoCliente} = ?`)
@@ -128,6 +149,32 @@ function applyFilters(
       where.push(`${colReceta} LIKE ?`)
       params.push(`%${filters.receta.trim()}%`)
     }
+  }
+  if (filters.factura?.trim() && colFactura) {
+    if (filters.facturaExact) {
+      where.push(`TO_VARCHAR(${colFactura}) = ?`)
+      params.push(filters.factura.trim())
+    } else {
+      where.push(`TO_VARCHAR(${colFactura}) LIKE ?`)
+      params.push(`%${filters.factura.trim()}%`)
+    }
+  }
+  if (filters.orden?.trim() && colOrden) {
+    const o = filters.orden.trim()
+    const digits = opDocNum(o)
+    if (digits && digits !== o) {
+      where.push(
+        `(TO_VARCHAR(${colOrden}) = ? OR TO_VARCHAR(${colOrden}) LIKE ? OR TO_VARCHAR(${colOrden}) = ?)`,
+      )
+      params.push(o, `%${digits}`, digits)
+    } else {
+      where.push(`TO_VARCHAR(${colOrden}) = ?`)
+      params.push(o)
+    }
+  }
+  if (filters.orden_id?.trim() && colOrdenId) {
+    where.push(`TO_VARCHAR(${colOrdenId}) = ?`)
+    params.push(filters.orden_id.trim())
   }
   if (filters.desde?.trim() && colFecha) {
     const d = new Date(filters.desde)
@@ -183,6 +230,14 @@ async function queryMssqlGeneric(
       : null
     const colReceta = fields.receta_code ? quoteColumn(fields.receta_code, 'receta', driver) : null
     const colFecha = fields.fecha ? quoteColumn(fields.fecha, 'fecha', driver) : null
+    const colFactura = fields.factura ? quoteColumn(fields.factura, 'factura', driver) : null
+    const colOrden =
+      fields.orden_produccion
+        ? quoteColumn(fields.orden_produccion, 'orden_produccion', driver)
+        : fields.orden
+          ? quoteColumn(fields.orden, 'orden', driver)
+          : null
+    const colOrdenId = fields.orden_id ? quoteColumn(fields.orden_id, 'orden_id', driver) : null
 
     if (filters.codigo_cliente?.trim() && colCodigoCliente) {
       where.push(`${colCodigoCliente} = @codigo_cliente`)
@@ -199,6 +254,34 @@ async function queryMssqlGeneric(
         where.push(`${colReceta} LIKE @receta`)
         request.input('receta', sql.NVarChar, `%${filters.receta.trim()}%`)
       }
+    }
+    if (filters.factura?.trim() && colFactura) {
+      if (filters.facturaExact) {
+        where.push(`CAST(${colFactura} AS NVARCHAR(100)) = @factura`)
+        request.input('factura', sql.NVarChar, filters.factura.trim())
+      } else {
+        where.push(`CAST(${colFactura} AS NVARCHAR(100)) LIKE @factura`)
+        request.input('factura', sql.NVarChar, `%${filters.factura.trim()}%`)
+      }
+    }
+    if (filters.orden?.trim() && colOrden) {
+      const o = filters.orden.trim()
+      const digits = opDocNum(o)
+      if (digits && digits !== o) {
+        where.push(
+          `(CAST(${colOrden} AS NVARCHAR(100)) = @orden OR CAST(${colOrden} AS NVARCHAR(100)) LIKE @ordenLike OR CAST(${colOrden} AS NVARCHAR(100)) = @ordenNum)`,
+        )
+        request.input('orden', sql.NVarChar, o)
+        request.input('ordenLike', sql.NVarChar, `%${digits}`)
+        request.input('ordenNum', sql.NVarChar, digits)
+      } else {
+        where.push(`CAST(${colOrden} AS NVARCHAR(100)) = @orden`)
+        request.input('orden', sql.NVarChar, o)
+      }
+    }
+    if (filters.orden_id?.trim() && colOrdenId) {
+      where.push(`CAST(${colOrdenId} AS NVARCHAR(100)) = @orden_id`)
+      request.input('orden_id', sql.NVarChar, filters.orden_id.trim())
     }
     if (filters.desde?.trim() && colFecha) {
       const d = new Date(filters.desde)
