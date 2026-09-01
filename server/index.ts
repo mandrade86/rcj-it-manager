@@ -54,6 +54,7 @@ import { vacacionesRouter } from './routes/vacaciones.js'
 import { ADJUNTOS_TAREAS_DIR } from './utils/multerAdjuntosTareas.js'
 import { ADJUNTOS_PROYECTOS_DIR } from './utils/multerAdjuntosProyectos.js'
 import { CERTS_DIR } from './utils/multerCertificados.js'
+import { buildCorsOrigins } from './utils/corsOrigins.js'
 import { mountClientApp } from './utils/serveClient.js'
 import { sincronizarEmpleadosDepartamentoDesdeEhr } from './utils/sincronizarEmpleadoDepartamentoEhr.js'
 
@@ -61,11 +62,7 @@ const PORT = Number(process.env.PORT) || 3001
 const HOST = process.env.HOST ?? '0.0.0.0'
 const INIT_DATA_ON_START = process.env.INIT_DATA_ON_START === 'true'
 
-const CORS_ORIGINS = (process.env.CORS_ORIGINS ??
-  'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3001,http://127.0.0.1:3001')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
+const CORS_ORIGINS = buildCorsOrigins()
 
 const app = express()
 app.use(
@@ -76,6 +73,7 @@ app.use(
         callback(null, true)
         return
       }
+      console.warn(`CORS rechazado: ${origin} (permitidos: ${CORS_ORIGINS.join(', ')})`)
       callback(new Error(`Origen CORS no permitido: ${origin}`))
     },
     credentials: true,
@@ -201,6 +199,9 @@ async function main() {
   const server = app.listen(PORT, HOST, () => {
     console.log(`RCJ IT Manager — http://${HOST}:${PORT}`)
     logAuthMode()
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`CORS: ${CORS_ORIGINS.join(', ')}`)
+    }
   })
 
   const shutdown = () => {

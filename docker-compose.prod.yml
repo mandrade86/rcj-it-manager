@@ -38,6 +38,7 @@ services:
       AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
       EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehrapi.rcjcorp.hn/api/Login}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://portal.rcjcorporacion.com}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       # BI Costeo muestras — conexión SAP (opcional; también configurable en la app)
       SAP_BI_DRIVER: ${SAP_BI_DRIVER:-hana}
       SAP_BI_HOST: ${SAP_BI_HOST:-172.16.146.16}

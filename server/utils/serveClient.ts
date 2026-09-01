@@ -13,7 +13,11 @@ export function mountClientApp(app: Express): boolean {
     return false
   }
   app.use(express.static(CLIENT_DIST, { index: false, maxAge: '1h' }))
-  app.get(/^(?!\/api\/).*/, (_req, res, next) => {
+  // No devolver index.html para /assets/* (evita 500/MIME raro si falta un chunk)
+  app.get(/^\/assets\/.+/, (_req, res) => {
+    res.status(404).type('text/plain').send('Asset no encontrado. Vuelva a desplegar con --build.')
+  })
+  app.get(/^(?!\/api\/)(?!\/assets\/).*/, (_req, res, next) => {
     res.sendFile(path.join(CLIENT_DIST, 'index.html'), (err) => {
       if (err) next(err)
     })
