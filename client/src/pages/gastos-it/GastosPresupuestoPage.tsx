@@ -293,7 +293,8 @@ export function GastosPresupuestoPage() {
       setErr('Esa empresa ya está en la lista.')
       return
     }
-    setMonedaRows((prev) => [...prev, { empresa: e, moneda: 'USD' }].sort((a, b) =>
+    const row: MonedaRow = { empresa: e, moneda: 'USD' }
+    setMonedaRows((prev) => [...prev, row].sort((a, b) =>
       a.empresa.localeCompare(b.empresa, 'es'),
     ))
     setEmpresas((prev) => [...new Set([...prev, e])].sort((a, b) => a.localeCompare(b, 'es')))
