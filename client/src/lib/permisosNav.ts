@@ -22,6 +22,7 @@ export const PERMISOS_FUERA_BI_COSTEO = [
   'roles:editar',
   'it:arquitectura:ver',
   'it:arquitectura:editar',
+  'it:gastos:ver',
 ] as const
 
 /** Permisos requeridos por ruta (cualquiera del arreglo basta). */
@@ -47,6 +48,9 @@ export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/admin/usuarios': 'usuarios:ver',
   '/admin/roles': 'roles:ver',
   '/it/arquitectura': 'it:arquitectura:ver',
+  '/it/gastos-control': 'it:gastos:ver',
+  '/it/gastos-dashboard': 'it:gastos:ver',
+  '/it/gastos-presupuesto': 'it:gastos:ver',
   '/bi/costeo-muestras': 'bi:costeo:ver',
 }
 
@@ -89,6 +93,7 @@ export function resolveDefaultRoute(
 ): string {
   if (hasPermiso('*') || hasPermiso('dashboard:ver')) return '/'
   if (hasPermiso('bi:costeo:ver')) return '/bi/costeo-muestras'
+  if (hasPermiso('it:gastos:ver')) return '/it/gastos-control'
   if (hasPermiso('proyectos:ver')) return '/proyectos'
   if (hasPermiso('equipo:ver')) return '/equipo'
   if (hasPermiso('capacitaciones:ver')) return '/capacitaciones'

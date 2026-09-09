@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -29,7 +28,6 @@ import {
   fetchGastosFinanciero,
   fetchGastosOpex,
   fetchGastosUltimoSync,
-  postGastosAnalizarOpexIA,
   postGastosSync,
   type GastosDiagnostico,
 } from '@/lib/api/gastos'
@@ -81,9 +79,6 @@ export function GastosPage() {
   const [ultimo, setUltimo] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [iaAnalisis, setIaAnalisis] = useState<string | null>(null)
-  const [iaLoading, setIaLoading] = useState(false)
-  const [iaError, setIaError] = useState<string | null>(null)
 
   // Cargar la lista de departamentos elegibles (1 si no eres admin, todos si lo eres).
   useEffect(() => {
@@ -144,21 +139,6 @@ export function GastosPage() {
     )
   }, [opex])
 
-  const handleAnalizarIA = async () => {
-    setIaLoading(true)
-    setIaError(null)
-    try {
-      const result = await postGastosAnalizarOpexIA(
-        departamentoId ? { departamento_id: departamentoId } : undefined,
-      )
-      setIaAnalisis(result.analisis)
-    } catch (e) {
-      setIaError(e instanceof Error ? e.message : 'Error al analizar')
-    } finally {
-      setIaLoading(false)
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -204,20 +184,6 @@ export function GastosPage() {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="outline"
-            disabled={iaLoading || !departamentoId || !opex?.archivoExiste}
-            className="gap-1.5 border-[var(--navy)]/30 text-[var(--navy)]"
-            onClick={() => void handleAnalizarIA()}
-          >
-            {iaLoading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
-            {iaLoading ? 'Analizando…' : 'Analizar con IA'}
-          </Button>
-          <Button
-            type="button"
             disabled={syncing || !departamentoId}
             className="bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
             onClick={async () => {
@@ -242,38 +208,6 @@ export function GastosPage() {
           </Button>
         </div>
       </div>
-
-      {(iaAnalisis || iaError) && (
-        <Card className="border-[var(--navy)]/20 bg-gradient-to-br from-[var(--blue-lt)]/40 to-white shadow-sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
-            <CardTitle className="flex items-center gap-2 text-base text-[var(--navy)]">
-              <Sparkles className="size-4 text-[var(--lime)]" />
-              Análisis de IA — Oportunidades de ahorro OPEX
-            </CardTitle>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 shrink-0 text-muted-foreground"
-              onClick={() => {
-                setIaAnalisis(null)
-                setIaError(null)
-              }}
-            >
-              Cerrar
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {iaError ? (
-              <p className="text-sm text-destructive">{iaError}</p>
-            ) : (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {iaAnalisis}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {err && (
         <p className="text-sm text-destructive">

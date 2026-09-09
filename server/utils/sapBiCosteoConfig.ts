@@ -281,6 +281,19 @@ export function sanitizeSqlIdentifier(name: string, label: string): string {
   return trimmed
 }
 
+/** Comillas para columnas reales de SAP (pueden incluir acentos, espacios, etc.). */
+export function quoteSqlIdentifierLoose(name: string, driver: SapBiDriver): string {
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('Identificador SQL vacío')
+  if (/["\r\n]/.test(trimmed)) {
+    throw new Error(`Identificador inválido: ${name}`)
+  }
+  if (driver === 'hana') {
+    return `"${trimmed.replace(/"/g, '""')}"`
+  }
+  return `[${trimmed.replace(/\]/g, ']]')}]`
+}
+
 export function qualifiedViewName(schema: string, viewName: string, driver: SapBiDriver = 'mssql'): string {
   const v = sanitizeSqlIdentifier(viewName, 'vista')
   const s = (schema?.trim() || '').length > 0 ? sanitizeSqlIdentifier(schema, 'esquema') : ''

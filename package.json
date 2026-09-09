@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-clean-ports.mjs && concurrently -k -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "predev": "npm install --include=dev --prefer-offline --no-audit --no-fund",
+    "dev": "node scripts/dev-clean-ports.mjs && npx concurrently -k -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
     "dev:clean": "node scripts/dev-clean-ports.mjs",
     "dev:client": "node scripts/wait-for-api.mjs && npm run dev --prefix client",
     "dev:server": "nodemon --watch server --ext ts --legacy-watch --delay 500 --exec tsx server/index.ts",
@@ -32,7 +33,6 @@
     "talento:importar:prod": "bash scripts/docker-importar-talento.sh"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.96.0",
     "@sap/hana-client": "^2.29.25",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",

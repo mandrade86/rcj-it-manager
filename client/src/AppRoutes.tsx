@@ -32,6 +32,9 @@ import { RolesPage } from '@/pages/maestros/RolesPage'
 import { UsuariosPage } from '@/pages/maestros/UsuariosPage'
 import { ArquitecturaDashboardPage } from '@/pages/it/ArquitecturaDashboardPage'
 import { CosteoMuestrasPage } from '@/pages/bi/CosteoMuestrasPage'
+import { CostosItPage } from '@/pages/gastos-it/CostosItPage'
+import { GastosDashboardPage } from '@/pages/gastos-it/GastosDashboardPage'
+import { GastosPresupuestoPage } from '@/pages/gastos-it/GastosPresupuestoPage'
 import { ManualGuidePage } from '@/pages/manual/ManualGuidePage'
 import { ManualHubPage } from '@/pages/manual/ManualHubPage'
 
@@ -92,6 +95,12 @@ export function AppRoutes() {
 
           <Route element={<ProtectedRoute permiso="bi:costeo:ver" />}>
             <Route path="bi/costeo-muestras" element={<CosteoMuestrasPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="it:gastos:ver" />}>
+            <Route path="it/gastos-control" element={<CostosItPage />} />
+            <Route path="it/gastos-dashboard" element={<GastosDashboardPage />} />
+            <Route path="it/gastos-presupuesto" element={<GastosPresupuestoPage />} />
           </Route>
 
           <Route element={<ProtectedRoute permiso="it:arquitectura:ver" />}>

@@ -29,6 +29,7 @@ import {
   normalizeEhrLoginUrl,
 } from '../utils/ehrAuth.js'
 import { ensureSapBiCosteoConfigFromEnv, ensureSapBiCosteoColumnMapping } from '../utils/sapBiCosteoConfig.js'
+import { loadCostosItConfig, saveCostosItConfig } from '../utils/sapCostosItConfig.js'
 import {
   CONFIG_CLAVE_EHR_COMPANY_LIST,
   DEFAULT_EHR_COMPANY_LIST_URL,
@@ -824,6 +825,7 @@ const ROLES_INICIALES = [
       'usuarios:ver', 'usuarios:editar', 'roles:ver', 'roles:editar',
       'it:arquitectura:ver', 'it:arquitectura:editar',
       'bi:costeo:ver', 'bi:costeo:config',
+      'it:gastos:ver', 'it:gastos:config',
     ],
   },
   {
@@ -855,6 +857,11 @@ const ROLES_INICIALES = [
     nombre: 'BI Costeo Admin',
     descripcion: 'BI Costeo de muestras con permiso para configurar conexión SAP',
     permisos: ['bi:costeo:ver', 'bi:costeo:config'],
+  },
+  {
+    nombre: 'Gastos IT',
+    descripcion: 'Solo control de gastos del departamento IT desde SAP HANA',
+    permisos: ['it:gastos:ver'],
   },
 ]
 
@@ -931,6 +938,9 @@ const PERMISO_ARQ_IT_VER = 'it:arquitectura:ver'
 const PERMISOS_BI_COSTEO_EDIT = ['bi:costeo:ver', 'bi:costeo:config'] as const
 const PERMISO_BI_COSTEO_VER = 'bi:costeo:ver'
 
+const PERMISOS_COSTOS_IT_EDIT = ['it:gastos:ver', 'it:gastos:config'] as const
+const PERMISO_COSTOS_IT_VER = 'it:gastos:ver'
+
 const ROLES_BI_COSTEO = [
   {
     nombre: 'BI Costeo',
@@ -941,6 +951,14 @@ const ROLES_BI_COSTEO = [
     nombre: 'BI Costeo Admin',
     descripcion: 'BI Costeo de muestras con permiso para configurar conexión SAP',
     permisos: [...PERMISOS_BI_COSTEO_EDIT],
+  },
+] as const
+
+const ROLES_COSTOS_IT = [
+  {
+    nombre: 'Gastos IT',
+    descripcion: 'Solo control de gastos del departamento IT desde SAP HANA',
+    permisos: [PERMISO_COSTOS_IT_VER],
   },
 ] as const
 
@@ -995,6 +1013,37 @@ export async function ensureSapBiCosteoPermisos(): Promise<void> {
   await ensureSapBiCosteoConfigFromEnv()
   await ensureSapBiCosteoColumnMapping()
   await ensureBiCosteoDemoUser()
+}
+
+export async function ensureCostosItPermisos(): Promise<void> {
+  await Rol.updateMany(
+    { nombre: 'Jefe IT' },
+    { $addToSet: { permisos: { $each: [...PERMISOS_COSTOS_IT_EDIT] } } },
+  )
+  for (const r of ROLES_COSTOS_IT) {
+    await Rol.findOneAndUpdate(
+      { nombre: r.nombre },
+      { $setOnInsert: { descripcion: r.descripcion, permisos: [...r.permisos], activo: true } },
+      { upsert: true },
+    )
+  }
+  await ensureCostosItConfigFromEnv()
+  const { ensureGastosItCategorias } = await import('../utils/gastosItCategorias.js')
+  const { ensureGastosItAnalisisDefaults } = await import('../utils/gastosItDashboardMensual.js')
+  await ensureGastosItCategorias()
+  await ensureGastosItAnalisisDefaults()
+}
+
+async function ensureCostosItConfigFromEnv(): Promise<void> {
+  const envView = process.env.SAP_COSTOS_IT_VIEW?.trim()
+  const envSchema = process.env.SAP_COSTOS_IT_SCHEMA?.trim()
+  if (!envView && !envSchema) return
+
+  const current = await loadCostosItConfig()
+  await saveCostosItConfig({
+    viewName: envView || current.viewName,
+    schema: envSchema || current.schema,
+  })
 }
 
 export async function ensureITArquitecturaData(): Promise<void> {

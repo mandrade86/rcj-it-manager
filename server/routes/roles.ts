@@ -36,6 +36,8 @@ export const PERMISOS_DISPONIBLES = [
   { clave: 'it:arquitectura:editar', descripcion: 'Arquitectura IT — editar' },
   { clave: 'bi:costeo:ver', descripcion: 'BI Costeo muestras — ver dashboard' },
   { clave: 'bi:costeo:config', descripcion: 'BI Costeo muestras — configurar conexión SAP' },
+  { clave: 'it:gastos:ver', descripcion: 'Gastos IT — dashboard desde SAP HANA (VW_COSTOS_IT)' },
+  { clave: 'it:gastos:config', descripcion: 'Gastos IT — configurar mapeo de columnas' },
 ]
 
 rolesRouter.get('/permisos-disponibles', (_req, res) => {

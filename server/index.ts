@@ -6,6 +6,7 @@ import mongoose from 'mongoose'
 
 import { connectDb } from './db/connection.js'
 import './db/models/index.js'
+import { ensurePresupuestoIndexes } from './db/models/GastosItPresupuesto.js'
 import {
   ensureDepartamentos,
   ensureEjesProyecto,
@@ -17,6 +18,7 @@ import {
   ensurePlantillasCarrera,
   ensureITArquitecturaData,
   ensureSapBiCosteoPermisos,
+  ensureCostosItPermisos,
   ensureRolesYAdmin,
   ensureRubricasPorPerfil,
   ensureRubricasPorPuesto,
@@ -33,6 +35,7 @@ import { kpiRegistrosRouter } from './routes/kpiRegistros.js'
 import { kpisRouter } from './routes/kpis.js'
 import { metasRouter } from './routes/metas.js'
 import { costeoMuestrasRouter } from './routes/costeoMuestras.js'
+import { costosItRouter } from './routes/costosIt.js'
 import { capacitacionColaboradoresRouter } from './routes/capacitacionColaboradores.js'
 import { capacitacionesRouter } from './routes/capacitaciones.js'
 import { colaboradoresRouter } from './routes/colaboradores.js'
@@ -112,6 +115,7 @@ app.use('/api/usuarios', usuariosRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/gastos', gastosRouter)
 app.use('/api/costeo-muestras', costeoMuestrasRouter) // BI: consumo real OP + OP vs receta
+app.use('/api/costos-it', costosItRouter) // Control gastos departamento IT desde SAP HANA
 app.use('/api/it', itArquitecturaRouter)
 app.use('/api/kpi-registros', kpiRegistrosRouter)
 app.use('/api/kpis', kpisRouter)
@@ -169,6 +173,8 @@ function logAuthMode() {
 async function runStartupMigrations() {
   try {
     await ensureSapBiCosteoPermisos()
+    await ensureCostosItPermisos()
+    await ensurePresupuestoIndexes()
   } catch (err) {
     console.error('Error en migraciones ligeras (la API sigue activa):', err)
   }

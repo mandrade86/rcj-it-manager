@@ -454,73 +454,9 @@ gastosRouter.post('/sync', async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-/** POST /api/gastos/analizar-opex-ia — análisis ejecutivo OPEX con Claude. */
-gastosRouter.post('/analizar-opex-ia', async (req, res, next) => {
-  try {
-    const resolved = await resolveDepartamentoForRequest(req)
-    if (!resolved.ok) {
-      res.status(resolved.status).json({ error: resolved.error })
-      return
-    }
-    const ctx = ctxFromDept(resolved.dept)
-    const { wb, archivoExiste, readError } = readWb(ctx.archivoRelativo)
-    const opex = loadOpex(wb, ctx.archivoRelativo, archivoExiste, readError)
-
-    if (!opex.archivoExiste || !opex.categorias.length) {
-      res.status(400).json({
-        error:
-          'No hay datos OPEX disponibles para analizar. Verifica que el archivo gastos.xlsx esté en su lugar.',
-      })
-      return
-    }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada en el servidor.' })
-      return
-    }
-
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic({ apiKey })
-
-    const resumenCategorias = [...opex.categorias]
-      .sort((a, b) => b.total - a.total)
-      .map(
-        (c) =>
-          `- ${c.nombre}: Lps ${c.total.toLocaleString('es-HN', { minimumFractionDigits: 2 })} (meta -20%: Lps ${c.meta20.toLocaleString('es-HN', { minimumFractionDigits: 2 })})`,
-      )
-      .join('\n')
-
-    const prompt = `Eres un consultor de eficiencia IT para RCJ Corporación, grupo empresarial en Honduras.
-El área de IT tiene como meta reducir su OPEX (gastos operativos) entre un 15% y 25% durante 2026.
-
-Estos son los gastos OPEX actuales por categoría (en Lempiras hondureños):
-${resumenCategorias}
-
-Total OPEX anual: Lps ${opex.totalAnual.toLocaleString('es-HN', { minimumFractionDigits: 2 })}
-Meta de ahorro (-20%): Lps ${opex.ahorroProyectado.toLocaleString('es-HN', { minimumFractionDigits: 2 })}
-
-Proporciona un análisis ejecutivo en español con:
-1. Las 3 categorías con mayor potencial de ahorro (justifica brevemente por qué)
-2. Una acción concreta y realista para cada una de esas 3 categorías
-3. Una estimación de ahorro alcanzable en lempiras para cada acción
-4. Una recomendación de priorización (qué hacer primero)
-
-Sé directo y orientado a la acción. No uses listas muy largas. Máximo 250 palabras.`
-
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 700,
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const texto = message.content
-      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-
-    res.json({ ok: true, analisis: texto, generadoEn: new Date().toISOString() })
-  } catch (err) {
-    next(err)
-  }
+/** POST /api/gastos/analizar-opex-ia — desactivado (sin OpenAI / IA opcional). */
+gastosRouter.post('/analizar-opex-ia', async (_req, res) => {
+  res.status(503).json({
+    error: 'Análisis con IA desactivado. OpenAI no está habilitado en esta instalación.',
+  })
 })

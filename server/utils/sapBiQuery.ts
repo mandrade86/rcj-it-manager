@@ -10,6 +10,7 @@ import {
   qualifiedViewName,
   quoteAlias,
   quoteColumn,
+  quoteSqlIdentifierLoose,
 } from './sapBiCosteoConfig.js'
 
 export type CosteoMuestraRow = {
@@ -389,4 +390,146 @@ export async function detectViewColumnMapping(cfg: SapBiCosteoConfig): Promise<{
 }> {
   const columnas = await listViewColumns(cfg)
   return { columnas, sugerido: suggestColumnMapping(columnas) }
+}
+
+export type HanaViewRef = { schema: string; viewName: string }
+
+/** Busca vistas en HANA por nombre (SYS.VIEWS). */
+export async function listHanaViews(
+  cfg: SapBiCosteoConfig,
+  opts?: { nameLike?: string; schema?: string; limit?: number },
+): Promise<HanaViewRef[]> {
+  if (!cfg.password?.trim()) throw new Error('Contraseña SAP no configurada')
+  if (cfg.driver !== 'hana') return []
+
+  const conn = await hanaConnect(cfg)
+  try {
+    const params: unknown[] = []
+    const where: string[] = []
+    if (opts?.schema?.trim()) {
+      where.push('SCHEMA_NAME = ?')
+      params.push(opts.schema.trim().toUpperCase())
+    }
+    if (opts?.nameLike?.trim()) {
+      where.push('VIEW_NAME LIKE ?')
+      params.push(opts.nameLike.trim().toUpperCase())
+    }
+    const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200)
+    const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : ''
+    const rows = await hanaExec(
+      conn,
+      `SELECT SCHEMA_NAME, VIEW_NAME FROM SYS.VIEWS${whereSql}
+       ORDER BY SCHEMA_NAME, VIEW_NAME LIMIT ${limit}`,
+      params,
+    )
+    return rows
+      .map((r) => ({
+        schema: String(r.SCHEMA_NAME ?? r.schema_name ?? '').trim(),
+        viewName: String(r.VIEW_NAME ?? r.view_name ?? '').trim(),
+      }))
+      .filter((v) => v.schema && v.viewName)
+  } finally {
+    await hanaDisconnect(conn)
+  }
+}
+
+export function isSapViewNotFoundError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /invalid table name|could not find table\/view|table or view not found|259/i.test(msg)
+}
+
+export type SapViewRawFilter = {
+  column: string
+  op: '=' | 'LIKE' | '>=' | '<='
+  value: unknown
+}
+
+/** SELECT * desde una vista SAP (HANA o MSSQL), con columnas detectadas dinámicamente. */
+export async function querySapViewRaw(
+  cfg: SapBiCosteoConfig,
+  viewName: string,
+  opts?: {
+    schema?: string
+    filters?: SapViewRawFilter[]
+    limit?: number
+  },
+): Promise<{ columnas: string[]; filas: Record<string, unknown>[] }> {
+  if (!cfg.password?.trim()) throw new Error('Contraseña SAP no configurada')
+  const schema = opts?.schema?.trim() || effectiveSchema(cfg)
+  const limit = Math.min(Math.max(opts?.limit ?? 5000, 1), 20000)
+  const viewCfg = { ...cfg, schema, viewName }
+  const columnas = await listViewColumns(viewCfg, viewName)
+
+  const whereParts: string[] = []
+  const params: unknown[] = []
+  for (const f of opts?.filters ?? []) {
+    if (!f.column?.trim()) continue
+    const colRef = quoteSqlIdentifierLoose(f.column, cfg.driver)
+    if (f.op === 'LIKE') {
+      whereParts.push(`${colRef} LIKE ?`)
+      params.push(`%${String(f.value ?? '').trim()}%`)
+    } else if (f.op === '>=' || f.op === '<=') {
+      whereParts.push(`${colRef} ${f.op} ?`)
+      params.push(f.value)
+    } else {
+      whereParts.push(`${colRef} = ?`)
+      params.push(f.value)
+    }
+  }
+  const whereSql = whereParts.length ? ` WHERE ${whereParts.join(' AND ')}` : ''
+
+  if (cfg.driver === 'hana') {
+    const conn = await hanaConnect(viewCfg)
+    try {
+      const view = qualifiedViewName(schema, viewName, 'hana')
+      const query = `SELECT * FROM ${view}${whereSql} LIMIT ${limit}`
+      const rows = await hanaExec(conn, query, params)
+      const filas = rows.map((r) => {
+        const out: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(r)) out[k] = v
+        return out
+      })
+      const cols = columnas.length
+        ? columnas
+        : filas[0]
+          ? Object.keys(filas[0])
+          : []
+      return { columnas: cols, filas }
+    } finally {
+      await hanaDisconnect(conn)
+    }
+  }
+
+  const pool = new sql.ConnectionPool({
+    server: cfg.host,
+    port: cfg.port,
+    database: cfg.database,
+    user: cfg.username,
+    password: cfg.password ?? '',
+    options: {
+      encrypt: cfg.encrypt,
+      trustServerCertificate: cfg.trustServerCertificate,
+      enableArithAbort: true,
+    },
+    connectionTimeout: 20000,
+    requestTimeout: 120000,
+  })
+  await pool.connect()
+  try {
+    const view = qualifiedViewName(schema || 'dbo', viewName, 'mssql')
+    const top = limit > 0 ? `TOP (${limit})` : ''
+    const req = pool.request()
+    opts?.filters?.forEach((f, i) => {
+      req.input(`p${i}`, f.value)
+    })
+    const whereMssql = whereParts.length
+      ? ` WHERE ${whereParts.map((w, i) => w.replace('?', `@p${i}`)).join(' AND ')}`
+      : ''
+    const result = await req.query(`SELECT ${top} * FROM ${view}${whereMssql}`)
+    const filas = (result.recordset ?? []) as Record<string, unknown>[]
+    const cols = columnas.length ? columnas : filas[0] ? Object.keys(filas[0]) : []
+    return { columnas: cols, filas }
+  } finally {
+    await pool.close()
+  }
 }

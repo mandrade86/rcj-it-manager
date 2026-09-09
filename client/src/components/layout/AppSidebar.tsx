@@ -192,6 +192,7 @@ export function AppSidebar() {
   const adminItems = adminNav.filter((i) => hasPermiso(i.permiso))
   const mostrarArqIT = hasPermiso('it:arquitectura:ver') || hasPermiso('*')
   const mostrarBiCosteo = hasPermiso('bi:costeo:ver') || hasPermiso('*')
+  const mostrarGastosIt = hasPermiso('it:gastos:ver') || hasPermiso('*')
 
   const isAdmin = hasPermiso('*')
   const llevaGastos = Boolean(user?.departamento_lleva_gastos)
@@ -266,6 +267,17 @@ export function AppSidebar() {
           {navGroups.map((group) => (
             <NavGroup key={group.id} group={group} collapsed={collapsed} />
           ))}
+
+          {mostrarGastosIt && (
+            <>
+              <GroupLabel icon={Wallet} label="Finanzas IT" collapsed={collapsed} />
+              <div className="flex flex-col gap-0.5">
+                <NavItem to="/it/gastos-dashboard" label="Dashboard de Gastos" icon={BarChart3} collapsed={collapsed} />
+                <NavItem to="/it/gastos-presupuesto" label="Presupuesto IT" icon={Target} collapsed={collapsed} />
+                <NavItem to="/it/gastos-control" label="Control gastos IT" icon={Wallet} collapsed={collapsed} />
+              </div>
+            </>
+          )}
 
           {mostrarBiCosteo && (
             <>
