@@ -68,20 +68,29 @@ const INIT_DATA_ON_START = process.env.INIT_DATA_ON_START === 'true'
 const CORS_ORIGINS = buildCorsOrigins()
 
 const app = express()
-app.use(
-  cors({
-    origin(origin, callback) {
-      // Sin Origin = same-origin / herramientas locales (curl, healthchecks)
-      if (!origin || CORS_ORIGINS.includes(origin)) {
-        callback(null, true)
-        return
-      }
-      console.warn(`CORS rechazado: ${origin} (permitidos: ${CORS_ORIGINS.join(', ')})`)
-      callback(new Error(`Origen CORS no permitido: ${origin}`))
-    },
-    credentials: true,
-  }),
-)
+// Vite pone crossorigin en /assets: un Error en el callback de cors → HTTP 500.
+// SPA/assets reflejan Origin; /api usa lista blanca (sin lanzar Error).
+const apiCors = cors({
+  origin(origin, callback) {
+    if (!origin || CORS_ORIGINS.includes(origin)) {
+      callback(null, true)
+      return
+    }
+    console.warn(`CORS rechazado: ${origin} (permitidos: ${CORS_ORIGINS.join(', ')})`)
+    callback(null, false)
+  },
+  credentials: true,
+})
+const spaCors = cors({
+  origin: true,
+  credentials: true,
+})
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return apiCors(req, res, next)
+  }
+  return spaCors(req, res, next)
+})
 app.use(express.json({ limit: '2mb' }))
 app.use('/api/certificados', express.static(CERTS_DIR))
 app.use('/api/adjuntos-tareas', express.static(ADJUNTOS_TAREAS_DIR))

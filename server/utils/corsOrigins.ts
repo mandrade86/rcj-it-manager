@@ -3,6 +3,10 @@ const DEFAULT_CORS_ORIGINS = [
   'http://127.0.0.1:5173',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
+  'http://portal.rcjcorporacion.com',
+  'https://portal.rcjcorporacion.com',
+  'http://portal.rcjcorp.hn',
+  'https://portal.rcjcorp.hn',
 ]
 
 /** Orígenes permitidos para CORS (incluye APP_PUBLIC_URL y variante http/https). */
