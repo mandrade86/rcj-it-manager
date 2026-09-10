@@ -31,7 +31,7 @@ import type { RolDoc } from '@/types/rol'
 import type { UsuarioDoc } from '@/types/usuario'
 import {
   deptFromUsuario, empleadoFromUsuario, empleadoIdFromUsuario,
-  empleadoIdsFromUsuario, empleadosFromUsuario, loginDisplayFromUsuario, rolFromUsuario,
+  empleadoIdsFromUsuario, rolFromUsuario,
 } from '@/types/usuario'
 
 const selectClass =

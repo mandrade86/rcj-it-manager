@@ -101,7 +101,7 @@ function fmtValor(v: number | null | undefined, unidad?: string | null): string 
 
 const FRECUENCIAS = ['Mensual', 'Trimestral', 'Anual', 'Único'] as const
 
-const GROUP_COLORS = [
+const GROUP_COLORS: string[] = [
   BOARD.blue,
   BOARD.green,
   BOARD.orange,
@@ -109,7 +109,8 @@ const GROUP_COLORS = [
   BOARD.purple,
   BOARD.red,
   BOARD.primary,
-] as const
+  BOARD.gray,
+]
 
 function cumplimientoColor(pct: number): string {
   if (pct >= 80) return BOARD.green

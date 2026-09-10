@@ -3,7 +3,6 @@ import {
   ClipboardList, Crown, Edit2, ListChecks, Plus, PlusCircle, Printer, Save, Sparkles, Target, Trash2, X,
 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,

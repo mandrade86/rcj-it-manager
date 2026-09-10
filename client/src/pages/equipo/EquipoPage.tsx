@@ -18,8 +18,6 @@ import { Label } from '@/components/ui/label'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { PaginationBar } from '@/components/ui/PaginationBar'
-import { usePagination } from '@/hooks/usePagination'
 import { fetchColaboradorPorEmpleado } from '@/lib/api/colaboradores'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchEmpresas } from '@/lib/api/empresas'
@@ -217,11 +215,6 @@ export function EquipoPage() {
       return true
     })
   }, [empleados, filterDept, filterEmpresa, filterEstado, busqueda, deptToEmpresaId])
-
-  const pagination = usePagination(filtrados.length, {
-    resetKey: `${filterDept}|${filterEmpresa}|${filterEstado}|${busqueda}|${empleados.length}`,
-  })
-  const pageFiltrados = pagination.slice(filtrados)
 
   const selected = useMemo(
     () => filtrados.find((e) => e._id === selectedId) ?? null,
