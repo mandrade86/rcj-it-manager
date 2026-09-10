@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BadgeCheck, Building2, CalendarDays, Crown, Edit2, Factory, FileText, Globe2, LayoutGrid, List, Network,
+  BadgeCheck, Building2, Crown, Edit2, Factory, FileText, Globe2, LayoutGrid, List, Network,
   Plus, RefreshCw, Search, Trash2, UserCircle, Users,
 } from 'lucide-react'
 
@@ -15,9 +15,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 import { fetchColaboradorPorEmpleado } from '@/lib/api/colaboradores'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchEmpresas } from '@/lib/api/empresas'
@@ -29,9 +26,8 @@ import { fetchVacacionesResumen } from '@/lib/api/vacaciones'
 import {
   buildDeptToEmpresaIdMap,
   empleadoEmpresaId,
-  empresaNombrePorId,
 } from '@/lib/deptoEmpresaFilter'
-import { OrgChart, OrgDetailPanel, Avatar } from '@/pages/maestros/OrgChart'
+import { OrgChart, OrgDetailPanel } from '@/pages/maestros/OrgChart'
 import { EquipoTablaBoard } from '@/pages/equipo/EquipoTablaBoard'
 import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'

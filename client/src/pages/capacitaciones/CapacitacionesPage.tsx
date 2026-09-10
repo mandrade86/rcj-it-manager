@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Award, ClipboardList, Plus, Trash2, Upload } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -42,7 +41,6 @@ import {
   createProveedorCapacitacion,
   fetchProveedoresCapacitacion,
 } from '@/lib/api/proveedoresCapacitacion'
-import { formatDateDMY, formatLps } from '@/lib/format'
 import { useAuthStore } from '@/store/authStore'
 import type { Colaborador } from '@/types/colaborador'
 import type {
@@ -55,7 +53,6 @@ import {
   certificadoPublicUrl,
   departamentoIdsFromCap,
   departamentosFromCap,
-  proveedorNombreFromCap,
 } from '@/types/capacitacion'
 import type { DepartamentoDoc } from '@/types/departamento'
 
