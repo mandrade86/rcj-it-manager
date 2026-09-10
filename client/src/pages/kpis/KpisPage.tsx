@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { Lightbulb, Pencil, Plus, Target, Trash2 } from 'lucide-react'
 
+import { BOARD, BoardPill, EntityBoard } from '@/components/board/EntityBoard'
 import { GaugeRing } from '@/components/kpis/GaugeRing'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,10 +35,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { Textarea } from '@/components/ui/textarea'
 import { MetasDepartamentoDialog } from '@/components/kpis/MetasDepartamentoDialog'
-import { usePagination } from '@/hooks/usePagination'
 import { fetchDepartamentos, updateDepartamentoMetas } from '@/lib/api/departamentos'
 import {
   getMetasDepartamento,
@@ -101,6 +100,31 @@ function fmtValor(v: number | null | undefined, unidad?: string | null): string 
 }
 
 const FRECUENCIAS = ['Mensual', 'Trimestral', 'Anual', 'Único'] as const
+
+const GROUP_COLORS = [
+  BOARD.blue,
+  BOARD.green,
+  BOARD.orange,
+  BOARD.indigo,
+  BOARD.purple,
+  BOARD.red,
+  BOARD.primary,
+] as const
+
+function cumplimientoColor(pct: number): string {
+  if (pct >= 80) return BOARD.green
+  if (pct >= 50) return BOARD.orange
+  if (pct > 0) return BOARD.red
+  return BOARD.gray
+}
+
+function frecuenciaColor(freq: string | null | undefined): string {
+  if (freq === 'Mensual') return BOARD.blue
+  if (freq === 'Trimestral') return BOARD.indigo
+  if (freq === 'Anual') return BOARD.purple
+  if (freq === 'Único') return BOARD.orange
+  return BOARD.gray
+}
 
 type EditorForm = {
   departamento_id: string
@@ -236,11 +260,6 @@ export function KpisPage() {
       ),
     [kpis],
   )
-
-  const paginationKpis = usePagination(kpisOrdenados.length, {
-    resetKey: `${filtroDepto}|${kpisOrdenados.length}`,
-  })
-  const kpisPagina = paginationKpis.slice(kpisOrdenados)
 
   const deptSeleccionado = useMemo(() => {
     if (filtroDepto === 'all' || filtroDepto === 'none') return null
@@ -470,7 +489,7 @@ export function KpisPage() {
   }
 
   function toggleSelectAllKpis() {
-    const ids = kpisPagina.map((k) => k._id)
+    const ids = kpisOrdenados.map((k) => k._id)
     setSelectedIds((prev) => {
       const all = ids.length > 0 && ids.every((i) => prev.has(i))
       if (all) return new Set()
@@ -506,8 +525,81 @@ export function KpisPage() {
 
   const seleccionCount = selectedIds.size
   const allKpisSelected =
-    kpisPagina.length > 0 && kpisPagina.every((k) => selectedIds.has(k._id))
-  const someKpisSelected = kpisPagina.some((k) => selectedIds.has(k._id))
+    kpisOrdenados.length > 0 && kpisOrdenados.every((k) => selectedIds.has(k._id))
+  const someKpisSelected = kpisOrdenados.some((k) => selectedIds.has(k._id))
+
+  const catalogGroups = useMemo(() => {
+    if (deptSeleccionado) {
+      const metas = metasVisibles.length > 0
+        ? metasVisibles
+        : [...new Set(kpisOrdenados.map((k) => metaEstrategicaDeKpi(k)))].map((id) => ({
+            id,
+            titulo: id === 'sin_meta' ? 'Sin meta' : id,
+          }))
+      const groups = metas.map((me, i) => ({
+        id: me.id,
+        label: me.titulo || me.id,
+        color: GROUP_COLORS[i % GROUP_COLORS.length],
+        match: (k: KpiDoc) => metaEstrategicaDeKpi(k) === me.id,
+      }))
+      const covered = new Set(groups.map((g) => g.id))
+      const orphanIds = [
+        ...new Set(
+          kpisOrdenados
+            .map((k) => metaEstrategicaDeKpi(k))
+            .filter((id) => !covered.has(id)),
+        ),
+      ]
+      for (const id of orphanIds) {
+        groups.push({
+          id,
+          label: id === 'sin_meta' ? 'Sin meta anual' : id,
+          color: BOARD.gray,
+          match: (k: KpiDoc) => metaEstrategicaDeKpi(k) === id,
+        })
+      }
+      return groups
+    }
+
+    // Vista global / sin depto: agrupar por departamento
+    const seen = new Map<string, { id: string; label: string; color: string }>()
+    for (const k of kpisOrdenados) {
+      const dRef = kpiDepartamentoRef(k)
+      const id = dRef?._id ?? 'none'
+      if (seen.has(id)) continue
+      seen.set(id, {
+        id,
+        label: dRef
+          ? `${dRef.codigo ?? '—'} · ${dRef.nombre ?? 'Departamento'}`
+          : 'Sin departamento',
+        color: dRef?.color?.trim() || GROUP_COLORS[seen.size % GROUP_COLORS.length],
+      })
+    }
+    if (seen.size === 0) {
+      return [
+        {
+          id: 'todos',
+          label: 'KPIs',
+          color: BOARD.blue,
+          match: () => true,
+        },
+      ]
+    }
+    return [...seen.values()].map((g) => ({
+      ...g,
+      match: (k: KpiDoc) => (kpiDepartamentoId(k) ?? 'none') === g.id,
+    }))
+  }, [deptSeleccionado, metasVisibles, kpisOrdenados])
+
+  const metaTituloForKpi = useCallback(
+    (k: KpiDoc) => {
+      const mid = metaEstrategicaDeKpi(k)
+      if (deptSeleccionado) return tituloMeta(metasVisibles, mid)
+      const dept = departamentos.find((d) => d._id === kpiDepartamentoId(k))
+      return tituloMeta(getMetasDepartamento(dept ?? null), mid)
+    },
+    [deptSeleccionado, metasVisibles, departamentos],
+  )
 
   const metasParaCards = metasDirty ? metasEditor : metasVisibles
 
@@ -967,7 +1059,7 @@ export function KpisPage() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
             <span className="text-muted-foreground">
               {seleccionCount === 0
-                ? 'Marca KPIs en la tabla para eliminarlos en lote.'
+                ? 'Marca KPIs en el tablero para eliminarlos en lote.'
                 : `${seleccionCount} seleccionado(s).`}
             </span>
             <Button
@@ -983,162 +1075,226 @@ export function KpisPage() {
             </Button>
           </div>
         )}
-        <Card>
-          <CardContent className="p-0">
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {puedeEliminarKpis && (
-                    <TableHead className="w-10 pr-0">
+        <EntityBoard
+          rows={kpisOrdenados}
+          countLabel="KPI"
+          emptyMessage="No hay KPIs para este filtro. Usa «Sugerencias» o «Nuevo KPI»."
+          minWidth="1100px"
+          groups={catalogGroups}
+          hideEmptyGroups
+          searchTexts={(k) => [
+            k.nombre,
+            k.descripcion,
+            k.eje,
+            k.meta,
+            k.frecuencia,
+            k.responsable,
+            kpiDepartamentoRef(k)?.codigo,
+            kpiDepartamentoRef(k)?.nombre,
+            metaTituloForKpi(k),
+          ]}
+          toolbarLeft={
+            puedeEliminarKpis && kpisOrdenados.length > 0 ? (
+              <label className="flex items-center gap-1.5 text-xs" style={{ color: BOARD.muted }}>
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--lime)]"
+                  checked={allKpisSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = !allKpisSelected && someKpisSelected
+                  }}
+                  onChange={toggleSelectAllKpis}
+                  title="Seleccionar todos"
+                />
+                Seleccionar visibles
+              </label>
+            ) : undefined
+          }
+          columns={[
+            ...(puedeEliminarKpis
+              ? [
+                  {
+                    id: 'sel',
+                    label: '',
+                    className: 'w-8',
+                    render: (k: KpiDoc) => (
                       <input
                         type="checkbox"
                         className="size-3.5 accent-[var(--lime)]"
-                        checked={allKpisSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = !allKpisSelected && someKpisSelected
-                        }}
-                        onChange={toggleSelectAllKpis}
-                        title="Seleccionar todos en la lista"
+                        checked={selectedIds.has(k._id)}
+                        onChange={() => toggleSelectKpi(k._id)}
+                        aria-label={`Seleccionar ${k.nombre}`}
                       />
-                    </TableHead>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              id: 'depto',
+              label: 'Departamento',
+              className: 'w-[120px]',
+              render: (k) => {
+                const dRef = kpiDepartamentoRef(k)
+                if (!dRef) {
+                  return <span className="text-xs" style={{ color: BOARD.muted }}>Sin asignar</span>
+                }
+                return (
+                  <Badge
+                    variant="outline"
+                    className="border"
+                    style={{
+                      borderColor: dRef.color ?? '#002060',
+                      color: dRef.color ?? '#002060',
+                    }}
+                  >
+                    {dRef.codigo ?? '—'}
+                  </Badge>
+                )
+              },
+            },
+            {
+              id: 'eje',
+              label: 'Eje',
+              className: 'w-[120px]',
+              render: (k) => (
+                <span className="text-xs uppercase" style={{ color: BOARD.muted }}>
+                  {k.eje}
+                </span>
+              ),
+            },
+            {
+              id: 'meta',
+              label: 'Meta anual',
+              className: 'w-[140px]',
+              render: (k) => (
+                <span className="text-xs">{metaTituloForKpi(k)}</span>
+              ),
+            },
+            {
+              id: 'nombre',
+              label: 'Nombre',
+              className: 'min-w-[180px]',
+              render: (k) => (
+                <div>
+                  <p className="text-[13px] font-medium leading-snug">{k.nombre}</p>
+                  {k.descripcion && (
+                    <p className="mt-0.5 line-clamp-1 text-[11px]" style={{ color: BOARD.muted }}>
+                      {k.descripcion}
+                    </p>
                   )}
-                  <TableHead className="w-[140px]">Departamento</TableHead>
-                  <TableHead className="w-[140px]">Eje</TableHead>
-                  <TableHead className="w-[130px]">Meta anual</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead className="w-[160px]">Objetivo</TableHead>
-                  <TableHead className="w-[110px]">Frecuencia</TableHead>
-                  <TableHead className="w-[120px]">Cálculo</TableHead>
-                  <TableHead className="w-[140px]">Último valor</TableHead>
-                  <TableHead className="w-[90px] text-center">Cumplim.</TableHead>
-                  <TableHead className="w-[110px] text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {kpisOrdenados.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={puedeEliminarKpis ? 11 : 10}
-                      className="py-6 text-center text-sm text-muted-foreground"
+                </div>
+              ),
+            },
+            {
+              id: 'objetivo',
+              label: 'Objetivo',
+              className: 'w-[140px]',
+              render: (k) => (
+                <span className="text-sm">
+                  {k.meta ?? '—'}{' '}
+                  {k.unidad && (
+                    <span className="text-xs" style={{ color: BOARD.muted }}>
+                      ({k.unidad})
+                    </span>
+                  )}
+                </span>
+              ),
+            },
+            {
+              id: 'freq',
+              label: 'Frecuencia',
+              className: 'w-[110px]',
+              render: (k) =>
+                k.frecuencia ? (
+                  <BoardPill
+                    label={k.frecuencia}
+                    bg={frecuenciaColor(k.frecuencia)}
+                    text="#fff"
+                  />
+                ) : (
+                  <span style={{ color: BOARD.muted }}>—</span>
+                ),
+            },
+            {
+              id: 'calculo',
+              label: 'Cálculo',
+              className: 'w-[120px]',
+              render: (k) => (
+                <span className="text-xs" style={{ color: BOARD.muted }}>
+                  {labelTipoCalculoKpi(k)}
+                </span>
+              ),
+            },
+            {
+              id: 'ultimo',
+              label: 'Último valor',
+              className: 'w-[120px]',
+              render: (k) => {
+                const ur = ultimoRegistro(k)
+                if (!ur) {
+                  return <span className="text-xs" style={{ color: BOARD.muted }}>Sin dato</span>
+                }
+                return (
+                  <div>
+                    <span className="font-medium tabular-nums text-sm">
+                      {fmtValor(ur.valor ?? null, k.unidad)}
+                    </span>
+                    <div className="text-[11px]" style={{ color: BOARD.muted }}>
+                      {formatDateDMY(ur.fecha)}
+                    </div>
+                  </div>
+                )
+              },
+            },
+            {
+              id: 'cumplim',
+              label: 'Cumplim.',
+              className: 'w-[100px]',
+              render: (k) => {
+                const pct = pctCumplimientoKpi(k)
+                return (
+                  <BoardPill
+                    label={`${pct}%`}
+                    bg={cumplimientoColor(pct)}
+                    text="#fff"
+                  />
+                )
+              },
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right' as const,
+              className: 'w-[100px]',
+              render: (k) => (
+                <div className="flex justify-end gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => openEditarKpi(k)}
+                    title="Editar"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  {puedeEliminarKpis && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-destructive hover:text-destructive"
+                      onClick={() => void handleDelete(k)}
+                      title="Eliminar"
                     >
-                      No hay KPIs para este filtro. Usa «Sugerencias» o «Nuevo KPI».
-                    </TableCell>
-                  </TableRow>
-                )}
-                {kpisPagina.map((k) => {
-                  const dRef = kpiDepartamentoRef(k)
-                  const ur = ultimoRegistro(k)
-                  const pct = pctCumplimientoKpi(k)
-                  return (
-                    <TableRow key={k._id}>
-                      {puedeEliminarKpis && (
-                        <TableCell className="w-10 pr-0">
-                          <input
-                            type="checkbox"
-                            className="size-3.5 accent-[var(--lime)]"
-                            checked={selectedIds.has(k._id)}
-                            onChange={() => toggleSelectKpi(k._id)}
-                            aria-label={`Seleccionar ${k.nombre}`}
-                          />
-                        </TableCell>
-                      )}
-                      <TableCell>
-                        {dRef ? (
-                          <Badge
-                            variant="outline"
-                            className="border"
-                            style={{ borderColor: dRef.color ?? '#002060', color: dRef.color ?? '#002060' }}
-                          >
-                            {dRef.codigo ?? '—'}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Sin asignar</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs uppercase text-muted-foreground">
-                        {k.eje}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {tituloMeta(metasVisibles, metaEstrategicaDeKpi(k))}
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-sm font-medium leading-snug">{k.nombre}</p>
-                        {k.descripcion && (
-                          <p className="mt-0.5 text-xs text-muted-foreground">{k.descripcion}</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {k.meta ?? '—'}{' '}
-                        {k.unidad && <span className="text-xs text-muted-foreground">({k.unidad})</span>}
-                      </TableCell>
-                      <TableCell className="text-sm">{k.frecuencia ?? '—'}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {labelTipoCalculoKpi(k)}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {ur ? (
-                          <>
-                            <span className="font-medium tabular-nums">
-                              {fmtValor(ur.valor ?? null, k.unidad)}
-                            </span>
-                            <div className="text-[11px] text-muted-foreground">
-                              {formatDateDMY(ur.fecha)}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Sin dato</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-center">
-                          <GaugeRing value={pct} size={42} />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2"
-                            onClick={() => openEditarKpi(k)}
-                            title="Editar"
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          {puedeEliminarKpis && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-destructive hover:text-destructive"
-                              onClick={() => void handleDelete(k)}
-                              title="Eliminar"
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={paginationKpis.page}
-              totalPages={paginationKpis.totalPages}
-              pageSize={paginationKpis.pageSize}
-              totalItems={paginationKpis.totalItems}
-              fromItem={paginationKpis.fromItem}
-              toItem={paginationKpis.toItem}
-              onPageChange={paginationKpis.setPage}
-              onPageSizeChange={paginationKpis.setPageSize}
-            />
-            </>
-          </CardContent>
-        </Card>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
       </section>
 
       <section>

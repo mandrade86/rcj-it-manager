@@ -435,7 +435,7 @@ export async function listHanaViews(
 
 export function isSapViewNotFoundError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err)
-  return /invalid table name|could not find table\/view|table or view not found|259/i.test(msg)
+  return /invalid table name|could not find table\/view|table or view not found|259|cannot find the object|objeto .* no (existe|encontr)|no such table/i.test(msg)
 }
 
 export type SapViewRawFilter = {

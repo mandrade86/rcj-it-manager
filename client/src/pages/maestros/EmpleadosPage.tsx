@@ -3,7 +3,6 @@ import {
   Cable, Edit2, Factory, LayoutGrid, List, Plus, RefreshCw, Save, Settings2, Trash2,
 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -11,9 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { BOARD, BoardAvatar, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import {
@@ -36,13 +33,8 @@ import type { DepartamentoDoc } from '@/types/departamento'
 import type { EmpleadoDoc } from '@/types/empleado'
 import type { EmpresaDoc } from '@/types/empresa'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { MAESTRO_SELECT_CLASS, compareStrings, type MaestroSortDir } from '@/lib/maestroList'
+import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
 import { DepartamentosMultiSelect } from '@/components/maestros/DepartamentosMultiSelect'
 import { OrgChart, OrgDetailPanel } from './OrgChart'
 import { departamentoIdsFromRefs } from '@/types/empleado'
@@ -101,9 +93,6 @@ export function EmpleadosPage() {
   const [filterDept, setFilterDept] = useState('')
   const [filterEmpresa, setFilterEmpresa] = useState('')
   const [filterEstado, setFilterEstado] = useState<'activos' | 'inactivos' | 'todos'>('activos')
-  const [busqueda, setBusqueda] = useState('')
-  const [sortKey, setSortKey] = useState('nombre')
-  const [sortDir, setSortDir] = useState<MaestroSortDir>('asc')
 
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<EmpleadoDoc | null>(null)
@@ -277,49 +266,16 @@ export function EmpleadosPage() {
         const eid = empleadoEmpresaId(e, deptToEmpresaId)
         if (eid !== filterEmpresa) return false
       }
-      if (busqueda) {
-        const q = busqueda.toLowerCase()
-        return (
-          e.nombre.toLowerCase().includes(q) ||
-          (e.puesto ?? '').toLowerCase().includes(q) ||
-          e.codigo.toLowerCase().includes(q) ||
-          (e.email ?? '').toLowerCase().includes(q)
-        )
-      }
       return true
     })
-  }, [list, filterDept, filterEmpresa, filterEstado, busqueda, deptToEmpresaId])
-
-  const displayed = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      switch (sortKey) {
-        case 'codigo':
-          return compareStrings(a.codigo, b.codigo, sortDir)
-        case 'puesto':
-          return compareStrings(a.puesto ?? '', b.puesto ?? '', sortDir)
-        case 'nombre':
-        default:
-          return compareStrings(a.nombre, b.nombre, sortDir)
-      }
-    })
-  }, [filtered, sortKey, sortDir])
-
-  const pagination = usePagination(displayed.length, {
-    resetKey: `${filterDept}|${filterEmpresa}|${filterEstado}|${busqueda}|${sortKey}|${sortDir}|${list.length}`,
-  })
-  const pageRows = pagination.slice(displayed)
-
-  const onSort = useCallback((key: string, dir: MaestroSortDir) => {
-    setSortKey(key)
-    setSortDir(dir)
-  }, [])
+  }, [list, filterDept, filterEmpresa, filterEstado, deptToEmpresaId])
 
   const selected = useMemo(
-    () => displayed.find((e) => e._id === selectedId) ?? null,
-    [displayed, selectedId],
+    () => filtered.find((e) => e._id === selectedId) ?? null,
+    [filtered, selectedId],
   )
 
-  const visibleIds = useMemo(() => pageRows.map((e) => e._id), [pageRows])
+  const visibleIds = useMemo(() => filtered.map((e) => e._id), [filtered])
   const bulk = useMaestroBulkDelete({
     recurso: 'empleados',
     visibleIds,
@@ -342,23 +298,14 @@ export function EmpleadosPage() {
           <Button variant="outline" className="gap-2" onClick={() => void openCfg()}>
             <Cable className="size-4" /> Servicio externo
           </Button>
-          <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
+          <BoardPrimaryButton onClick={openNew}>
             <Plus className="size-4" /> Nuevo empleado
-          </Button>
+          </BoardPrimaryButton>
         </div>
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <MaestroListToolbar
-            busqueda={busqueda}
-            onBusquedaChange={setBusqueda}
-            busquedaPlaceholder="Nombre, puesto, código, email…"
-            showActivoFilter={false}
-            count={displayed.length}
-            total={list.length}
-            countLabel="empleado(s)"
-          >
+        <div className="flex flex-wrap items-end gap-3">
           <div className="grid gap-1">
             <label className="text-xs text-muted-foreground">Departamento</label>
             <select
@@ -402,7 +349,6 @@ export function EmpleadosPage() {
               <option value="todos">Todos</option>
             </select>
           </div>
-          </MaestroListToolbar>
         </div>
         <div className="flex shrink-0 items-center gap-1 rounded-md border bg-background p-1">
           <Button
@@ -438,126 +384,150 @@ export function EmpleadosPage() {
               etiqueta="empleados"
             />
           )}
-        <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-            ) : displayed.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">
-                {list.length === 0 ? 'Sin empleados.' : 'Ningún empleado coincide con los filtros.'}
-              </p>
-            ) : (
-              <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <MaestroSelectAllHeader
-                      allSelected={bulk.allSelected}
-                      someSelected={bulk.someSelected}
-                      onToggleAll={bulk.toggleAll}
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            <EntityBoard
+              rows={filtered}
+              countLabel="empleado"
+              emptyMessage={list.length === 0 ? 'Sin empleados.' : 'Ningún empleado coincide con los filtros.'}
+              searchTexts={(e) => [e.nombre, e.puesto, e.codigo, e.email]}
+              minWidth="1100px"
+              groups={
+                filterEstado === 'todos'
+                  ? undefined
+                  : [{
+                      id: 'filtrados',
+                      label: filterEstado === 'activos' ? 'Activos' : 'Inactivos',
+                      color: filterEstado === 'activos' ? BOARD.green : BOARD.gray,
+                      match: () => true,
+                    }]
+              }
+              columns={[
+                {
+                  id: 'sel',
+                  label: '',
+                  className: 'w-8',
+                  render: (e) => (
+                    <input
+                      type="checkbox"
+                      className="size-3.5 accent-[var(--navy)]"
+                      checked={bulk.selectedIds.has(e._id)}
+                      onChange={() => bulk.toggle(e._id)}
+                      aria-label={`Seleccionar ${e.nombre}`}
                     />
-                    <MaestroSortableHead column="codigo" label="Código" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    <MaestroSortableHead column="puesto" label="Puesto" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    <TableHead>Departamento</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Reporta a</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pageRows.map((e) => {
+                  ),
+                },
+                {
+                  id: 'codigo',
+                  label: 'Código',
+                  render: (e) => <span className="font-mono text-sm">{e.codigo}</span>,
+                },
+                {
+                  id: 'nombre',
+                  label: 'Nombre',
+                  render: (e) => (
+                    <div className="flex items-center gap-2">
+                      <BoardAvatar name={e.nombre} />
+                      <span className="font-medium">{e.nombre}</span>
+                    </div>
+                  ),
+                },
+                {
+                  id: 'puesto',
+                  label: 'Puesto',
+                  render: (e) => <span className="text-sm">{e.puesto || '—'}</span>,
+                },
+                {
+                  id: 'depto',
+                  label: 'Departamento',
+                  render: (e) => {
                     const dept = e.departamento_id && typeof e.departamento_id !== 'string' ? e.departamento_id : null
-                    const jefe = e.jefe_id && typeof e.jefe_id !== 'string' ? e.jefe_id : null
                     const deptosCargo = (e.departamentos_a_cargo ?? []).filter(
                       (d): d is { _id: string; codigo: string; nombre: string; color?: string } =>
                         typeof d !== 'string',
                     )
                     return (
-                      <TableRow key={e._id}>
-                        <MaestroSelectCell
-                          id={e._id}
-                          label={e.nombre}
-                          selected={bulk.selectedIds.has(e._id)}
-                          onToggle={bulk.toggle}
-                        />
-                        <TableCell className="font-mono text-sm">{e.codigo}</TableCell>
-                        <TableCell className="font-medium">{e.nombre}</TableCell>
-                        <TableCell className="text-sm">{e.puesto || '—'}</TableCell>
-                        <TableCell>
-                          <div className="grid gap-1">
-                            {dept ? (
-                              <div className="flex items-center gap-1.5">
-                                <div className="size-2.5 rounded-full" style={{ background: dept.color ?? '#002060' }} />
-                                <span className="text-sm">{dept.nombre}</span>
-                              </div>
-                            ) : (
-                              <span className="text-sm">{e.departamento || '—'}</span>
-                            )}
-                            {deptosCargo.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {deptosCargo.map((d) => (
-                                  <Badge
-                                    key={d._id}
-                                    variant="outline"
-                                    className="text-[10px] font-normal"
-                                    title="Departamento a cargo"
-                                  >
-                                    {d.codigo}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
+                      <div className="grid gap-1">
+                        {dept ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="size-2.5 rounded-full" style={{ background: dept.color ?? '#002060' }} />
+                            <span className="text-sm">{dept.nombre}</span>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {empresaNombrePorId(empleadoEmpresaId(e, deptToEmpresaId), empresasCatalog)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{jefe?.nombre ?? '—'}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{e.email || '—'}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={e.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                            {e.activo ? 'Activo' : 'Inactivo'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
-                              <Edit2 className="size-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
-                              onClick={() => setDeleteTarget(e)}>
-                              <Trash2 className="size-4" />
-                            </Button>
+                        ) : (
+                          <span className="text-sm">{e.departamento || '—'}</span>
+                        )}
+                        {deptosCargo.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {deptosCargo.map((d) => (
+                              <BoardPill key={d._id} label={d.codigo} bg={BOARD.gray} text={BOARD.text} />
+                            ))}
                           </div>
-                        </TableCell>
-                      </TableRow>
+                        )}
+                      </div>
                     )
-                  })}
-                </TableBody>
-              </Table>
-              <PaginationBar
-                page={pagination.page}
-                totalPages={pagination.totalPages}
-                pageSize={pagination.pageSize}
-                totalItems={pagination.totalItems}
-                fromItem={pagination.fromItem}
-                toItem={pagination.toItem}
-                onPageChange={pagination.setPage}
-                onPageSizeChange={pagination.setPageSize}
-              />
-              </>
-            )}
-          </CardContent>
-        </Card>
+                  },
+                },
+                {
+                  id: 'empresa',
+                  label: 'Empresa',
+                  render: (e) => (
+                    <span className="text-sm" style={{ color: BOARD.muted }}>
+                      {empresaNombrePorId(empleadoEmpresaId(e, deptToEmpresaId), empresasCatalog)}
+                    </span>
+                  ),
+                },
+                {
+                  id: 'jefe',
+                  label: 'Reporta a',
+                  render: (e) => {
+                    const jefe = e.jefe_id && typeof e.jefe_id !== 'string' ? e.jefe_id : null
+                    return <span className="text-sm" style={{ color: BOARD.muted }}>{jefe?.nombre ?? '—'}</span>
+                  },
+                },
+                {
+                  id: 'email',
+                  label: 'Email',
+                  render: (e) => (
+                    <span className="text-sm" style={{ color: BOARD.muted }}>{e.email || '—'}</span>
+                  ),
+                },
+                {
+                  id: 'estado',
+                  label: 'Estado',
+                  render: (e) => (
+                    <BoardPill
+                      label={e.activo ? 'Activo' : 'Inactivo'}
+                      bg={e.activo ? BOARD.green : BOARD.gray}
+                      text={e.activo ? '#fff' : BOARD.text}
+                    />
+                  ),
+                },
+                {
+                  id: 'acciones',
+                  label: 'Acciones',
+                  align: 'right',
+                  render: (e) => (
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
+                        <Edit2 className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(e)}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
         </>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           <Card>
             <CardContent className="p-0">
-              <OrgChart empleados={displayed} selectedId={selectedId} onSelect={setSelectedId} />
+              <OrgChart empleados={filtered} selectedId={selectedId} onSelect={setSelectedId} />
             </CardContent>
           </Card>
           <OrgDetailPanel empleado={selected} />

@@ -1,15 +1,15 @@
 import { useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, Building2, Download, Factory, FileUp, GanttChartSquare, GitBranch, History,
-  LayoutGrid, List, Lock, MessageSquare, Paperclip, Pencil, Plus, Trash2, User, Users,
+  ArrowLeft, ArrowRight, Building2, Download, Factory, FileUp, GitBranch, History,
+  Lock, MessageSquare, Paperclip, Pencil, Trash2, User, Wallet,
 } from 'lucide-react'
 
+import { BOARD, BoardAvatar, BoardPill } from '@/components/board/BoardPrimitives'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
 import { TareaTagsList } from '@/components/proyectos/TareaTagsList'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -35,7 +35,7 @@ import {
   uploadAdjuntoTarea,
   urlAdjuntoTarea,
 } from '@/lib/api/tareas'
-import { formatDateDMY } from '@/lib/format'
+import { formatDateDMY, formatMoney } from '@/lib/format'
 import {
   dependeDeIds,
   etiquetaSaludTarea,
@@ -51,14 +51,40 @@ import { TareaFormDialog } from '@/pages/proyectos/TareaFormDialog'
 import { ProyectoParticipantesPanel } from '@/pages/proyectos/ProyectoParticipantesPanel'
 import { TareasPanel } from '@/pages/proyectos/TareasPanel'
 import { TareasMiniGantt } from '@/pages/proyectos/TareasMiniGantt'
+import { TareasTablaBoard } from '@/pages/proyectos/TareasTablaBoard'
 import { useAuthStore } from '@/store/authStore'
 import { useProyectosStore } from '@/store/proyectosStore'
 import type { Proyecto, ProyectoEstado } from '@/types/proyecto'
 import {
   estadoColor, proyectoDeptDoc, proyectoEmpresasDocs, proyectoKpiDoc, proyectoOwnerName,
-  proyectoPuedeEditar, PROYECTO_ESTADOS, TRANSICIONES_SUGERIDAS,
+  proyectoPresupuestoAsignacionPct, proyectoPresupuestoConsumoPct,
+  proyectoPresupuestoDisponible, proyectoPuedeEditar, proyectoTienePresupuesto,
+  PROYECTO_ESTADOS, TRANSICIONES_SUGERIDAS,
 } from '@/types/proyecto'
 import type { Tarea, TareaAdjunto } from '@/types/tarea'
+
+type VistaProyecto = 'tablero' | 'canvas' | 'gantt' | 'lista' | 'resumen' | 'participantes'
+
+const ESTADO_BOARD: Record<ProyectoEstado, { label: string; bg: string; text: string }> = {
+  Idea: { label: 'Idea', bg: BOARD.gray, text: '#fff' },
+  Planificado: { label: 'Planificado', bg: BOARD.blue, text: '#fff' },
+  'En revisión': { label: 'En revisión', bg: BOARD.orange, text: '#fff' },
+  Aprobado: { label: 'Aprobado', bg: BOARD.indigo, text: '#fff' },
+  'En progreso': { label: 'En curso', bg: BOARD.orange, text: '#fff' },
+  Bloqueado: { label: 'Detenido', bg: BOARD.red, text: '#fff' },
+  'En pausa': { label: 'En pausa', bg: '#7f6000', text: '#fff' },
+  Completado: { label: 'Listo', bg: BOARD.green, text: '#fff' },
+  Cancelado: { label: 'Cancelado', bg: BOARD.text, text: '#fff' },
+}
+
+const VISTAS: Array<{ id: VistaProyecto; label: string }> = [
+  { id: 'tablero', label: 'Tablero' },
+  { id: 'canvas', label: 'Canvas' },
+  { id: 'gantt', label: 'Timeline' },
+  { id: 'lista', label: 'Lista' },
+  { id: 'resumen', label: 'Resumen' },
+  { id: 'participantes', label: 'Equipo' },
+]
 
 type Props = {
   proyectoId: string | null
@@ -84,7 +110,8 @@ export function ProyectoDetailView({
   const [deletingProyecto, setDeletingProyecto] = useState(false)
   const [bulkDeletingTareas, setBulkDeletingTareas] = useState(false)
   const [tareaDetalle, setTareaDetalle] = useState<Tarea | null>(null)
-  const [seccion, setSeccion] = useState<'resumen' | 'participantes' | 'tareas'>('resumen')
+  /** Vista principal del proyecto: tablero Monday por defecto. */
+  const [vista, setVista] = useState<VistaProyecto>('tablero')
 
   const tareaIds = useMemo(() => tareas.map((t) => t._id), [tareas])
   const mapaTareasProyecto = useMemo(() => mapaTareas(tareas), [tareas])
@@ -230,405 +257,272 @@ export function ProyectoDetailView({
     }
   }
 
+  const ownerName = proyecto ? proyectoOwnerName(proyecto) : ''
+  const dept = proyecto ? proyectoDeptDoc(proyecto) : null
+  const estadoBoard = proyecto
+    ? (ESTADO_BOARD[proyecto.estado] ?? { label: proyecto.estado, bg: BOARD.gray, text: BOARD.text })
+    : null
+  const avance = Math.max(0, Math.min(100, proyecto?.porcentaje_avance ?? 0))
+  const consumoPct = proyecto ? proyectoPresupuestoConsumoPct(proyecto) : null
+  const asignacionPct = proyecto ? proyectoPresupuestoAsignacionPct(proyecto) : null
+  const disponible = proyecto ? proyectoPresupuestoDisponible(proyecto) : null
+  const showExcelTools =
+    vista === 'tablero' || vista === 'lista' || vista === 'canvas' || vista === 'gantt'
+
   return (
     <>
-      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
-        <header className="sticky top-0 z-10 -mx-6 mb-6 border-b border-border bg-[var(--gray-bg)] px-6 py-4 lg:top-0">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onBack}>
-              <ArrowLeft className="size-4" />
-              Volver a proyectos
-            </Button>
+      <div className="mx-auto flex w-full max-w-[1400px] flex-col pb-10">
+        {!proyectoId || loadErr ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {loadErr ?? 'No se pudo cargar el proyecto.'}
           </div>
-          {!proyectoId || loadErr ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {loadErr ?? 'No se pudo cargar el proyecto.'}
-            </div>
-          ) : !proyecto ? (
-            <p className="text-sm text-muted-foreground">Cargando proyecto…</p>
-          ) : (
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 space-y-1">
-                <h1 className="text-xl font-semibold leading-tight text-[var(--navy)]">{proyecto.nombre}</h1>
-                <p className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
-                  <span>{proyecto._id}</span>
-                  {proyecto.fase != null && <span>· Fase {proyecto.fase}</span>}
-                  {proyecto.eje && <span>· {proyecto.eje}</span>}
-                  <Badge variant="outline" className="text-[10px] font-sans">
-                    {proyecto.tipo === 'departamental' ? 'Departamental' : 'Individual'}
-                  </Badge>
-                  <Badge variant="outline" className={cn('text-[10px] font-sans', estadoColor(proyecto.estado))}>
-                    {proyecto.estado}
-                  </Badge>
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                {proyecto.acceso?.rol_participante === 'lectura' && (
-                  <Badge variant="outline" className="gap-1 text-[10px]">
-                    <Lock className="size-3" />
-                    Participante · solo lectura
-                  </Badge>
-                )}
-                {puedeEditarProyecto && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => navigate(`/proyectos/${encodeURIComponent(proyecto._id)}/editar`)}
-                  >
-                    Editar proyecto
-                  </Button>
-                )}
-                {puedeEliminarProyecto && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="border-destructive/50 text-destructive hover:bg-destructive/10"
-                    disabled={deletingProyecto}
-                    onClick={() => void handleDeleteProyecto()}
-                  >
-                    {deletingProyecto ? 'Eliminando…' : 'Eliminar proyecto'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </header>
-
-        {proyecto && (
-          <div className="space-y-6">
-            <Tabs value={seccion} onValueChange={(v) => setSeccion(v as typeof seccion)} className="w-full">
-              <TabsList className="mb-2">
-                <TabsTrigger value="resumen">Resumen</TabsTrigger>
-                <TabsTrigger value="participantes" className="gap-1.5">
-                  <Users className="size-3.5" />
-                  Participantes
-                  {(proyecto.participantes?.length ?? 0) > 0 && (
-                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">
-                      {proyecto.participantes!.length}
+        ) : !proyecto || !estadoBoard ? (
+          <p className="p-6 text-sm text-muted-foreground">Cargando proyecto…</p>
+        ) : (
+          <>
+            <header
+              className="sticky top-0 z-10 -mx-4 mb-3 border-b px-4 pb-0 pt-2 lg:-mx-6 lg:px-6"
+              style={{ backgroundColor: BOARD.bg, borderColor: BOARD.borderSoft }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="inline-flex items-center gap-1 text-xs hover:underline"
+                  style={{ color: BOARD.muted }}
+                >
+                  <ArrowLeft className="size-3.5" />
+                  Proyectos
+                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {proyecto.acceso?.rol_participante === 'lectura' && (
+                    <Badge variant="outline" className="mr-1 gap-1 text-[10px]">
+                      <Lock className="size-3" />
+                      Solo lectura
                     </Badge>
                   )}
-                </TabsTrigger>
-                <TabsTrigger value="tareas">Tareas</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="resumen" className="mt-0 space-y-6">
-                  <section className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-sm sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Propietario</p>
-                      <p className="font-medium inline-flex items-center gap-1">
-                        <User className="size-3.5 text-muted-foreground" />
-                        {proyectoOwnerName(proyecto) || '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Departamento</p>
-                      <p className="font-medium inline-flex items-center gap-1">
-                        {(() => {
-                          const d = proyectoDeptDoc(proyecto)
-                          if (!d) return <span>—</span>
-                          return (
-                            <>
-                              <span
-                                className="size-2.5 rounded-full"
-                                style={{ background: d.color ?? '#002060' }}
-                              />
-                              <Building2 className="size-3.5 text-muted-foreground" />
-                              {d.nombre}
-                            </>
-                          )
-                        })()}
-                      </p>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <p className="text-xs text-muted-foreground">Empresas del grupo</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {proyectoEmpresasDocs(proyecto).length === 0 ? (
-                          <span className="font-medium text-muted-foreground">—</span>
-                        ) : (
-                          proyectoEmpresasDocs(proyecto).map((e) => (
-                            <Badge
-                              key={e._id}
-                              variant="outline"
-                              className="gap-1 text-[10px]"
-                            >
-                              <Factory className="size-3 text-muted-foreground" />
-                              {e.nombre}
-                            </Badge>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Responsable (texto)</p>
-                      <p className="font-medium">{proyecto.responsable ?? '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Prioridad</p>
-                      <p className="font-medium">{proyecto.prioridad}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Inicio</p>
-                      <p className="font-medium">{formatDateDMY(proyecto.fecha_inicio)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Fin</p>
-                      <p className="font-medium">{formatDateDMY(proyecto.fecha_fin)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Avance (tareas)</p>
-                      <p className="font-medium">{proyecto.porcentaje_avance}%</p>
-                    </div>
-                  </section>
-
-                  {/* Workflow del proyecto */}
-                  <section className="rounded-md border border-[var(--lime)]/30 bg-[var(--lime-lt)]/30 p-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <ArrowRight className="size-4 text-[var(--navy)]" />
-                      <h3 className="text-sm font-semibold text-[var(--navy)]">Flujo del proyecto</h3>
-                    </div>
-                    <FlujoEstado
-                      estadoActual={proyecto.estado}
-                      soloLectura={!puedeEditarProyecto}
-                      onTransicionar={async (a, comentario) => {
-                        try {
-                          const doc = await transicionarProyecto(proyecto._id, a, comentario)
-                          setProyecto(doc)
-                          onProyectoUpdated()
-                        } catch (err) {
-                          window.alert(err instanceof Error ? err.message : 'Error en transición')
-                        }
-                      }}
-                    />
-                  </section>
-
-                  {proyecto.descripcion && (
-                    <section>
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">
-                        Descripción
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm">{proyecto.descripcion}</p>
-                    </section>
-                  )}
-
-                  <section>
-                    <p className="text-xs font-semibold uppercase text-muted-foreground">
-                      KPI / Meta
-                    </p>
-                    {(() => {
-                      const k = proyectoKpiDoc(proyecto)
-                      if (k) {
-                        return (
-                          <div className="mt-2 space-y-1.5 text-sm">
-                            <p>
-                              <span className="text-muted-foreground">KPI: </span>
-                              <span className="font-medium">{k.nombre}</span>
-                            </p>
-                            <p>
-                              <span className="text-muted-foreground">Eje: </span>
-                              {k.eje}
-                            </p>
-                            <p>
-                              <span className="text-muted-foreground">Meta (departamento): </span>
-                              {k.meta ?? '—'}
-                              {k.unidad ? ` (${k.unidad})` : ''}
-                            </p>
-                            {proyecto.meta_kpi && proyecto.meta_kpi !== k.meta && (
-                              <p className="text-xs text-muted-foreground">
-                                Texto en proyecto: {proyecto.meta_kpi}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      }
-                      return (
-                        <p className="mt-1 text-sm">{proyecto.meta_kpi ?? '—'}</p>
-                      )
-                    })()}
-                    {proyecto.notas && (
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                        {proyecto.notas}
-                      </p>
-                    )}
-                  </section>
-
-                  <section>
-                    <div className="mb-2 flex items-center gap-2">
-                      <History className="size-4 text-muted-foreground" />
-                      <h3 className="text-sm font-semibold">Historial de estado</h3>
-                    </div>
-                    <ul className="space-y-2">
-                      {(proyecto.historial ?? []).slice().reverse().map((h, idx) => (
-                        <li key={idx} className="rounded-md border border-border bg-muted/10 p-2 text-xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="inline-flex items-center gap-1.5">
-                              {h.de ? (
-                                <>
-                                  <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.de as ProyectoEstado))}>{h.de}</Badge>
-                                  <ArrowRight className="size-3 text-muted-foreground" />
-                                </>
-                              ) : <Badge variant="outline" className="text-[10px]">Creación</Badge>}
-                              <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.a as ProyectoEstado))}>{h.a}</Badge>
-                            </div>
-                            <span className="text-muted-foreground">
-                              {formatDateDMY(h.fecha)}
-                            </span>
-                          </div>
-                          {h.usuario_nombre && (
-                            <p className="mt-1 text-muted-foreground">
-                              por <strong>{h.usuario_nombre}</strong>
-                            </p>
-                          )}
-                          {h.comentario && (
-                            <p className="mt-1 italic text-muted-foreground">«{h.comentario}»</p>
-                          )}
-                        </li>
-                      ))}
-                      {(!proyecto.historial || proyecto.historial.length === 0) && (
-                        <li className="text-xs text-muted-foreground">Sin historial registrado.</li>
-                      )}
-                    </ul>
-                  </section>
-
-              </TabsContent>
-
-              <TabsContent value="participantes" className="mt-0">
-                <ProyectoParticipantesPanel
-                  proyecto={proyecto}
-                  onUpdated={(doc) => {
-                    setProyecto(doc)
-                    onProyectoUpdated()
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent value="tareas" className="mt-0 space-y-6">
-                  <section>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold">Tareas</h3>
-                      {puedeEditarProyecto && (
-                      <div className="flex flex-wrap gap-2">
-                        <input
-                          ref={tareasFileRef}
-                          type="file"
-                          accept=".xlsx,.xls"
-                          className="hidden"
-                          onChange={(e) => void handleImportTareas(e.target.files?.[0])}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={async () => {
-                            try {
-                              await exportarTareasExcel(proyecto._id)
-                            } catch (e) {
-                              window.alert(e instanceof Error ? e.message : 'Error al exportar')
-                            }
-                          }}
-                        >
-                          <Download className="size-4" />
-                          Exportar Excel
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={async () => {
-                            try {
-                              await descargarPlantillaTareas(proyecto._id)
-                            } catch (e) {
-                              window.alert(e instanceof Error ? e.message : 'Error al descargar plantilla')
-                            }
-                          }}
-                        >
-                          <Download className="size-4" />
-                          Plantilla Excel
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          disabled={importingTareas}
-                          onClick={() => tareasFileRef.current?.click()}
-                        >
-                          <FileUp className="size-4" />
-                          {importingTareas ? 'Importando…' : 'Subir Excel'}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="gap-1 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
-                          onClick={() => {
-                            setTareaEditing(null)
-                            setTareaFormOpen(true)
-                          }}
-                        >
-                          <Plus className="size-4" />
-                          Agregar tarea
-                        </Button>
-                      </div>
-                      )}
-                    </div>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      El <strong>KPI / meta</strong> del proyecto está arriba en «KPI / Meta»; no se repite por tarea.
-                      En <strong>Canvas</strong> usa el tablero To Do / In Progress / Done (arrastrar solo dueño o responsable). Al editar puedes indicar
-                      de cuáles depende (deben completarse antes). Usa <strong>Adjuntos</strong> para evidencias y el icono{' '}
-                      <strong>Comentarios</strong> para la bitácora de seguimiento.
-                    </p>
-
-                    <Tabs defaultValue="lista" className="w-full">
-                      <TabsList className="mb-3">
-                        <TabsTrigger value="lista" className="gap-1.5">
-                          <List className="size-3.5" />
-                          Lista
-                        </TabsTrigger>
-                        <TabsTrigger value="panel" className="gap-1.5">
-                          <LayoutGrid className="size-3.5" />
-                          Canvas
-                        </TabsTrigger>
-                        <TabsTrigger value="gantt" className="gap-1.5">
-                          <GanttChartSquare className="size-3.5" />
-                          Gantt
-                        </TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="lista" className="mt-0">
-                    {tareas.length > 0 && puedeEditarProyecto && (
-                      <MaestroBulkDeleteBar
-                        seleccionCount={seleccionTareas.seleccionCount}
-                        bulkDeleting={bulkDeletingTareas}
-                        etiqueta="tareas en la lista"
-                        onEliminar={() => void handleEliminarTareasSeleccionadas()}
+                  {showExcelTools && puedeEditarProyecto && (
+                    <>
+                      <input
+                        ref={tareasFileRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={(e) => void handleImportTareas(e.target.files?.[0])}
                       />
-                    )}
-                    {tareas.length > 0 && puedeEditarProyecto && (
-                      <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          className="size-3.5 accent-[var(--navy)]"
-                          checked={seleccionTareas.allSelected}
-                          ref={(el) => {
-                            if (el) el.indeterminate = seleccionTareas.someSelected && !seleccionTareas.allSelected
-                          }}
-                          onChange={() => seleccionTareas.toggleAll()}
-                          aria-label="Seleccionar todas las tareas"
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        title="Exportar Excel"
+                        onClick={async () => {
+                          try {
+                            await exportarTareasExcel(proyecto._id)
+                          } catch (e) {
+                            window.alert(e instanceof Error ? e.message : 'Error al exportar')
+                          }
+                        }}
+                      >
+                        <Download className="size-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        title="Descargar plantilla"
+                        onClick={async () => {
+                          try {
+                            await descargarPlantillaTareas(proyecto._id)
+                          } catch (e) {
+                            window.alert(e instanceof Error ? e.message : 'Error al descargar plantilla')
+                          }
+                        }}
+                      >
+                        <Download className="size-3.5 opacity-60" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        title="Importar Excel"
+                        disabled={importingTareas}
+                        onClick={() => tareasFileRef.current?.click()}
+                      >
+                        <FileUp className="size-3.5" />
+                      </Button>
+                    </>
+                  )}
+                  {puedeEditarProyecto && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 gap-1 px-2 text-xs"
+                      onClick={() => navigate(`/proyectos/${encodeURIComponent(proyecto._id)}/editar`)}
+                    >
+                      <Pencil className="size-3.5" />
+                      Editar
+                    </Button>
+                  )}
+                  {puedeEliminarProyecto && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={deletingProyecto}
+                      title="Eliminar proyecto"
+                      onClick={() => void handleDeleteProyecto()}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h1
+                  className="truncate text-xl font-semibold tracking-tight"
+                  style={{ color: BOARD.text }}
+                >
+                  {proyecto.nombre}
+                </h1>
+                <BoardPill label={estadoBoard.label} bg={estadoBoard.bg} text={estadoBoard.text} />
+              </div>
+
+              <div
+                className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                style={{ color: BOARD.muted }}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <BoardAvatar name={ownerName || '?'} className="size-5 text-[8px]" />
+                  {ownerName || 'Sin propietario'}
+                </span>
+                {dept && <span>{dept.nombre}</span>}
+                <span>
+                  {formatDateDMY(proyecto.fecha_inicio)}
+                  {' – '}
+                  {formatDateDMY(proyecto.fecha_fin)}
+                </span>
+                <span className="tabular-nums">{avance}% avance</span>
+                {proyectoTienePresupuesto(proyecto) && consumoPct != null && (
+                  <span
+                    className="inline-flex items-center gap-1 tabular-nums"
+                    style={{
+                      color: consumoPct > 100 ? BOARD.red : BOARD.muted,
+                    }}
+                  >
+                    <Wallet className="size-3" />
+                    {consumoPct.toLocaleString('es-HN', { maximumFractionDigits: 0 })}% presup.
+                  </span>
+                )}
+              </div>
+
+              <nav className="mt-3 flex flex-wrap gap-0" aria-label="Vistas del proyecto">
+                {VISTAS.map((v) => {
+                  const active = vista === v.id
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setVista(v.id)}
+                      className={cn(
+                        'relative px-3 py-2 text-xs font-medium transition-colors',
+                        active ? 'text-[var(--navy)]' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {v.label}
+                      {v.id === 'participantes' && (proyecto.participantes?.length ?? 0) > 0 && (
+                        <span className="ml-1 text-[10px] opacity-70">
+                          {proyecto.participantes!.length}
+                        </span>
+                      )}
+                      {active && (
+                        <span
+                          className="absolute inset-x-2 bottom-0 h-0.5 rounded-full"
+                          style={{ backgroundColor: BOARD.primary }}
                         />
-                        Seleccionar todas para eliminar en lote
-                      </label>
-                    )}
-                    <ul className="space-y-3">
-                      {tareas.map((t) => {
-                        const preds = nombresPredecesoras(t, mapaTareasProyecto)
-                        const bloqueada = tareaBloqueadaPorDependencias(t, mapaTareasProyecto)
-                        const depN = dependeDeIds(t).length
-                        const salud = evaluarSaludTarea(t, mapaTareasProyecto)
-                        const etiquetaSalud = etiquetaSaludTarea(salud)
-                        return (
+                      )}
+                    </button>
+                  )
+                })}
+              </nav>
+            </header>
+
+            <div className="min-w-0">
+              {vista === 'tablero' && (
+                <TareasTablaBoard
+                  tareas={tareas}
+                  proyecto={proyecto}
+                  puedeEditar={puedeEditarProyecto}
+                  selectedId={tareaDetalle?._id}
+                  onSelect={(t) => setTareaDetalle(t)}
+                  onAddAdvanced={
+                    puedeEditarProyecto
+                      ? () => {
+                          setTareaEditing(null)
+                          setTareaFormOpen(true)
+                        }
+                      : undefined
+                  }
+                  onChanged={reload}
+                />
+              )}
+
+              {vista === 'canvas' && (
+                <TareasPanel
+                  tareas={tareas}
+                  proyecto={proyecto}
+                  selectedId={tareaDetalle?._id}
+                  onSelect={(t) => setTareaDetalle(t)}
+                  onTareaMoved={reload}
+                />
+              )}
+
+              {vista === 'gantt' && (
+                <TareasMiniGantt
+                  proyecto={proyecto}
+                  tareas={tareas}
+                  onSelect={(t) => setTareaDetalle(t)}
+                />
+              )}
+
+              {vista === 'lista' && (
+                <div className="space-y-2">
+                  {tareas.length > 0 && puedeEditarProyecto && (
+                    <MaestroBulkDeleteBar
+                      seleccionCount={seleccionTareas.seleccionCount}
+                      bulkDeleting={bulkDeletingTareas}
+                      etiqueta="tareas en la lista"
+                      onEliminar={() => void handleEliminarTareasSeleccionadas()}
+                    />
+                  )}
+                  {tareas.length > 0 && puedeEditarProyecto && (
+                    <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="size-3.5 accent-[var(--navy)]"
+                        checked={seleccionTareas.allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = seleccionTareas.someSelected && !seleccionTareas.allSelected
+                        }}
+                        onChange={() => seleccionTareas.toggleAll()}
+                        aria-label="Seleccionar todas las tareas"
+                      />
+                      Seleccionar todas para eliminar en lote
+                    </label>
+                  )}
+                  <ul className="space-y-3">
+                    {tareas.map((t) => {
+                      const preds = nombresPredecesoras(t, mapaTareasProyecto)
+                      const bloqueada = tareaBloqueadaPorDependencias(t, mapaTareasProyecto)
+                      const depN = dependeDeIds(t).length
+                      const salud = evaluarSaludTarea(t, mapaTareasProyecto)
+                      const etiquetaSalud = etiquetaSaludTarea(salud)
+                      return (
                         <li
                           key={t._id}
                           className={cn(
@@ -736,64 +630,355 @@ export function ProyectoDetailView({
                               <Paperclip className="size-4" />
                             </Button>
                             {puedeEditarProyecto && (
-                            <>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground"
-                              onClick={() => {
-                                setTareaEditing(t)
-                                setTareaFormOpen(true)
-                              }}
-                              aria-label="Editar tarea"
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground hover:text-destructive"
-                              onClick={() => void handleDeleteTarea(t)}
-                              aria-label="Eliminar tarea"
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                            </>
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-muted-foreground"
+                                  onClick={() => {
+                                    setTareaEditing(t)
+                                    setTareaFormOpen(true)
+                                  }}
+                                  aria-label="Editar tarea"
+                                >
+                                  <Pencil className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-muted-foreground hover:text-destructive"
+                                  onClick={() => void handleDeleteTarea(t)}
+                                  aria-label="Eliminar tarea"
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </>
                             )}
                           </div>
                         </li>
-                        )
-                      })}
-                    </ul>
-                    {tareas.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No hay tareas registradas.</p>
-                    )}
-                      </TabsContent>
+                      )
+                    })}
+                  </ul>
+                  {tareas.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No hay tareas registradas.</p>
+                  )}
+                </div>
+              )}
 
-                      <TabsContent value="panel" className="mt-0">
-                        <TareasPanel
-                          tareas={tareas}
-                          proyecto={proyecto}
-                          selectedId={tareaDetalle?._id}
-                          onSelect={(t) => setTareaDetalle(t)}
-                          onTareaMoved={reload}
-                        />
-                      </TabsContent>
+              {vista === 'participantes' && (
+                <ProyectoParticipantesPanel
+                  proyecto={proyecto}
+                  onUpdated={(doc) => {
+                    setProyecto(doc)
+                    onProyectoUpdated()
+                  }}
+                />
+              )}
 
-                      <TabsContent value="gantt" className="mt-0">
-                        <TareasMiniGantt
-                          proyecto={proyecto}
-                          tareas={tareas}
-                          onSelect={(t) => setTareaDetalle(t)}
-                        />
-                      </TabsContent>
-                    </Tabs>
+              {vista === 'resumen' && (
+                <div className="space-y-6">
+                  <section className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Propietario</p>
+                      <p className="inline-flex items-center gap-1 font-medium">
+                        <User className="size-3.5 text-muted-foreground" />
+                        {ownerName || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Departamento</p>
+                      <p className="inline-flex items-center gap-1 font-medium">
+                        {!dept ? (
+                          <span>—</span>
+                        ) : (
+                          <>
+                            <span
+                              className="size-2.5 rounded-full"
+                              style={{ background: dept.color ?? '#002060' }}
+                            />
+                            <Building2 className="size-3.5 text-muted-foreground" />
+                            {dept.nombre}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-xs text-muted-foreground">Empresas del grupo</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {proyectoEmpresasDocs(proyecto).length === 0 ? (
+                          <span className="font-medium text-muted-foreground">—</span>
+                        ) : (
+                          proyectoEmpresasDocs(proyecto).map((e) => (
+                            <Badge
+                              key={e._id}
+                              variant="outline"
+                              className="gap-1 text-[10px]"
+                            >
+                              <Factory className="size-3 text-muted-foreground" />
+                              {e.nombre}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Responsable (texto)</p>
+                      <p className="font-medium">{proyecto.responsable ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Prioridad</p>
+                      <p className="font-medium">{proyecto.prioridad}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Inicio</p>
+                      <p className="font-medium">{formatDateDMY(proyecto.fecha_inicio)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Fin</p>
+                      <p className="font-medium">{formatDateDMY(proyecto.fecha_fin)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Avance (tareas)</p>
+                      <p className="font-medium">{proyecto.porcentaje_avance}%</p>
+                    </div>
                   </section>
-              </TabsContent>
-            </Tabs>
-          </div>
+
+                  <section className="rounded-md border border-[var(--navy)]/20 bg-[var(--blue-lt)]/30 p-3">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="size-4 text-[var(--navy)]" />
+                        <h3 className="text-sm font-semibold text-[var(--navy)]">Presupuesto</h3>
+                      </div>
+                      {puedeEditarProyecto && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => navigate(`/proyectos/${encodeURIComponent(proyecto._id)}/editar`)}
+                        >
+                          <Pencil className="size-3" />
+                          Editar montos
+                        </Button>
+                      )}
+                    </div>
+                    {!proyectoTienePresupuesto(proyecto) ? (
+                      <p className="text-sm text-muted-foreground">
+                        Define el envelope en «Editar» y asigna montos a cada tarea. El ejecutado se
+                        calcula automáticamente (monto × % avance).
+                      </p>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Planificado (envelope)</p>
+                          <p className="text-base font-semibold tabular-nums text-[var(--navy)]">
+                            {formatMoney(
+                              proyecto.presupuesto_planificado,
+                              proyecto.moneda_presupuesto ?? 'HNL',
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Asignado a tareas</p>
+                          <p className="text-base font-semibold tabular-nums">
+                            {formatMoney(
+                              proyecto.presupuesto_asignado,
+                              proyecto.moneda_presupuesto ?? 'HNL',
+                            )}
+                          </p>
+                          {asignacionPct != null && (
+                            <p
+                              className={cn(
+                                'text-[11px] font-medium',
+                                asignacionPct > 100 ? 'text-destructive' : 'text-muted-foreground',
+                              )}
+                            >
+                              {asignacionPct.toLocaleString('es-HN', { maximumFractionDigits: 0 })}% del
+                              envelope
+                              {asignacionPct > 100 ? ' — sobreasignado' : ''}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Disponible</p>
+                          <p
+                            className={cn(
+                              'text-base font-semibold tabular-nums',
+                              disponible != null && disponible < 0 && 'text-destructive',
+                            )}
+                          >
+                            {formatMoney(disponible, proyecto.moneda_presupuesto ?? 'HNL')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Ejecutado (desde tareas)</p>
+                          <p
+                            className={cn(
+                              'text-base font-semibold tabular-nums',
+                              consumoPct != null && consumoPct > 100
+                                ? 'text-destructive'
+                                : 'text-foreground',
+                            )}
+                          >
+                            {formatMoney(
+                              proyecto.presupuesto_ejecutado,
+                              proyecto.moneda_presupuesto ?? 'HNL',
+                            )}
+                          </p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="h-2 max-w-[100px] flex-1 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${Math.min(100, Math.max(0, consumoPct ?? 0))}%`,
+                                  backgroundColor:
+                                    consumoPct != null && consumoPct > 100
+                                      ? 'var(--seg)'
+                                      : consumoPct != null && consumoPct >= 85
+                                        ? '#c9a227'
+                                        : 'var(--navy)',
+                                }}
+                              />
+                            </div>
+                            <span
+                              className={cn(
+                                'text-xs font-semibold tabular-nums',
+                                consumoPct != null && consumoPct > 100 && 'text-destructive',
+                              )}
+                            >
+                              {consumoPct != null
+                                ? `${consumoPct.toLocaleString('es-HN', { maximumFractionDigits: 1 })}%`
+                                : '—'}
+                            </span>
+                          </div>
+                        </div>
+                        {proyecto.presupuesto_notas?.trim() && (
+                          <div className="sm:col-span-2 lg:col-span-4">
+                            <p className="text-xs text-muted-foreground">Notas</p>
+                            <p className="text-sm">{proyecto.presupuesto_notas}</p>
+                          </div>
+                        )}
+                        <p className="sm:col-span-2 lg:col-span-4 text-[11px] text-muted-foreground">
+                          El ejecutado se recalcula al guardar tareas: usa el monto ejecutado de la
+                          tarea, o asignado × % avance (100% si está Completada).
+                        </p>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="rounded-md border border-[var(--lime)]/30 bg-[var(--lime-lt)]/30 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <ArrowRight className="size-4 text-[var(--navy)]" />
+                      <h3 className="text-sm font-semibold text-[var(--navy)]">Flujo del proyecto</h3>
+                    </div>
+                    <FlujoEstado
+                      estadoActual={proyecto.estado}
+                      soloLectura={!puedeEditarProyecto}
+                      onTransicionar={async (a, comentario) => {
+                        try {
+                          const doc = await transicionarProyecto(proyecto._id, a, comentario)
+                          setProyecto(doc)
+                          onProyectoUpdated()
+                        } catch (err) {
+                          window.alert(err instanceof Error ? err.message : 'Error en transición')
+                        }
+                      }}
+                    />
+                  </section>
+
+                  {proyecto.descripcion && (
+                    <section>
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        Descripción
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm">{proyecto.descripcion}</p>
+                    </section>
+                  )}
+
+                  <section>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      KPI / Meta
+                    </p>
+                    {(() => {
+                      const k = proyectoKpiDoc(proyecto)
+                      if (k) {
+                        return (
+                          <div className="mt-2 space-y-1.5 text-sm">
+                            <p>
+                              <span className="text-muted-foreground">KPI: </span>
+                              <span className="font-medium">{k.nombre}</span>
+                            </p>
+                            <p>
+                              <span className="text-muted-foreground">Eje: </span>
+                              {k.eje}
+                            </p>
+                            <p>
+                              <span className="text-muted-foreground">Meta (departamento): </span>
+                              {k.meta ?? '—'}
+                              {k.unidad ? ` (${k.unidad})` : ''}
+                            </p>
+                            {proyecto.meta_kpi && proyecto.meta_kpi !== k.meta && (
+                              <p className="text-xs text-muted-foreground">
+                                Texto en proyecto: {proyecto.meta_kpi}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      }
+                      return (
+                        <p className="mt-1 text-sm">{proyecto.meta_kpi ?? '—'}</p>
+                      )
+                    })()}
+                    {proyecto.notas && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                        {proyecto.notas}
+                      </p>
+                    )}
+                  </section>
+
+                  <section>
+                    <div className="mb-2 flex items-center gap-2">
+                      <History className="size-4 text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">Historial de estado</h3>
+                    </div>
+                    <ul className="space-y-2">
+                      {(proyecto.historial ?? []).slice().reverse().map((h, idx) => (
+                        <li key={idx} className="rounded-md border border-border bg-muted/10 p-2 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="inline-flex items-center gap-1.5">
+                              {h.de ? (
+                                <>
+                                  <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.de as ProyectoEstado))}>{h.de}</Badge>
+                                  <ArrowRight className="size-3 text-muted-foreground" />
+                                </>
+                              ) : <Badge variant="outline" className="text-[10px]">Creación</Badge>}
+                              <Badge variant="outline" className={cn('text-[10px]', estadoColor(h.a as ProyectoEstado))}>{h.a}</Badge>
+                            </div>
+                            <span className="text-muted-foreground">
+                              {formatDateDMY(h.fecha)}
+                            </span>
+                          </div>
+                          {h.usuario_nombre && (
+                            <p className="mt-1 text-muted-foreground">
+                              por <strong>{h.usuario_nombre}</strong>
+                            </p>
+                          )}
+                          {h.comentario && (
+                            <p className="mt-1 italic text-muted-foreground">«{h.comentario}»</p>
+                          )}
+                        </li>
+                      ))}
+                      {(!proyecto.historial || proyecto.historial.length === 0) && (
+                        <li className="text-xs text-muted-foreground">Sin historial registrado.</li>
+                      )}
+                    </ul>
+                  </section>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 

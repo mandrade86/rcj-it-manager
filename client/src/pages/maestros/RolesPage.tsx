@@ -3,28 +3,18 @@ import { Briefcase, Crown, Edit2, Plus, Shield, Trash2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { DepartamentosMultiSelect } from '@/components/maestros/DepartamentosMultiSelect'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchPerfilesPuesto } from '@/lib/api/perfilesPuesto'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { compareNumbers, compareStrings, type MaestroSortDir } from '@/lib/maestroList'
 import {
   createRol, deleteRol, fetchPermisosDisponibles, fetchRoles, updateRol,
 } from '@/lib/api/roles'
@@ -52,19 +42,6 @@ function emptyForm(): FormState {
   return {
     nombre: '', descripcion: '', departamentos_ids: [],
     perfil_puesto_id: '', permisos: [], activo: true,
-  }
-}
-function compareRoles(a: RolDoc, b: RolDoc, sortKey: string, dir: MaestroSortDir): number {
-  const deptA = departamentosFromRol(a).map((d) => d.nombre).join(', ')
-  const deptB = departamentosFromRol(b).map((d) => d.nombre).join(', ')
-  switch (sortKey) {
-    case 'departamento':
-      return compareStrings(deptA, deptB, dir)
-    case 'permisos':
-      return compareNumbers(a.permisos?.length ?? 0, b.permisos?.length ?? 0, dir)
-    case 'nombre':
-    default:
-      return compareStrings(a.nombre, b.nombre, dir)
   }
 }
 
@@ -120,25 +97,7 @@ export function RolesPage() {
 
   useEffect(() => { void reload() }, [reload])
 
-  const maestro = useMaestroList({
-    items: list,
-    defaultSortKey: 'nombre',
-    getActivo: (r) => r.activo,
-    searchTexts: (r) => {
-      const deptos = departamentosFromRol(r)
-      const perfil = perfilFromRol(r)
-      return [r.nombre, r.descripcion, ...deptos.map((d) => d.nombre), perfil?.titulo]
-    },
-    compare: compareRoles,
-  })
-  const { rows, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, count, total } = maestro
-
-  const pagination = usePagination(rows.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${total}`,
-  })
-  const pageRows = pagination.slice(rows)
-
-  const visibleIds = useMemo(() => pageRows.map((r) => r._id), [pageRows])
+  const visibleIds = useMemo(() => list.map((r) => r._id), [list])
   const bulk = useMaestroBulkDelete({
     recurso: 'roles',
     visibleIds,
@@ -194,25 +153,12 @@ export function RolesPage() {
             Define los roles del sistema y los permisos asociados a cada uno.
           </p>
         </div>
-        <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
+        <BoardPrimaryButton onClick={openNew}>
           <Plus className="size-4" /> Nuevo rol
-        </Button>
+        </BoardPrimaryButton>
       </div>
 
       {err && <p className="text-sm text-destructive">{err}</p>}
-
-      {!loading && list.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Nombre, departamento, perfil…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={count}
-          total={total}
-          countLabel="rol(es)"
-        />
-      )}
 
       {!loading && bulk.showBar && (
         <MaestroBulkDeleteBar
@@ -223,136 +169,136 @@ export function RolesPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : list.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Sin roles registrados.</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ningún rol coincide con los filtros.</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <MaestroSelectAllHeader
-                    allSelected={bulk.allSelected}
-                    someSelected={bulk.someSelected}
-                    onToggleAll={bulk.toggleAll}
-                  />
-                  <TableHead className="w-8" />
-                  <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="departamento" label="Departamentos" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Perfil de puesto</TableHead>
-                  <MaestroSortableHead column="permisos" label="Permisos" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((r) => {
-                  const deptos = departamentosFromRol(r)
-                  const perfil = perfilFromRol(r)
-                  return (
-                  <TableRow key={r._id}>
-                    <MaestroSelectCell
-                      id={r._id}
-                      label={r.nombre}
-                      selected={bulk.selectedIds.has(r._id)}
-                      onToggle={bulk.toggle}
-                    />
-                    <TableCell><Shield className="size-4 text-muted-foreground" /></TableCell>
-                    <TableCell>
-                      <div className="font-medium">{r.nombre}</div>
-                      {r.descripcion && (
-                        <div className="text-xs text-muted-foreground">{r.descripcion}</div>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={list}
+          countLabel="rol"
+          emptyMessage="Sin roles registrados."
+          searchTexts={(r) => {
+            const deptos = departamentosFromRol(r)
+            const perfil = perfilFromRol(r)
+            return [r.nombre, r.descripcion, ...deptos.map((d) => d.nombre), perfil?.titulo]
+          }}
+          columns={[
+            {
+              id: 'sel',
+              label: '',
+              className: 'w-8',
+              render: (r) => (
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--navy)]"
+                  checked={bulk.selectedIds.has(r._id)}
+                  onChange={() => bulk.toggle(r._id)}
+                  aria-label={`Seleccionar ${r.nombre}`}
+                />
+              ),
+            },
+            {
+              id: 'nombre',
+              label: 'Nombre',
+              render: (r) => (
+                <div className="flex items-start gap-2">
+                  <Shield className="mt-0.5 size-4 shrink-0" style={{ color: BOARD.muted }} />
+                  <div>
+                    <div className="font-medium">{r.nombre}</div>
+                    {r.descripcion && (
+                      <div className="text-xs" style={{ color: BOARD.muted }}>{r.descripcion}</div>
+                    )}
+                  </div>
+                </div>
+              ),
+            },
+            {
+              id: 'departamentos',
+              label: 'Departamentos',
+              render: (r) => {
+                const deptos = departamentosFromRol(r)
+                if (deptos.length === 0) return <span style={{ color: BOARD.muted }}>—</span>
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    {deptos.map((d) => (
+                      <span key={d._id} className="inline-flex items-center gap-1 text-xs">
+                        <span className="size-2 rounded-full" style={{ background: d.color ?? '#002060' }} />
+                        {d.nombre}
+                      </span>
+                    ))}
+                  </div>
+                )
+              },
+            },
+            {
+              id: 'perfil',
+              label: 'Perfil de puesto',
+              render: (r) => {
+                const perfil = perfilFromRol(r)
+                if (!perfil) return <span className="text-xs" style={{ color: BOARD.muted }}>—</span>
+                return (
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <Briefcase className="size-3.5" style={{ color: BOARD.muted }} />
+                      <span className="truncate text-sm font-medium">{perfil.titulo}</span>
+                      {perfil.tiene_personal_a_cargo && (
+                        <Crown className="size-3" style={{ color: BOARD.primary }} />
                       )}
-                    </TableCell>
-                    <TableCell>
-                      {deptos.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {deptos.map((d) => (
-                            <Badge key={d._id} variant="outline" className="gap-1 font-normal">
-                              <span
-                                className="size-2 rounded-full"
-                                style={{ background: d.color ?? '#002060' }}
-                              />
-                              {d.nombre}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
+                    </div>
+                    <code className="text-[10px]" style={{ color: BOARD.muted }}>{perfil.codigo}</code>
+                  </div>
+                )
+              },
+            },
+            {
+              id: 'permisos',
+              label: 'Permisos',
+              render: (r) => (
+                <div className="flex flex-wrap gap-1">
+                  {r.permisos.includes('*') ? (
+                    <BoardPill label="Acceso total" bg={BOARD.red} />
+                  ) : (
+                    <>
+                      {r.permisos.slice(0, 3).map((p) => (
+                        <BoardPill key={p} label={p} bg={BOARD.gray} text={BOARD.text} />
+                      ))}
+                      {r.permisos.length > 3 && (
+                        <BoardPill label={`+${r.permisos.length - 3}`} bg={BOARD.gray} text={BOARD.text} />
                       )}
-                    </TableCell>
-                    <TableCell>
-                      {perfil ? (
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <Briefcase className="size-3.5 text-muted-foreground" />
-                            <span className="truncate text-sm font-medium">{perfil.titulo}</span>
-                            {perfil.tiene_personal_a_cargo && (
-                              <Badge variant="secondary" className="gap-1 bg-[var(--navy)] py-0 text-[10px] text-white">
-                                <Crown className="size-2.5" />
-                              </Badge>
-                            )}
-                          </div>
-                          <code className="text-[10px] text-muted-foreground">{perfil.codigo}</code>
-                        </div>
-                      ) : <span className="text-xs text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {r.permisos.includes('*') ? (
-                          <Badge variant="secondary" className="bg-red-50 text-red-700">Acceso total</Badge>
-                        ) : (
-                          <>
-                            {r.permisos.slice(0, 3).map((p) => (
-                              <Badge key={p} variant="outline" className="text-[10px]">{p}</Badge>
-                            ))}
-                            {r.permisos.length > 3 && (
-                              <Badge variant="outline" className="text-[10px]">+{r.permisos.length - 3}</Badge>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={r.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                        {r.activo ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(r)}>
-                          <Edit2 className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(r)}>
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+                    </>
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (r) => (
+                <BoardPill
+                  label={r.activo ? 'Activo' : 'Inactivo'}
+                  bg={r.activo ? BOARD.green : BOARD.gray}
+                  text={r.activo ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (r) => (
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(r)}>
+                    <Edit2 className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(r)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">

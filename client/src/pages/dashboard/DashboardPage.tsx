@@ -15,16 +15,6 @@ import { GaugeRing } from '@/components/kpis/GaugeRing'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { PaginationBar } from '@/components/ui/PaginationBar'
-import { usePagination } from '@/hooks/usePagination'
 import { fetchDashboardResumen } from '@/lib/api/dashboard'
 import { formatDateDMY } from '@/lib/format'
 import { metaEstrategicaDeKpi, type KpiDoc } from '@/types/kpi'
@@ -34,6 +24,7 @@ import type { MetaEstrategicaDepto } from '@/types/departamento'
 import type { DashboardAlcanceTipo, DashboardResumen } from '@/types/dashboard'
 
 import { DashboardPersonalTodos } from './DashboardPersonalTodos'
+import { DashboardTareasBoard } from './DashboardTareasBoard'
 import { useAuthStore } from '@/store/authStore'
 
 function fmtValor(v: number | null | undefined, unidad?: string | null): string {
@@ -147,12 +138,6 @@ export function DashboardPage() {
   )
 
   const hoy = useMemo(() => formatDateDMY(new Date().toISOString()), [])
-
-  const tareasLista = data?.tareas_proximas ?? []
-  const paginationTareas = usePagination(tareasLista.length, {
-    resetKey: tareasLista.map((t) => t._id).join('|'),
-  })
-  const pageTareas = paginationTareas.slice(tareasLista)
 
   const alcance = data?.alcance
   const AlcanceIcon = alcance ? alcanceIcon(alcance.tipo) : Globe
@@ -321,57 +306,7 @@ export function DashboardPage() {
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Tareas próximas a vencer (14 días)
             </h3>
-            <Card className="shadow-sm">
-              <CardContent className="p-0">
-                {data.tareas_proximas.length === 0 ? (
-                  <p className="p-4 text-sm text-muted-foreground">No hay tareas pendientes en esta ventana.</p>
-                ) : (
-                  <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tarea</TableHead>
-                        <TableHead>Proyecto</TableHead>
-                        <TableHead>Responsable</TableHead>
-                        <TableHead className="w-[110px]">Fin</TableHead>
-                        <TableHead className="w-[120px]">Estado</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pageTareas.map((t) => (
-                        <TableRow key={t._id}>
-                          <TableCell className="max-w-[200px] font-medium">{t.nombre}</TableCell>
-                          <TableCell>
-                            <Link
-                              to={`/proyectos/${encodeURIComponent(t.proyecto_id)}`}
-                              className="text-[var(--lime)] hover:underline"
-                            >
-                              {t.proyecto_nombre}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">{t.responsable || '—'}</TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {formatDateDMY(t.fecha_fin)}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">{t.estado}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <PaginationBar
-                    page={paginationTareas.page}
-                    totalPages={paginationTareas.totalPages}
-                    pageSize={paginationTareas.pageSize}
-                    totalItems={paginationTareas.totalItems}
-                    fromItem={paginationTareas.fromItem}
-                    toItem={paginationTareas.toItem}
-                    onPageChange={paginationTareas.setPage}
-                    onPageSizeChange={paginationTareas.setPageSize}
-                  />
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <DashboardTareasBoard tareas={data.tareas_proximas} />
           </section>
 
           {metasConDatos.length > 0 ? (

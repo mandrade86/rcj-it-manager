@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Download, FolderKanban, Map, Plus, RotateCw, Trash2, Upload } from 'lucide-react'
+import { Download, FolderKanban, Map, Plus, RotateCw, Table2, Trash2, Upload } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -24,6 +24,7 @@ import { ProyectosFiltrosBar } from '@/pages/proyectos/ProyectosFiltrosBar'
 import { ProyectosGantt } from '@/pages/proyectos/ProyectosGantt'
 import { ProyectosRoadmap } from '@/pages/proyectos/ProyectosRoadmap'
 import { ProyectosTabla } from '@/pages/proyectos/ProyectosTabla'
+import { ProyectosTablaBoard } from '@/pages/proyectos/ProyectosTablaBoard'
 import { PaginationBar } from '@/components/ui/PaginationBar'
 import { usePagination } from '@/hooks/usePagination'
 import { useAuthStore } from '@/store/authStore'
@@ -56,15 +57,17 @@ export function ProyectosPage() {
 
   const vistaFromUrl = searchParams.get('vista')
   const initialVista =
-    vistaFromUrl === 'gantt' || vistaFromUrl === 'roadmap' ? vistaFromUrl : 'lista'
-  const [vista, setVista] = useState<'lista' | 'gantt' | 'roadmap'>(initialVista)
+    vistaFromUrl === 'gantt' || vistaFromUrl === 'roadmap' || vistaFromUrl === 'lista'
+      ? vistaFromUrl
+      : 'tablero'
+  const [vista, setVista] = useState<'tablero' | 'lista' | 'gantt' | 'roadmap'>(initialVista)
 
-  function setVistaConUrl(next: 'lista' | 'gantt' | 'roadmap') {
+  function setVistaConUrl(next: 'tablero' | 'lista' | 'gantt' | 'roadmap') {
     setVista(next)
     setSp(
       (prev) => {
         const n = new URLSearchParams(prev)
-        if (next === 'lista') n.delete('vista')
+        if (next === 'tablero') n.delete('vista')
         else n.set('vista', next)
         return n
       },
@@ -74,8 +77,8 @@ export function ProyectosPage() {
 
   useEffect(() => {
     const v = searchParams.get('vista')
-    if (v === 'gantt' || v === 'roadmap') setVista(v)
-    else if (v === null || v === '') setVista('lista')
+    if (v === 'gantt' || v === 'roadmap' || v === 'lista') setVista(v)
+    else if (v === 'tablero' || v === null || v === '') setVista('tablero')
   }, [searchParams])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -496,6 +499,9 @@ export function ProyectosPage() {
 
       <Tabs value={vista} onValueChange={(v) => setVistaConUrl(v as typeof vista)}>
         <TabsList className="inline-flex h-9 w-auto">
+          <TabsTrigger value="tablero" className="gap-1.5">
+            <Table2 className="size-3.5" /> Tablero
+          </TabsTrigger>
           <TabsTrigger value="lista" className="gap-1.5">
             <FolderKanban className="size-3.5" /> Lista
           </TabsTrigger>
@@ -504,6 +510,19 @@ export function ProyectosPage() {
             <Map className="size-3.5" /> Roadmap
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="tablero" className="mt-2">
+          {loading && list.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            <ProyectosTablaBoard
+              rows={displayList}
+              onRowClick={openDetail}
+              puedeEditar={puedeEditar}
+              onAdd={puedeEditar ? () => navigate('/proyectos/nuevo') : undefined}
+              emptyMessage={emptyTablaMsg}
+            />
+          )}
+        </TabsContent>
         <TabsContent value="lista" className="mt-2">
           {puedeEliminar && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">

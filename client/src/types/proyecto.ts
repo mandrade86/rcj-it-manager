@@ -79,6 +79,14 @@ export type Proyecto = {
   kpi_id?: string | KpiDoc | null
   meta_kpi?: string | null
   porcentaje_avance: number
+  /** Envelope presupuestario del proyecto. */
+  presupuesto_planificado?: number | null
+  /** Σ montos asignados a tareas (auto). */
+  presupuesto_asignado?: number | null
+  /** Σ ejecutado estimado desde tareas (auto). */
+  presupuesto_ejecutado?: number | null
+  moneda_presupuesto?: 'HNL' | 'USD' | null
+  presupuesto_notas?: string | null
   notas?: string | null
   historial?: ProyectoCambio[]
   participantes?: ProyectoParticipante[]
@@ -86,6 +94,39 @@ export type Proyecto = {
   createdAt?: string
   updatedAt?: string
   riesgo?: RiesgoProyecto
+}
+
+/** % de consumo del presupuesto (ejecutado / planificado). */
+export function proyectoPresupuestoConsumoPct(p: Proyecto): number | null {
+  const plan = p.presupuesto_planificado
+  const ejec = p.presupuesto_ejecutado
+  if (plan == null || !Number.isFinite(plan) || plan <= 0) return null
+  if (ejec == null || !Number.isFinite(ejec)) return null
+  return (ejec / plan) * 100
+}
+
+/** % del envelope ya repartido en tareas (asignado / planificado). */
+export function proyectoPresupuestoAsignacionPct(p: Proyecto): number | null {
+  const plan = p.presupuesto_planificado
+  const asg = p.presupuesto_asignado
+  if (plan == null || !Number.isFinite(plan) || plan <= 0) return null
+  if (asg == null || !Number.isFinite(asg)) return null
+  return (asg / plan) * 100
+}
+
+export function proyectoPresupuestoDisponible(p: Proyecto): number | null {
+  const plan = p.presupuesto_planificado
+  if (plan == null || !Number.isFinite(plan)) return null
+  const asg = p.presupuesto_asignado ?? 0
+  return Math.round((plan - asg) * 100) / 100
+}
+
+export function proyectoTienePresupuesto(p: Proyecto): boolean {
+  return (
+    (p.presupuesto_planificado != null && Number.isFinite(p.presupuesto_planificado))
+    || (p.presupuesto_asignado != null && Number.isFinite(p.presupuesto_asignado) && p.presupuesto_asignado > 0)
+    || (p.presupuesto_ejecutado != null && Number.isFinite(p.presupuesto_ejecutado) && p.presupuesto_ejecutado > 0)
+  )
 }
 
 export function proyectoOwnerId(p: Proyecto): string | null {

@@ -1,4 +1,5 @@
 export type TareaEstado = 'Pendiente' | 'En progreso' | 'Completado' | 'Bloqueado'
+export type TareaPrioridad = 'Alta' | 'Media' | 'Baja'
 
 export type TareaAdjunto = {
   _id: string
@@ -29,6 +30,11 @@ export type Tarea = {
   fecha_inicio?: string | null
   fecha_fin?: string | null
   estado: TareaEstado
+  prioridad?: TareaPrioridad | null
+  /** Presupuesto asignado a la tarea (moneda del proyecto). */
+  monto_asignado?: number | null
+  /** Gasto real (opcional). Si no hay, se estima con monto_asignado × % avance. */
+  monto_ejecutado?: number | null
   porcentaje: number
   eje?: string | null
   adjuntos?: TareaAdjunto[]
@@ -38,6 +44,44 @@ export type Tarea = {
   tags?: string[]
   createdAt?: string
   updatedAt?: string
+}
+
+/** Ejecutado estimado de una tarea para rollup de presupuesto. */
+export function tareaMontoEjecutadoEstimado(t: Tarea): number {
+  if (t.monto_ejecutado != null && Number.isFinite(t.monto_ejecutado)) {
+    return Math.max(0, t.monto_ejecutado)
+  }
+  const asignado = t.monto_asignado != null && Number.isFinite(t.monto_asignado)
+    ? Math.max(0, t.monto_asignado)
+    : 0
+  if (asignado <= 0) return 0
+  if (t.estado === 'Completado') return asignado
+  const pct = Math.min(100, Math.max(0, t.porcentaje ?? 0))
+  return (asignado * pct) / 100
+}
+
+export function sumarPresupuestoTareas(tareas: Tarea[]): {
+  asignado: number
+  ejecutado: number
+  conMonto: number
+} {
+  let asignado = 0
+  let ejecutado = 0
+  let conMonto = 0
+  for (const t of tareas) {
+    if (t.monto_asignado != null && Number.isFinite(t.monto_asignado) && t.monto_asignado > 0) {
+      conMonto += 1
+      asignado += t.monto_asignado
+    } else if (t.monto_ejecutado != null && Number.isFinite(t.monto_ejecutado) && t.monto_ejecutado > 0) {
+      conMonto += 1
+    }
+    ejecutado += tareaMontoEjecutadoEstimado(t)
+  }
+  return {
+    asignado: Math.round(asignado * 100) / 100,
+    ejecutado: Math.round(ejecutado * 100) / 100,
+    conMonto,
+  }
 }
 
 export type ReporteSemanalTarea = {

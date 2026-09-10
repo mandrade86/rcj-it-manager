@@ -13,13 +13,9 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { compareStrings, type MaestroSortDir } from '@/lib/maestroList'
 import {
   createPlantillaCarrera, deletePlantillaCarrera, fetchPlantillaCarrera,
   fetchPlantillasCarrera, updateItemsPlantilla, updatePlantillaCarrera,
@@ -36,24 +32,6 @@ import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
 
 const selectClass = MAESTRO_SELECT_CLASS
 
-function comparePlantillas(
-  a: PlantillaCarreraDoc,
-  b: PlantillaCarreraDoc,
-  sortKey: string,
-  dir: MaestroSortDir,
-): number {
-  const deptA = deptFromPlantilla(a)?.nombre ?? ''
-  const deptB = deptFromPlantilla(b)?.nombre ?? ''
-  switch (sortKey) {
-    case 'departamento':
-      return compareStrings(deptA, deptB, dir)
-    case 'items':
-      return compareStrings(String(a.items.length), String(b.items.length), dir)
-    case 'nombre':
-    default:
-      return compareStrings(a.nombre, b.nombre, dir)
-  }
-}
 
 const SECCIONES_SUGERIDAS = [
   'A. Formación académica y técnica',
@@ -265,24 +243,7 @@ export function PlantillasCarreraPage() {
 
   useEffect(() => { void reload() }, [reload])
 
-  const maestro = useMaestroList({
-    items: list,
-    defaultSortKey: 'nombre',
-    getActivo: (p) => p.activo,
-    searchTexts: (p) => {
-      const d = deptFromPlantilla(p)
-      return [p.nombre, p.descripcion, p.tipo_ruta, d?.nombre, d?.codigo]
-    },
-    compare: comparePlantillas,
-  })
-  const { rows, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, count, total } = maestro
-
-  const pagination = usePagination(rows.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${total}`,
-  })
-  const pageRows = pagination.slice(rows)
-
-  const visibleIds = useMemo(() => pageRows.map((pl) => pl._id), [pageRows])
+  const visibleIds = useMemo(() => list.map((pl) => pl._id), [list])
   const bulk = useMaestroBulkDelete({
     recurso: 'plantillas-carrera',
     visibleIds,
@@ -343,25 +304,12 @@ export function PlantillasCarreraPage() {
                 Define las rutas de desarrollo para cualquier departamento. Desde aquí asignas planes a colaboradores.
               </p>
             </div>
-            <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
+            <BoardPrimaryButton onClick={openNew}>
               <Plus className="size-4" /> Nueva plantilla
-            </Button>
+            </BoardPrimaryButton>
           </div>
 
           {err && <p className="text-sm text-destructive">{err}</p>}
-
-          {!loading && list.length > 0 && (
-            <MaestroListToolbar
-              busqueda={busqueda}
-              onBusquedaChange={setBusqueda}
-              busquedaPlaceholder="Nombre, ruta, departamento…"
-              filterActivo={filterActivo}
-              onFilterActivoChange={setFilterActivo}
-              count={count}
-              total={total}
-              countLabel="plantilla(s)"
-            />
-          )}
 
           {!loading && bulk.showBar && (
             <MaestroBulkDeleteBar
@@ -372,96 +320,108 @@ export function PlantillasCarreraPage() {
             />
           )}
 
-          <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-            {/* List */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-sm">Plantillas ({rows.length})</CardTitle>
-                {list.length > 0 && (
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            <EntityBoard
+              rows={list}
+              countLabel="plantilla"
+              emptyMessage="Sin plantillas. Crea la primera."
+              searchTexts={(pl) => {
+                const d = deptFromPlantilla(pl)
+                return [pl.nombre, pl.descripcion, pl.tipo_ruta, d?.nombre, d?.codigo]
+              }}
+              onRowClick={(pl) => void openDetail(pl)}
+              columns={[
+                {
+                  id: 'sel',
+                  label: '',
+                  className: 'w-8',
+                  render: (pl) => (
                     <input
                       type="checkbox"
-                      className="size-3.5 accent-[var(--lime)]"
-                      checked={bulk.allSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = !bulk.allSelected && bulk.someSelected
-                      }}
-                      onChange={bulk.toggleAll}
+                      className="size-3.5 accent-[var(--navy)]"
+                      checked={bulk.selectedIds.has(pl._id)}
+                      onChange={() => bulk.toggle(pl._id)}
+                      aria-label={`Seleccionar ${pl.nombre}`}
                     />
-                    Todas
-                  </label>
-                )}
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? (
-                  <p className="p-3 text-sm text-muted-foreground">Cargando…</p>
-                ) : list.length === 0 ? (
-                  <p className="p-3 text-sm text-muted-foreground">Sin plantillas. Crea la primera.</p>
-                ) : rows.length === 0 ? (
-                  <p className="p-3 text-sm text-muted-foreground">Ninguna plantilla coincide con los filtros.</p>
-                ) : (
-                  <>
-                  <ul className="divide-y divide-border">
-                    {pageRows.map((pl) => {
-                      const dept = deptFromPlantilla(pl)
-                      const isActive = selected?._id === pl._id
-                      return (
-                        <li key={pl._id} className="flex items-stretch">
-                          <div
-                            className="flex items-center px-2"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              type="checkbox"
-                              className="size-3.5 accent-[var(--lime)]"
-                              checked={bulk.selectedIds.has(pl._id)}
-                              onChange={() => bulk.toggle(pl._id)}
-                              aria-label={`Seleccionar ${pl.nombre}`}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void openDetail(pl)}
-                            className={cn(
-                              'flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40',
-                              isActive && 'bg-[var(--blue-lt)] font-medium',
-                            )}
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm">{pl.nombre}</p>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                {dept && (
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full"
-                                    style={{ background: dept.color ?? '#002060' }}
-                                  />
-                                )}
-                                <span className="text-xs text-muted-foreground">{dept?.nombre ?? 'Sin dpto'} · {pl.items.length} ítems</span>
-                              </div>
-                            </div>
-                            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  <PaginationBar
-                    page={pagination.page}
-                    totalPages={pagination.totalPages}
-                    pageSize={pagination.pageSize}
-                    totalItems={pagination.totalItems}
-                    fromItem={pagination.fromItem}
-                    toItem={pagination.toItem}
-                    onPageChange={pagination.setPage}
-                    onPageSizeChange={pagination.setPageSize}
-                  />
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                  ),
+                },
+                {
+                  id: 'nombre',
+                  label: 'Plantilla',
+                  render: (pl) => (
+                    <div>
+                      <p className="font-medium">{pl.nombre}</p>
+                      {pl.descripcion && (
+                        <p className="line-clamp-1 text-xs" style={{ color: BOARD.muted }}>{pl.descripcion}</p>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  id: 'departamento',
+                  label: 'Departamento',
+                  render: (pl) => {
+                    const dept = deptFromPlantilla(pl)
+                    if (!dept) return <span style={{ color: BOARD.muted }}>Sin dpto</span>
+                    return (
+                      <span className="inline-flex items-center gap-1.5 text-xs">
+                        <span className="size-2 rounded-full" style={{ background: dept.color ?? '#002060' }} />
+                        {dept.nombre}
+                      </span>
+                    )
+                  },
+                },
+                {
+                  id: 'ruta',
+                  label: 'Tipo de ruta',
+                  render: (pl) => <BoardPill label={pl.tipo_ruta} bg={BOARD.indigo} />,
+                },
+                {
+                  id: 'items',
+                  label: 'Ítems',
+                  render: (pl) => <span className="text-sm tabular-nums">{pl.items.length}</span>,
+                },
+                {
+                  id: 'estado',
+                  label: 'Estado',
+                  render: (pl) => (
+                    <BoardPill
+                      label={pl.activo ? 'Activa' : 'Inactiva'}
+                      bg={pl.activo ? BOARD.green : BOARD.gray}
+                      text={pl.activo ? '#fff' : BOARD.text}
+                    />
+                  ),
+                },
+                {
+                  id: 'acciones',
+                  label: 'Acciones',
+                  align: 'right',
+                  render: (pl) => (
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" title="Ver detalle" onClick={() => void openDetail(pl)}>
+                        <ChevronRight className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => openEditForm(pl)}>
+                        <Edit2 className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(pl)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
 
-            {/* Detail */}
-            {selected ? (
+          {selected ? (
               <Card>
                 <CardHeader className="border-b pb-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -560,12 +520,7 @@ export function PlantillasCarreraPage() {
                   )}
                 </CardContent>
               </Card>
-            ) : (
-              <div className="flex items-center justify-center rounded-lg border border-dashed p-12 text-muted-foreground">
-                Selecciona una plantilla para ver su detalle
-              </div>
-            )}
-          </div>
+            ) : null}
         </>
       )}
 

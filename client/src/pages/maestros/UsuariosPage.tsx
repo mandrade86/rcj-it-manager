@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, Edit2, Key, Plus, Search, Trash2, User as UserIcon, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BadgeCheck, Download, Edit2, Key, Plus, Search, Trash2, Upload, User as UserIcon, X } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -16,20 +14,17 @@ import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchEmpleados } from '@/lib/api/empleados'
 import { fetchRoles } from '@/lib/api/roles'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
+import { BOARD, BoardAvatar, BoardPill, EntityBoard, BoardPrimaryButton } from '@/components/board/EntityBoard'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { compareStrings, type MaestroSortDir } from '@/lib/maestroList'
 import { isApiRequestError } from '@/lib/api/errors'
 import {
-  createUsuario, deleteUsuario, fetchUsuarios, resetPasswordUsuario, updateUsuario,
+  createUsuario, deleteUsuario, descargarPlantillaUsuarios, fetchUsuarios,
+  importUsuariosExcel, resetPasswordUsuario, updateUsuario,
+  type ImportUsuariosResult,
 } from '@/lib/api/usuarios'
 import { formatDateDMY } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { EmpleadoDoc } from '@/types/empleado'
 import type { RolDoc } from '@/types/rol'
@@ -339,25 +334,12 @@ function EmpleadosMultiSelect({
 
 // ─── Página principal ────────────────────────────────────────────────────────
 
-function compareUsuarios(a: UsuarioDoc, b: UsuarioDoc, sortKey: string, dir: MaestroSortDir): number {
-  const rolA = rolFromUsuario(a)?.nombre ?? ''
-  const rolB = rolFromUsuario(b)?.nombre ?? ''
-  const deptA = deptFromUsuario(a)?.nombre ?? ''
-  const deptB = deptFromUsuario(b)?.nombre ?? ''
-  switch (sortKey) {
-    case 'email':
-      return compareStrings(loginDisplayFromUsuario(a), loginDisplayFromUsuario(b), dir)
-    case 'rol':
-      return compareStrings(rolA, rolB, dir)
-    case 'departamento':
-      return compareStrings(deptA, deptB, dir)
-    case 'nombre':
-    default:
-      return compareStrings(a.nombre, b.nombre, dir)
-  }
-}
-
 export function UsuariosPage() {
+  const hasPermiso = useAuthStore((s) => s.hasPermiso)
+  const puedeEditar = hasPermiso('usuarios:editar') || hasPermiso('*')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [importando, setImportando] = useState(false)
+  const [importResult, setImportResult] = useState<ImportUsuariosResult | null>(null)
   const [list, setList] = useState<UsuarioDoc[]>([])
   const [roles, setRoles] = useState<RolDoc[]>([])
   const [depts, setDepts] = useState<DepartamentoDoc[]>([])
@@ -388,26 +370,7 @@ export function UsuariosPage() {
 
   useEffect(() => { void reload() }, [reload])
 
-  const maestro = useMaestroList({
-    items: list,
-    defaultSortKey: 'nombre',
-    getActivo: (u) => u.activo,
-    searchTexts: (u) => {
-      const rol = rolFromUsuario(u)
-      const dept = deptFromUsuario(u)
-      const emp = empleadoFromUsuario(u)
-      return [u.nombre, u.email, u.login_dominio, loginDisplayFromUsuario(u), rol?.nombre, dept?.nombre, emp?.codigo, emp?.nombre]
-    },
-    compare: compareUsuarios,
-  })
-  const { rows, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, count, total } = maestro
-
-  const pagination = usePagination(rows.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${total}`,
-  })
-  const pageRows = pagination.slice(rows)
-
-  const visibleIds = useMemo(() => pageRows.map((u) => u._id), [pageRows])
+  const visibleIds = useMemo(() => list.map((u) => u._id), [list])
   const bulk = useMaestroBulkDelete({
     recurso: 'usuarios',
     visibleIds,
@@ -418,6 +381,22 @@ export function UsuariosPage() {
 
   function openNew() { setEditing(null); setForm(emptyForm()); setFormErrors({}); setOpen(true) }
   function openEdit(d: UsuarioDoc) { setEditing(d); setForm(fromDoc(d)); setFormErrors({}); setOpen(true) }
+
+  async function handleImportExcel(file: File | undefined) {
+    if (!file || !puedeEditar) return
+    setImportando(true)
+    try {
+      const result = await importUsuariosExcel(file)
+      setImportResult(result)
+      await reload()
+    } catch (ex) {
+      window.alert(ex instanceof Error ? ex.message : 'Error al importar Excel')
+    } finally {
+      setImportando(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
   function setF<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }))
     setFormErrors((errs) => {
@@ -546,25 +525,25 @@ export function UsuariosPage() {
             automáticamente sus reportes directos y la estructura bajo su cargo.
           </p>
         </div>
-        <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
-          <Plus className="size-4" /> Nuevo usuario
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {puedeEditar && (
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={(e) => void handleImportExcel(e.target.files?.[0])}
+            />
+          )}
+          {puedeEditar && (
+            <BoardPrimaryButton onClick={openNew}>
+              <Plus className="size-4" /> Nuevo usuario
+            </BoardPrimaryButton>
+          )}
+        </div>
       </div>
 
       {err && <p className="text-sm text-destructive">{err}</p>}
-
-      {!loading && list.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Nombre, email, rol, empleado…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={count}
-          total={total}
-          countLabel="usuario(s)"
-        />
-      )}
 
       {!loading && bulk.showBar && (
         <MaestroBulkDeleteBar
@@ -575,142 +554,184 @@ export function UsuariosPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : list.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Sin usuarios registrados.</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ningún usuario coincide con los filtros.</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <MaestroSelectAllHeader
-                    allSelected={bulk.allSelected}
-                    someSelected={bulk.someSelected}
-                    onToggleAll={bulk.toggleAll}
-                  />
-                  <TableHead className="w-8" />
-                  <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="email" label="Login / Email" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="rol" label="Rol" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Empleado</TableHead>
-                  <MaestroSortableHead column="departamento" label="Departamento" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Adicionales</TableHead>
-                  <TableHead>Último acceso</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((u) => {
-                  const rol = rolFromUsuario(u)
-                  const dept = deptFromUsuario(u)
-                  const empSelf = empleadoFromUsuario(u)
-                  const emps = empleadosFromUsuario(u)
-                  return (
-                    <TableRow key={u._id}>
-                      <MaestroSelectCell
-                        id={u._id}
-                        label={u.nombre}
-                        selected={bulk.selectedIds.has(u._id)}
-                        onToggle={bulk.toggle}
-                      />
-                      <TableCell><UserIcon className="size-4 text-muted-foreground" /></TableCell>
-                      <TableCell className="font-medium">{u.nombre}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        <span>{u.email}</span>
-                        {u.es_usuario_dominio && u.login_dominio && (
-                          <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground/80">
-                            AD: {u.login_dominio}
-                          </span>
-                        )}
-                        {u.es_usuario_dominio && (
-                          <Badge variant="outline" className="ml-1.5 text-[10px]">Dominio</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{rol ? <Badge variant="secondary">{rol.nombre}</Badge> : '—'}</TableCell>
-                      <TableCell>
-                        {empSelf ? (
-                          <div className="flex items-center gap-1.5">
-                            <BadgeCheck className="size-3.5 text-[var(--navy)]" />
-                            <div className="min-w-0">
-                              <span className="text-sm font-medium">{empSelf.nombre}</span>
-                              <span className="ml-1 font-mono text-[10px] text-muted-foreground">{empSelf.codigo}</span>
-                            </div>
-                          </div>
-                        ) : <span className="text-xs text-muted-foreground">— Sin amarrar —</span>}
-                      </TableCell>
-                      <TableCell>
-                        {dept ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="size-2.5 rounded-full" style={{ background: dept.color ?? '#002060' }} />
-                            <span className="text-sm">{dept.nombre}</span>
-                          </div>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                      <TableCell>
-                        {emps.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {emps.slice(0, 2).map((e) => (
-                              <Badge key={e._id} variant="outline" className="text-[10px]">
-                                {e.nombre.split(' ')[0]}
-                              </Badge>
-                            ))}
-                            {emps.length > 2 && (
-                              <Badge variant="outline" className="text-[10px]">+{emps.length - 2}</Badge>
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {u.ultimo_acceso ? formatDateDMY(u.ultimo_acceso) : 'Nunca'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          <Badge variant="secondary" className={u.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                            {u.activo ? 'Activo' : 'Inactivo'}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" title="Resetear contraseña" onClick={() => setResetTarget(u)}>
-                            <Key className="size-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
-                            <Edit2 className="size-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteTarget(u)}>
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={list}
+          countLabel="usuario"
+          emptyMessage="Sin usuarios registrados."
+          searchTexts={(u) => {
+            const rol = rolFromUsuario(u)
+            const dept = deptFromUsuario(u)
+            const emp = empleadoFromUsuario(u)
+            return [u.nombre, u.email, u.login_dominio, rol?.nombre, dept?.nombre, emp?.codigo, emp?.nombre]
+          }}
+          toolbarLeft={
+            puedeEditar ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() =>
+                    void descargarPlantillaUsuarios().catch((e) =>
+                      window.alert(e instanceof Error ? e.message : 'Error al descargar plantilla'),
+                    )
+                  }
+                >
+                  <Download className="size-3.5" /> Plantilla
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={importando}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Upload className={`size-3.5 ${importando ? 'animate-pulse' : ''}`} />
+                  {importando ? 'Importando…' : 'Creación masiva'}
+                </Button>
+              </div>
+            ) : undefined
+          }
+          columns={[
+            {
+              id: 'sel',
+              label: '',
+              className: 'w-8',
+              render: (u) => (
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--navy)]"
+                  checked={bulk.selectedIds.has(u._id)}
+                  onChange={() => bulk.toggle(u._id)}
+                  aria-label={`Seleccionar ${u.nombre}`}
+                />
+              ),
+            },
+            {
+              id: 'nombre',
+              label: 'Usuario',
+              className: 'min-w-[160px]',
+              render: (u) => (
+                <div className="flex items-center gap-2">
+                  <BoardAvatar name={u.nombre} />
+                  <span className="font-medium">{u.nombre}</span>
+                </div>
+              ),
+            },
+            {
+              id: 'email',
+              label: 'Login / Email',
+              render: (u) => (
+                <div>
+                  <span className="text-xs">{u.email}</span>
+                  {u.es_usuario_dominio && u.login_dominio && (
+                    <span className="mt-0.5 block font-mono text-[10px]" style={{ color: BOARD.muted }}>
+                      AD: {u.login_dominio}
+                    </span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: 'rol',
+              label: 'Rol',
+              render: (u) => {
+                const rol = rolFromUsuario(u)
+                return rol ? (
+                  <BoardPill label={rol.nombre} bg={BOARD.indigo} />
+                ) : (
+                  <span style={{ color: BOARD.muted }}>—</span>
+                )
+              },
+            },
+            {
+              id: 'empleado',
+              label: 'Empleado',
+              render: (u) => {
+                const empSelf = empleadoFromUsuario(u)
+                return empSelf ? (
+                  <span className="text-xs">
+                    {empSelf.nombre}{' '}
+                    <span className="font-mono text-[10px]" style={{ color: BOARD.muted }}>
+                      {empSelf.codigo}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-xs" style={{ color: BOARD.muted }}>
+                    Sin amarrar
+                  </span>
+                )
+              },
+            },
+            {
+              id: 'depto',
+              label: 'Departamento',
+              render: (u) => {
+                const dept = deptFromUsuario(u)
+                return dept ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs">
+                    <span
+                      className="size-2 rounded-full"
+                      style={{ background: dept.color ?? BOARD.primary }}
+                    />
+                    {dept.nombre}
+                  </span>
+                ) : (
+                  <span style={{ color: BOARD.muted }}>—</span>
+                )
+              },
+            },
+            {
+              id: 'acceso',
+              label: 'Último acceso',
+              render: (u) => (
+                <span className="text-xs" style={{ color: BOARD.muted }}>
+                  {u.ultimo_acceso ? formatDateDMY(u.ultimo_acceso) : 'Nunca'}
+                </span>
+              ),
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (u) => (
+                <BoardPill
+                  label={u.activo ? 'Activo' : 'Inactivo'}
+                  bg={u.activo ? BOARD.green : BOARD.gray}
+                  text={u.activo ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (u) => (
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" title="Resetear contraseña" onClick={() => setResetTarget(u)}>
+                    <Key className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
+                    <Edit2 className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(u)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       {/* Create/Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
@@ -909,6 +930,50 @@ export function UsuariosPage() {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
             <Button variant="destructive" onClick={() => void handleDelete()}>Eliminar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(importResult)} onOpenChange={(o) => !o && setImportResult(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Resultado de creación masiva</DialogTitle>
+          </DialogHeader>
+          {importResult && (
+            <div className="space-y-3 text-sm">
+              <p>
+                Hoja <strong>{importResult.hoja}</strong> · {importResult.totalFilas} fila(s) leídas.
+              </p>
+              <p>
+                <span className="font-medium text-[var(--lime)]">{importResult.creados} creados</span>
+                {importResult.omitidos > 0
+                  ? ` · ${importResult.omitidos} omitidos`
+                  : ''}
+              </p>
+              {importResult.errores.length > 0 && (
+                <div className="max-h-56 overflow-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Fila</TableHead>
+                        <TableHead>Error</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importResult.errores.map((e, i) => (
+                        <TableRow key={`${e.fila}-${i}`}>
+                          <TableCell className="font-mono text-xs">{e.fila}</TableCell>
+                          <TableCell className="text-xs text-destructive">{e.error}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setImportResult(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

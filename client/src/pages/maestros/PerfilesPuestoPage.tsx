@@ -5,7 +5,6 @@ import {
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -16,15 +15,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { MAESTRO_SELECT_CLASS, compareStrings, type MaestroSortDir } from '@/lib/maestroList'
+import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
 import {
   createPerfilPuesto, deletePerfilPuesto, fetchPerfilesPuesto, fetchRubricaPerfil,
   updatePerfilPuesto, updateRubricaPerfil,
@@ -37,26 +31,6 @@ import { deptFromPerfil } from '@/types/perfilPuesto'
 import { printDescriptorPuesto } from '@/lib/printDescriptorPuesto'
 
 const selectClass = MAESTRO_SELECT_CLASS
-
-function comparePerfiles(
-  a: PerfilPuestoDoc,
-  b: PerfilPuestoDoc,
-  sortKey: string,
-  dir: MaestroSortDir,
-  _deptMap: Record<string, DepartamentoDoc>,
-): number {
-  const deptA = deptFromPerfil(a)
-  const deptB = deptFromPerfil(b)
-  switch (sortKey) {
-    case 'departamento':
-      return compareStrings(deptA?.nombre ?? '', deptB?.nombre ?? '', dir)
-    case 'codigo':
-      return compareStrings(a.codigo, b.codigo, dir)
-    case 'titulo':
-    default:
-      return compareStrings(a.titulo, b.titulo, dir)
-  }
-}
 
 type FormState = {
   codigo: string
@@ -200,33 +174,15 @@ export function PerfilesPuestoPage() {
 
   const deptMap = useMemo(() => Object.fromEntries(depts.map((d) => [d._id, d])), [depts])
 
-  const maestro = useMaestroList({
-    items: list,
-    defaultSortKey: 'titulo',
-    getActivo: () => true,
-    searchTexts: (p) => {
-      const d = deptFromPerfil(p)
-      return [p.codigo, p.titulo, p.objetivo, d?.nombre, d?.codigo]
-    },
-    compare: (a, b, sortKey, sortDir) => comparePerfiles(a, b, sortKey, sortDir, deptMap),
-  })
-  const { rows: searched, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, total } =
-    maestro
-
   const filtered = useMemo(() => {
-    if (!filterDept) return searched
-    return searched.filter((p) => {
+    if (!filterDept) return list
+    return list.filter((p) => {
       const d = deptFromPerfil(p)
       return d?._id === filterDept || d?.codigo === filterDept
     })
-  }, [searched, filterDept])
+  }, [list, filterDept])
 
-  const pagination = usePagination(filtered.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${filterDept}|${total}`,
-  })
-  const pageRows = pagination.slice(filtered)
-
-  const visibleIds = useMemo(() => pageRows.map((p) => p._id), [pageRows])
+  const visibleIds = useMemo(() => filtered.map((p) => p._id), [filtered])
   const bulk = useMaestroBulkDelete({
     recurso: 'perfiles-puesto',
     visibleIds,
@@ -243,35 +199,10 @@ export function PerfilesPuestoPage() {
             Catálogo de perfiles/puestos por departamento. Define objetivos, requisitos, responsabilidades y competencias.
           </p>
         </div>
-        <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
+        <BoardPrimaryButton onClick={openNew}>
           <Plus className="size-4" /> Nuevo perfil
-        </Button>
+        </BoardPrimaryButton>
       </div>
-
-      {!loading && list.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Código, título, departamento…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={filtered.length}
-          total={total}
-          countLabel="perfil(es)"
-        >
-          <div className="grid gap-1">
-            <label className="text-xs text-muted-foreground">Departamento</label>
-            <select className={selectClass + ' min-w-[200px]'} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
-              <option value="">Todos</option>
-              {depts.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {d.nombre} ({d.codigo})
-                </option>
-              ))}
-            </select>
-          </div>
-        </MaestroListToolbar>
-      )}
 
       {err && <p className="text-sm text-destructive">{err}</p>}
 
@@ -284,143 +215,146 @@ export function PerfilesPuestoPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : list.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Sin perfiles registrados.</p>
-          ) : filtered.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ningún perfil coincide con los filtros.</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <MaestroSelectAllHeader
-                    allSelected={bulk.allSelected}
-                    someSelected={bulk.someSelected}
-                    onToggleAll={bulk.toggleAll}
-                  />
-                  <MaestroSortableHead column="codigo" label="Código" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="titulo" label="Título del puesto" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="departamento" label="Departamento" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Nivel</TableHead>
-                  <TableHead>Jefatura</TableHead>
-                  <TableHead>Evaluación</TableHead>
-                  <TableHead>Reporta a</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((p) => {
-                  const dept = deptFromPerfil(p)
-                  const deptInfo = dept ? deptMap[dept._id] ?? dept : null
-                  return (
-                    <TableRow key={p._id}>
-                      <MaestroSelectCell
-                        id={p._id}
-                        label={p.titulo}
-                        selected={bulk.selectedIds.has(p._id)}
-                        onToggle={bulk.toggle}
-                      />
-                      <TableCell className="font-mono text-sm font-semibold">{p.codigo}</TableCell>
-                      <TableCell className="font-medium">{p.titulo}</TableCell>
-                      <TableCell>
-                        {deptInfo ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="size-2.5 rounded-full" style={{ background: deptInfo.color ?? '#002060' }} />
-                            <span className="text-sm">{deptInfo.nombre}</span>
-                          </div>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                      <TableCell>
-                        {p.nivel ? <Badge variant="secondary">{p.nivel}</Badge> : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {p.tiene_personal_a_cargo ? (
-                          <Badge variant="secondary" className="gap-1 bg-[var(--navy)] py-0 text-[10px] text-white">
-                            <Crown className="size-2.5" /> Con personal
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {p.rubrica_criterios && p.rubrica_criterios.length > 0 ? (
-                            <Badge variant="secondary" className="gap-1 bg-[var(--lime-lt)] py-0 text-[10px] text-[var(--navy)]">
-                              <ListChecks className="size-3" />
-                              Rúbrica: {p.rubrica_criterios.length}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Sin rúbrica</span>
-                          )}
-                          {p.kpis_evaluacion && p.kpis_evaluacion.length > 0 ? (
-                            <Badge variant="secondary" className="gap-1 bg-[var(--blue-lt)] py-0 text-[10px] text-[var(--navy)]">
-                              <Target className="size-3" />
-                              KPIs: {p.kpis_evaluacion.length}
-                            </Badge>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground">Sin KPIs</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{p.reporta_a || '—'}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Editar rúbrica de evaluación"
-                            onClick={() => setRubricaTarget(p)}
-                          >
-                            <ClipboardList className="size-4 text-[var(--navy)]" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Evaluación por cumplimiento de KPI"
-                            onClick={() => setKpisEvalTarget(p)}
-                          >
-                            <Target className="size-4 text-[var(--navy)]" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Imprimir descriptor (RH-F-04)"
-                            onClick={() => printDescriptorPuesto({ perfil: p })}
-                          >
-                            <Printer className="size-4 text-[var(--navy)]" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                            <Edit2 className="size-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteTarget(p)}>
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={filtered}
+          countLabel="perfil"
+          emptyMessage="Sin perfiles registrados."
+          searchTexts={(p) => {
+            const d = deptFromPerfil(p)
+            return [p.codigo, p.titulo, p.objetivo, d?.nombre, d?.codigo]
+          }}
+          groups={[{ id: 'todos', label: 'Todos', color: BOARD.blue, match: () => true }]}
+          toolbarLeft={
+            <div className="grid gap-1">
+              <label className="text-xs" style={{ color: BOARD.muted }}>Departamento</label>
+              <select className={selectClass + ' min-w-[200px]'} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
+                <option value="">Todos</option>
+                {depts.map((d) => (
+                  <option key={d._id} value={d._id}>
+                    {d.nombre} ({d.codigo})
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+          minWidth="1000px"
+          columns={[
+            {
+              id: 'sel',
+              label: '',
+              className: 'w-8',
+              render: (p) => (
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--navy)]"
+                  checked={bulk.selectedIds.has(p._id)}
+                  onChange={() => bulk.toggle(p._id)}
+                  aria-label={`Seleccionar ${p.titulo}`}
+                />
+              ),
+            },
+            {
+              id: 'codigo',
+              label: 'Código',
+              render: (p) => <span className="font-mono text-sm font-semibold">{p.codigo}</span>,
+            },
+            {
+              id: 'titulo',
+              label: 'Título del puesto',
+              render: (p) => <span className="font-medium">{p.titulo}</span>,
+            },
+            {
+              id: 'departamento',
+              label: 'Departamento',
+              render: (p) => {
+                const dept = deptFromPerfil(p)
+                const deptInfo = dept ? deptMap[dept._id] ?? dept : null
+                if (!deptInfo) return <span style={{ color: BOARD.muted }}>—</span>
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-2.5 rounded-full" style={{ background: deptInfo.color ?? '#002060' }} />
+                    <span className="text-sm">{deptInfo.nombre}</span>
+                  </div>
+                )
+              },
+            },
+            {
+              id: 'nivel',
+              label: 'Nivel',
+              render: (p) =>
+                p.nivel ? <BoardPill label={p.nivel} bg={BOARD.indigo} /> : <span style={{ color: BOARD.muted }}>—</span>,
+            },
+            {
+              id: 'jefatura',
+              label: 'Jefatura',
+              render: (p) =>
+                p.tiene_personal_a_cargo ? (
+                  <span className="inline-flex items-center gap-1 text-xs">
+                    <Crown className="size-3" style={{ color: BOARD.primary }} /> Con personal
+                  </span>
+                ) : (
+                  <span className="text-xs" style={{ color: BOARD.muted }}>—</span>
+                ),
+            },
+            {
+              id: 'evaluacion',
+              label: 'Evaluación',
+              render: (p) => (
+                <div className="flex flex-col gap-1">
+                  {p.rubrica_criterios && p.rubrica_criterios.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs">
+                      <ListChecks className="size-3" /> Rúbrica: {p.rubrica_criterios.length}
+                    </span>
+                  ) : (
+                    <span className="text-xs" style={{ color: BOARD.muted }}>Sin rúbrica</span>
+                  )}
+                  {p.kpis_evaluacion && p.kpis_evaluacion.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs">
+                      <Target className="size-3" /> KPIs: {p.kpis_evaluacion.length}
+                    </span>
+                  ) : (
+                    <span className="text-[11px]" style={{ color: BOARD.muted }}>Sin KPIs</span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: 'reporta',
+              label: 'Reporta a',
+              render: (p) => (
+                <span className="text-sm" style={{ color: BOARD.muted }}>{p.reporta_a || '—'}</span>
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (p) => (
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" title="Editar rúbrica de evaluación" onClick={() => setRubricaTarget(p)}>
+                    <ClipboardList className="size-4 text-[var(--navy)]" />
+                  </Button>
+                  <Button variant="ghost" size="icon" title="Evaluación por cumplimiento de KPI" onClick={() => setKpisEvalTarget(p)}>
+                    <Target className="size-4 text-[var(--navy)]" />
+                  </Button>
+                  <Button variant="ghost" size="icon" title="Imprimir descriptor (RH-F-04)" onClick={() => printDescriptorPuesto({ perfil: p })}>
+                    <Printer className="size-4 text-[var(--navy)]" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                    <Edit2 className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(p)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>

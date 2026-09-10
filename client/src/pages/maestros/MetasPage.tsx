@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, RefreshCw, Target, Trash2 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { PaginationBar } from '@/components/ui/PaginationBar'
-import { usePagination } from '@/hooks/usePagination'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
 import {
   createMeta,
@@ -34,15 +26,11 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { MetaDoc } from '@/types/meta'
-import {
-  MAESTRO_SELECT_CLASS,
-  compareNumbers,
-  compareStrings,
-  matchMaestroSearch,
-  type MaestroSortDir,
-} from '@/lib/maestroList'
+import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
 
 const selectClass = MAESTRO_SELECT_CLASS
+
+type MetaBoardRow = MetaDoc & { _id: string; activo: boolean }
 
 type FormState = {
   departamento_id: string
@@ -98,14 +86,6 @@ export function MetasPage() {
 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
-  const [busqueda, setBusqueda] = useState('')
-  const [sortKey, setSortKey] = useState('titulo')
-  const [sortDir, setSortDir] = useState<MaestroSortDir>('asc')
-
-  const onSort = useCallback((key: string, dir: MaestroSortDir) => {
-    setSortKey(key)
-    setSortDir(dir)
-  }, [])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -133,43 +113,19 @@ export function MetasPage() {
 
   useEffect(() => {
     setSelectedKeys(new Set())
-  }, [filterDept, filterActiva, busqueda, sortKey, sortDir])
+  }, [filterDept, filterActiva])
 
-  const displayed = useMemo(() => {
-    let out = rows
-    if (busqueda.trim()) {
-      out = out.filter((m) =>
-        matchMaestroSearch(busqueda, [
-          m.titulo,
-          m.id,
-          m.departamento_nombre,
-          m.departamento_codigo,
-          m.objetivo,
-          m.valor_objetivo,
-        ]),
-      )
-    }
-    return [...out].sort((a, b) => {
-      switch (sortKey) {
-        case 'departamento':
-          return compareStrings(a.departamento_nombre, b.departamento_nombre, sortDir)
-        case 'kpi_count':
-          return compareNumbers(a.kpi_count, b.kpi_count, sortDir)
-        case 'id':
-          return compareStrings(a.id, b.id, sortDir)
-        case 'titulo':
-        default:
-          return compareStrings(a.titulo, b.titulo, sortDir)
-      }
-    })
-  }, [rows, busqueda, sortKey, sortDir])
+  const boardRows: MetaBoardRow[] = useMemo(
+    () =>
+      rows.map((m) => ({
+        ...m,
+        _id: metaRowKey(m),
+        activo: m.activa !== false,
+      })),
+    [rows],
+  )
 
-  const pagination = usePagination(displayed.length, {
-    resetKey: `${filterDept}|${filterActiva}|${busqueda}|${sortKey}|${sortDir}|${rows.length}`,
-  })
-  const pageRows = pagination.slice(displayed)
-
-  const visibleKeys = useMemo(() => pageRows.map(metaRowKey), [pageRows])
+  const visibleKeys = useMemo(() => boardRows.map((m) => m._id), [boardRows])
   const allSelected = visibleKeys.length > 0 && visibleKeys.every((k) => selectedKeys.has(k))
   const someSelected = visibleKeys.some((k) => selectedKeys.has(k))
 
@@ -292,57 +248,12 @@ export function MetasPage() {
             <RefreshCw className="size-3.5" /> Actualizar
           </Button>
           {puedeEditar && (
-            <Button
-              type="button"
-              size="sm"
-              className="gap-1.5 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
-              onClick={openNew}
-            >
+            <BoardPrimaryButton onClick={openNew}>
               <Plus className="size-4" /> Nueva meta
-            </Button>
+            </BoardPrimaryButton>
           )}
         </div>
       </div>
-
-      {!loading && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Título, ID, departamento…"
-          showActivoFilter={false}
-          count={displayed.length}
-          total={rows.length}
-          countLabel="meta(s)"
-        >
-          <div className="grid gap-1">
-            <label className="text-xs text-muted-foreground">Departamento</label>
-            <select
-              className={selectClass + ' max-w-xs'}
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {depts.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {d.codigo} — {d.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-1">
-            <label className="text-xs text-muted-foreground">Estado</label>
-            <select
-              className={selectClass + ' max-w-[140px]'}
-              value={filterActiva}
-              onChange={(e) => setFilterActiva(e.target.value as typeof filterActiva)}
-            >
-              <option value="all">Todas</option>
-              <option value="true">Activas</option>
-              <option value="false">Inactivas</option>
-            </select>
-          </div>
-        </MaestroListToolbar>
-      )}
 
       {err && <p className="text-sm text-destructive">{err}</p>}
 
@@ -361,124 +272,170 @@ export function MetasPage() {
         </div>
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-6 text-sm text-muted-foreground">Cargando…</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {puedeEditar && (
-                    <TableHead className="w-10">
-                      <input
-                        type="checkbox"
-                        className="size-3.5 accent-[var(--lime)]"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = !allSelected && someSelected
-                        }}
-                        onChange={toggleAll}
-                      />
-                    </TableHead>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={boardRows}
+          countLabel="meta"
+          emptyMessage="No hay metas. Crea la primera o inicializa desde KPIs → Registrar metas."
+          searchTexts={(m) => [
+            m.titulo, m.id, m.departamento_nombre, m.departamento_codigo, m.objetivo, m.valor_objetivo,
+          ]}
+          groups={
+            filterActiva === 'all'
+              ? [
+                  { id: 'activas', label: 'Activas', color: BOARD.green, match: (r) => r.activo },
+                  { id: 'inactivas', label: 'Inactivas', color: BOARD.gray, match: (r) => !r.activo },
+                ]
+              : [{
+                  id: 'filtradas',
+                  label: filterActiva === 'true' ? 'Activas' : 'Inactivas',
+                  color: filterActiva === 'true' ? BOARD.green : BOARD.gray,
+                  match: () => true,
+                }]
+          }
+          toolbarLeft={
+            <div className="flex flex-wrap gap-3">
+              <div className="grid gap-1">
+                <label className="text-xs" style={{ color: BOARD.muted }}>Departamento</label>
+                <select
+                  className={selectClass + ' max-w-xs'}
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                >
+                  <option value="">Todos</option>
+                  {depts.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.codigo} — {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-1">
+                <label className="text-xs" style={{ color: BOARD.muted }}>Estado</label>
+                <select
+                  className={selectClass + ' max-w-[140px]'}
+                  value={filterActiva}
+                  onChange={(e) => setFilterActiva(e.target.value as typeof filterActiva)}
+                >
+                  <option value="all">Todas</option>
+                  <option value="true">Activas</option>
+                  <option value="false">Inactivas</option>
+                </select>
+              </div>
+              {puedeEditar && boardRows.length > 0 && (
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-1.5 text-xs" style={{ color: BOARD.muted }}>
+                    <input
+                      type="checkbox"
+                      className="size-3.5 accent-[var(--navy)]"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = !allSelected && someSelected
+                      }}
+                      onChange={toggleAll}
+                    />
+                    Seleccionar visibles
+                  </label>
+                </div>
+              )}
+            </div>
+          }
+          columns={[
+            ...(puedeEditar
+              ? [{
+                  id: 'sel',
+                  label: '',
+                  className: 'w-8',
+                  render: (m: MetaBoardRow) => (
+                    <input
+                      type="checkbox"
+                      className="size-3.5 accent-[var(--navy)]"
+                      checked={selectedKeys.has(m._id)}
+                      onChange={() => toggleRow(m._id)}
+                    />
+                  ),
+                }]
+              : []),
+            {
+              id: 'depto',
+              label: 'Depto',
+              render: (m) => <span className="font-mono text-xs">{m.departamento_codigo}</span>,
+            },
+            {
+              id: 'id',
+              label: 'ID',
+              render: (m) => <span className="font-mono text-xs">{m.id}</span>,
+            },
+            {
+              id: 'titulo',
+              label: 'Título',
+              render: (m) => (
+                <div>
+                  <p className="font-medium">{m.titulo}</p>
+                  {m.objetivo && (
+                    <p className="line-clamp-1 text-xs" style={{ color: BOARD.muted }}>{m.objetivo}</p>
                   )}
-                  <MaestroSortableHead column="departamento" label="Depto" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="id" label="ID" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="titulo" label="Título" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Valor objetivo</TableHead>
-                  <TableHead>Cálculo</TableHead>
-                  <MaestroSortableHead column="kpi_count" label="KPIs" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Estado</TableHead>
-                  {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayed.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={puedeEditar ? 9 : 7}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      No hay metas. Crea la primera o inicializa desde KPIs → Registrar metas.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  pageRows.map((m) => {
-                    const key = metaRowKey(m)
-                    return (
-                      <TableRow key={key}>
-                        {puedeEditar && (
-                          <TableCell>
-                            <input
-                              type="checkbox"
-                              className="size-3.5 accent-[var(--lime)]"
-                              checked={selectedKeys.has(key)}
-                              onChange={() => toggleRow(key)}
-                            />
-                          </TableCell>
-                        )}
-                        <TableCell className="text-xs">
-                          <span className="font-mono">{m.departamento_codigo}</span>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{m.id}</TableCell>
-                        <TableCell>
-                          <p className="font-medium">{m.titulo}</p>
-                          {m.objetivo && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">{m.objetivo}</p>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm">{m.valor_objetivo || '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {META_TIPO_CALCULO_LABELS[(m.tipo_calculo as MetaTipoCalculo) ?? 'promedio_kpis'] ??
-                            m.tipo_calculo}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-sm">{m.kpi_count}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className={m.activa !== false ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}
-                          >
-                            {m.activa !== false ? 'Activa' : 'Inactiva'}
-                          </Badge>
-                        </TableCell>
-                        {puedeEditar && (
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
-                                <Pencil className="size-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive"
-                                onClick={() => setDeleteTarget(m)}
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              ),
+            },
+            {
+              id: 'valor',
+              label: 'Valor objetivo',
+              render: (m) => <span className="text-sm">{m.valor_objetivo || '—'}</span>,
+            },
+            {
+              id: 'calculo',
+              label: 'Cálculo',
+              render: (m) => (
+                <span className="text-xs" style={{ color: BOARD.muted }}>
+                  {META_TIPO_CALCULO_LABELS[(m.tipo_calculo as MetaTipoCalculo) ?? 'promedio_kpis'] ??
+                    m.tipo_calculo}
+                </span>
+              ),
+            },
+            {
+              id: 'kpis',
+              label: 'KPIs',
+              render: (m) => <span className="tabular-nums text-sm">{m.kpi_count}</span>,
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (m) => (
+                <BoardPill
+                  label={m.activo ? 'Activa' : 'Inactiva'}
+                  bg={m.activo ? BOARD.green : BOARD.gray}
+                  text={m.activo ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            ...(puedeEditar
+              ? [{
+                  id: 'acciones',
+                  label: 'Acciones',
+                  align: 'right' as const,
+                  render: (m: MetaBoardRow) => (
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive"
+                        onClick={() => setDeleteTarget(m)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ),
+                }]
+              : []),
+          ]}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">

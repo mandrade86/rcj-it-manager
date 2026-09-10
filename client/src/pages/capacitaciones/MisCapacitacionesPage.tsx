@@ -9,19 +9,9 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
+import { BOARD, BoardPill, EntityBoard } from '@/components/board/EntityBoard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { PaginationBar } from '@/components/ui/PaginationBar'
-import { usePagination } from '@/hooks/usePagination'
 import { fetchMiColaborador } from '@/lib/api/colaboradores'
 import {
   fetchCapacitaciones,
@@ -38,27 +28,17 @@ import {
   proveedorNombreFromCap,
 } from '@/types/capacitacion'
 
-function estadoBadge(estado?: EstadoCap | null) {
-  if (!estado) return null
-  const cls =
-    estado === 'Completado'
-      ? 'bg-[var(--lime-lt)] text-[var(--navy)] border-[var(--lime)]/50'
-      : estado === 'En progreso'
-        ? 'bg-amber-500/10 text-amber-900 border-amber-500/40'
-        : 'bg-muted text-muted-foreground border-border'
-  return (
-    <Badge variant="outline" className={cn('border gap-1', cls)}>
-      {estado === 'Completado' && <CheckCircle2 className="size-3" />}
-      {estado === 'En progreso' && <PlayCircle className="size-3" />}
-      {estado === 'Pendiente' && <Clock className="size-3" />}
-      {estado}
-    </Badge>
-  )
-}
-
 type FilaCap = {
+  _id: string
   capacitacion: CapacitacionDoc
   asignado: AsignadoCap
+  estado: EstadoCap
+}
+
+function estadoColor(estado: EstadoCap): string {
+  if (estado === 'Completado') return BOARD.green
+  if (estado === 'En progreso') return BOARD.orange
+  return BOARD.gray
 }
 
 export function MisCapacitacionesPage() {
@@ -101,7 +81,14 @@ export function MisCapacitacionesPage() {
     const out: FilaCap[] = []
     for (const c of caps) {
       const mine = c.asignados.find((a) => colaboradorIdFromAsignado(a) === colab._id)
-      if (mine) out.push({ capacitacion: c, asignado: mine })
+      if (mine) {
+        out.push({
+          _id: c._id,
+          capacitacion: c,
+          asignado: mine,
+          estado: mine.estado ?? 'Pendiente',
+        })
+      }
     }
     return out.sort((a, b) => {
       const fa = a.capacitacion.fecha_inicio ?? a.capacitacion.fecha_fin ?? ''
@@ -113,22 +100,16 @@ export function MisCapacitacionesPage() {
   const stats = useMemo(() => {
     return {
       total: filas.length,
-      pendientes: filas.filter((f) => (f.asignado.estado ?? 'Pendiente') === 'Pendiente').length,
-      enProgreso: filas.filter((f) => f.asignado.estado === 'En progreso').length,
-      completadas: filas.filter((f) => f.asignado.estado === 'Completado').length,
-      conCertificado: filas.filter((f) => f.asignado.certificado).length,
+      pendientes: filas.filter((f) => f.estado === 'Pendiente').length,
+      enProgreso: filas.filter((f) => f.estado === 'En progreso').length,
+      completadas: filas.filter((f) => f.estado === 'Completado').length,
     }
   }, [filas])
 
   const filtradas = useMemo(() => {
     if (filtro === 'Todas') return filas
-    return filas.filter((f) => (f.asignado.estado ?? 'Pendiente') === filtro)
+    return filas.filter((f) => f.estado === filtro)
   }, [filas, filtro])
-
-  const pagination = usePagination(filtradas.length, {
-    resetKey: `${filtro}|${filtradas.length}`,
-  })
-  const pageFiltradas = pagination.slice(filtradas)
 
   async function cambiarEstado(capacitacionId: string, nuevoEstado: EstadoCap) {
     if (!colab) return
@@ -208,7 +189,6 @@ export function MisCapacitacionesPage() {
         </div>
       </header>
 
-      {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
         <StatCard label="Asignadas" value={stats.total} color="bg-muted" />
         <StatCard label="Pendientes" value={stats.pendientes} color="bg-amber-100" />
@@ -216,7 +196,6 @@ export function MisCapacitacionesPage() {
         <StatCard label="Completadas" value={stats.completadas} color="bg-[var(--lime-lt)]" />
       </div>
 
-      {/* Filtro */}
       <div className="flex flex-wrap gap-2">
         {(['Todas', 'Pendiente', 'En progreso', 'Completado'] as const).map((opt) => (
           <Button
@@ -225,8 +204,9 @@ export function MisCapacitacionesPage() {
             size="sm"
             variant={filtro === opt ? 'default' : 'outline'}
             className={cn(
-              filtro === opt && 'bg-[var(--navy)] text-white hover:bg-[var(--navy)]/90',
+              filtro === opt && 'text-white hover:opacity-90',
             )}
+            style={filtro === opt ? { backgroundColor: BOARD.primary } : undefined}
             onClick={() => setFiltro(opt)}
           >
             {opt}
@@ -243,206 +223,231 @@ export function MisCapacitacionesPage() {
         ))}
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Capacitación</TableHead>
-                <TableHead>Modalidad</TableHead>
-                <TableHead>Fechas</TableHead>
-                <TableHead>Mi estado</TableHead>
-                <TableHead>Certificado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtradas.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                    {filas.length === 0
-                      ? 'No tienes capacitaciones asignadas todavía.'
-                      : 'No hay capacitaciones que coincidan con el filtro.'}
-                  </TableCell>
-                </TableRow>
-              )}
-              {pageFiltradas.map(({ capacitacion: c, asignado: a }) => {
-                const estado = a.estado ?? 'Pendiente'
-                const busy = busyId === c._id
-                const certUrl = certificadoPublicUrl(a.certificado)
-                const tieneCert = Boolean(certUrl)
-                return (
-                  <TableRow key={c._id} className="align-top">
-                    <TableCell className="max-w-xs">
-                      <p className="text-sm font-medium leading-snug">{c.nombre}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {proveedorNombreFromCap(c) || 'Sin proveedor'}
-                        {c.duracion_horas ? ` · ${c.duracion_horas} h` : ''}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      {c.modalidad ? (
-                        <Badge variant="secondary" className="text-xs">
-                          {c.modalidad}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {c.fecha_inicio ? (
-                        <>
-                          {formatDateDMY(c.fecha_inicio)}
-                          {c.fecha_fin && (
-                            <>
-                              <span className="mx-1">→</span>
-                              {formatDateDMY(c.fecha_fin)}
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {estadoBadge(estado)}
-                        {a.fecha_completado && (
-                          <span className="text-[11px] text-muted-foreground">
-                            {formatDateDMY(a.fecha_completado)}
-                          </span>
-                        )}
-                        {typeof a.calificacion === 'number' && (
-                          <span className="text-[11px] text-muted-foreground">
-                            Calif. {a.calificacion}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {tieneCert ? (
-                        <a
-                          href={certUrl ?? '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-[var(--navy)] hover:underline"
-                        >
-                          <Award className="size-3.5" />
-                          {a.certificado_nombre || 'Ver diploma'}
-                          <ExternalLink className="size-3" />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Sin diploma</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-col items-end gap-1.5">
-                        {estado === 'Pendiente' && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() => void cambiarEstado(c._id, 'En progreso')}
-                            className="gap-1.5"
-                          >
-                            <PlayCircle className="size-3.5" />
-                            Empezar
-                          </Button>
-                        )}
-                        {estado === 'En progreso' && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() => void cambiarEstado(c._id, 'Completado')}
-                            className="gap-1.5 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
-                          >
-                            <CheckCircle2 className="size-3.5" />
-                            Marcar como completada
-                          </Button>
-                        )}
-                        {estado === 'Completado' && !tieneCert && (
-                          <>
-                            <input
-                              ref={(el) => {
-                                uploadRefs.current[c._id] = el
-                              }}
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0]
-                                if (f) void subirCertificado(c._id, f)
-                                e.target.value = ''
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={busy}
-                              onClick={() => uploadRefs.current[c._id]?.click()}
-                              className="gap-1.5"
-                            >
-                              <Upload className="size-3.5" />
-                              Subir diploma
-                            </Button>
-                          </>
-                        )}
-                        {estado === 'Completado' && tieneCert && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={() => void cambiarEstado(c._id, 'En progreso')}
-                            className="text-xs"
-                          >
-                            Reabrir
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <PaginationBar
-            page={pagination.page}
-            totalPages={pagination.totalPages}
-            pageSize={pagination.pageSize}
-            totalItems={pagination.totalItems}
-            fromItem={pagination.fromItem}
-            toItem={pagination.toItem}
-            onPageChange={pagination.setPage}
-            onPageSizeChange={pagination.setPageSize}
-          />
-          </>
-        </CardContent>
-      </Card>
+      <EntityBoard
+        rows={filtradas}
+        countLabel="capacitación"
+        emptyMessage={
+          filas.length === 0
+            ? 'No tienes capacitaciones asignadas todavía.'
+            : 'No hay capacitaciones que coincidan con el filtro.'
+        }
+        hideEmptyGroups={filtro !== 'Todas'}
+        groups={[
+          {
+            id: 'pendiente',
+            label: 'Pendientes',
+            color: BOARD.gray,
+            match: (f) => f.estado === 'Pendiente',
+          },
+          {
+            id: 'progreso',
+            label: 'En progreso',
+            color: BOARD.orange,
+            match: (f) => f.estado === 'En progreso',
+          },
+          {
+            id: 'completado',
+            label: 'Completadas',
+            color: BOARD.green,
+            match: (f) => f.estado === 'Completado',
+          },
+        ]}
+        searchTexts={(f) => [
+          f.capacitacion.nombre,
+          proveedorNombreFromCap(f.capacitacion),
+          f.capacitacion.modalidad,
+          f.estado,
+        ]}
+        minWidth="920px"
+        columns={[
+          {
+            id: 'nombre',
+            label: 'Capacitación',
+            className: 'min-w-[200px]',
+            render: (f) => {
+              const c = f.capacitacion
+              return (
+                <div>
+                  <p className="text-[13px] font-medium leading-snug">{c.nombre}</p>
+                  <p className="text-[11px]" style={{ color: BOARD.muted }}>
+                    {proveedorNombreFromCap(c) || 'Sin proveedor'}
+                    {c.duracion_horas ? ` · ${c.duracion_horas} h` : ''}
+                  </p>
+                </div>
+              )
+            },
+          },
+          {
+            id: 'modalidad',
+            label: 'Modalidad',
+            render: (f) =>
+              f.capacitacion.modalidad ? (
+                <BoardPill label={f.capacitacion.modalidad} bg={BOARD.blue} />
+              ) : (
+                <span style={{ color: BOARD.muted }}>—</span>
+              ),
+          },
+          {
+            id: 'fechas',
+            label: 'Fechas',
+            render: (f) => {
+              const c = f.capacitacion
+              if (!c.fecha_inicio) return <span style={{ color: BOARD.muted }}>—</span>
+              return (
+                <span className="text-xs" style={{ color: BOARD.muted }}>
+                  {formatDateDMY(c.fecha_inicio)}
+                  {c.fecha_fin ? ` → ${formatDateDMY(c.fecha_fin)}` : ''}
+                </span>
+              )
+            },
+          },
+          {
+            id: 'estado',
+            label: 'Mi estado',
+            render: (f) => {
+              const a = f.asignado
+              return (
+                <div className="flex flex-col gap-1">
+                  <BoardPill label={f.estado} bg={estadoColor(f.estado)} />
+                  {a.fecha_completado && (
+                    <span className="text-[11px]" style={{ color: BOARD.muted }}>
+                      {formatDateDMY(a.fecha_completado)}
+                    </span>
+                  )}
+                  {typeof a.calificacion === 'number' && (
+                    <span className="text-[11px]" style={{ color: BOARD.muted }}>
+                      Calif. {a.calificacion}
+                    </span>
+                  )}
+                </div>
+              )
+            },
+          },
+          {
+            id: 'cert',
+            label: 'Certificado',
+            render: (f) => {
+              const a = f.asignado
+              const certUrl = certificadoPublicUrl(a.certificado)
+              if (!certUrl) {
+                return <span className="text-xs" style={{ color: BOARD.muted }}>Sin diploma</span>
+              }
+              return (
+                <a
+                  href={certUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-medium hover:underline"
+                  style={{ color: BOARD.primary }}
+                >
+                  <Award className="size-3.5" />
+                  {a.certificado_nombre || 'Ver diploma'}
+                  <ExternalLink className="size-3" />
+                </a>
+              )
+            },
+          },
+          {
+            id: 'acciones',
+            label: 'Acciones',
+            align: 'right',
+            render: (f) => {
+              const c = f.capacitacion
+              const a = f.asignado
+              const estado = f.estado
+              const busy = busyId === c._id
+              return (
+                <div className="flex flex-col items-end gap-1.5">
+                  {estado === 'Pendiente' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void cambiarEstado(c._id, 'En progreso')}
+                      className="gap-1.5"
+                    >
+                      <PlayCircle className="size-3.5" />
+                      Empezar
+                    </Button>
+                  )}
+                  {estado === 'En progreso' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void cambiarEstado(c._id, 'Completado')}
+                      className="gap-1.5 text-white hover:opacity-90"
+                      style={{ backgroundColor: BOARD.green }}
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      Completar
+                    </Button>
+                  )}
+                  {(estado === 'Completado' || estado === 'En progreso') && (
+                    <>
+                      <input
+                        ref={(el) => {
+                          uploadRefs.current[c._id] = el
+                        }}
+                        type="file"
+                        accept=".pdf,image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) void subirCertificado(c._id, file)
+                          e.target.value = ''
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        className="gap-1.5"
+                        onClick={() => uploadRefs.current[c._id]?.click()}
+                      >
+                        <Upload className="size-3.5" />
+                        {a.certificado ? 'Cambiar diploma' : 'Subir diploma'}
+                      </Button>
+                    </>
+                  )}
+                  {estado === 'Completado' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      className="h-7 gap-1 text-xs"
+                      onClick={() => void cambiarEstado(c._id, 'En progreso')}
+                    >
+                      <Clock className="size-3" />
+                      Reabrir
+                    </Button>
+                  )}
+                </div>
+              )
+            },
+          },
+        ]}
+      />
     </div>
   )
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({
+  label,
+  value,
+  color,
+}: {
+  label: string
+  value: number
+  color: string
+}) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div
-          className={cn(
-            'flex size-10 shrink-0 items-center justify-center rounded-md text-base font-semibold text-[var(--navy)]',
-            color,
-          )}
-        >
-          {value}
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className={cn('rounded-lg border border-border px-4 py-3', color)}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+    </div>
   )
 }

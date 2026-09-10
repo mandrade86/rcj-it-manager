@@ -24,8 +24,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CapacitacionesAlcanceBar } from '@/components/capacitaciones/CapacitacionesAlcanceBar'
-import { PaginationBar } from '@/components/ui/PaginationBar'
-import { usePagination } from '@/hooks/usePagination'
+import { BOARD, BoardAvatar, BoardPill, EntityBoard } from '@/components/board/EntityBoard'
+import { CapacitacionesTablaBoard } from '@/pages/capacitaciones/CapacitacionesTablaBoard'
 import {
   asignarCapacitacion,
   createCapacitacion,
@@ -64,6 +64,12 @@ const selectClass =
 
 const MODALIDADES = ['Online', 'Presencial', 'Mixto'] as const
 const ESTADOS: EstadoCap[] = ['Pendiente', 'En progreso', 'Completado']
+
+function estadoCapColor(estado: EstadoCap): string {
+  if (estado === 'Completado') return BOARD.green
+  if (estado === 'En progreso') return BOARD.orange
+  return BOARD.gray
+}
 
 const NUEVO_PROVEEDOR_SENTINEL = '__nuevo__'
 
@@ -163,8 +169,30 @@ export function CapacitacionesPage() {
     })
   }, [cols, asignacionesPorCol, filtroResumen])
 
+  const resumenBoardRows = useMemo(() => {
+    return colaboradoresResumen.map((c) => {
+      const m = asignacionesPorCol.get(c._id)!
+      const pct = Math.round((m.done / m.total) * 100)
+      const dominant: EstadoCap =
+        m.done === m.total
+          ? 'Completado'
+          : m.rows.some((r) => r.estado === 'En progreso')
+            ? 'En progreso'
+            : 'Pendiente'
+      return {
+        _id: c._id,
+        colaborador: c,
+        total: m.total,
+        done: m.done,
+        pct,
+        estadoGrupo: dominant,
+      }
+    })
+  }, [colaboradoresResumen, asignacionesPorCol])
+
   const reporteRows = useMemo(() => {
     const rows: {
+      _id: string
       capId: string
       capNombre: string
       colaborador_id: string
@@ -177,10 +205,12 @@ export function CapacitacionesPage() {
     }[] = []
     for (const cap of caps) {
       for (const a of cap.asignados) {
+        const colaborador_id = colaboradorIdFromAsignado(a)
         rows.push({
+          _id: `${cap._id}-${colaborador_id}`,
           capId: cap._id,
           capNombre: cap.nombre,
-          colaborador_id: colaboradorIdFromAsignado(a),
+          colaborador_id,
           nombre: nombreColaboradorAsignado(a),
           estado: (a.estado ?? 'Pendiente') as EstadoCap,
           fecha_completado: a.fecha_completado,
@@ -192,21 +222,6 @@ export function CapacitacionesPage() {
     }
     return rows.sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'))
   }, [caps])
-
-  const pagResumen = usePagination(colaboradoresResumen.length, {
-    resetKey: `${filtroResumen}|${colaboradoresResumen.length}`,
-  })
-  const pageResumenCols = pagResumen.slice(colaboradoresResumen)
-
-  const pagLista = usePagination(capsTabla.length, {
-    resetKey: `${filtroLista}|${capsTabla.length}`,
-  })
-  const pageCapsTabla = pagLista.slice(capsTabla)
-
-  const pagReporte = usePagination(reporteRows.length, {
-    resetKey: `${reporteRows.length}|${caps.length}`,
-  })
-  const pageReporteRows = pagReporte.slice(reporteRows)
 
   const departamentosFormulario = useMemo(() => {
     if (!alcance || alcance.isGlobal) return departamentos
@@ -330,84 +345,139 @@ export function CapacitacionesPage() {
         </TabsList>
 
         <TabsContent value="resumen" className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="grid gap-2">
-              <Label className="text-xs">Filtrar por estado de asignación</Label>
-              <select
-                className={selectClass + ' w-[220px]'}
-                value={filtroResumen}
-                onChange={(e) =>
-                  setFiltroResumen((e.target.value || '') as EstadoCap | '')
-                }
-              >
-                <option value="">Todos (con asignaciones)</option>
-                {ESTADOS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {pageResumenCols.map((c) => {
-              const m = asignacionesPorCol.get(c._id)!
-              const pct = Math.round((m.done / m.total) * 100)
-              return (
-                <Card key={c._id}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base leading-tight">{c.nombre}</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {c.puesto} · {c.codigo}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Avance del plan</span>
-                      <span className="font-medium">{pct}%</span>
+          <EntityBoard
+            rows={resumenBoardRows}
+            countLabel="colaborador"
+            emptyMessage={
+              filtroResumen
+                ? `No hay colaboradores con asignaciones en estado «${filtroResumen}».`
+                : 'No hay colaboradores con asignaciones.'
+            }
+            minWidth="720px"
+            groups={[
+              {
+                id: 'pendiente',
+                label: 'Pendientes',
+                color: BOARD.gray,
+                match: (r) => r.estadoGrupo === 'Pendiente',
+              },
+              {
+                id: 'progreso',
+                label: 'En progreso',
+                color: BOARD.orange,
+                match: (r) => r.estadoGrupo === 'En progreso',
+              },
+              {
+                id: 'completado',
+                label: 'Completados',
+                color: BOARD.green,
+                match: (r) => r.estadoGrupo === 'Completado',
+              },
+            ]}
+            searchTexts={(r) => [
+              r.colaborador.nombre,
+              r.colaborador.codigo,
+              r.colaborador.puesto,
+            ]}
+            toolbarLeft={
+              <div className="grid gap-1">
+                <label className="text-xs" style={{ color: BOARD.muted }}>
+                  Estado de asignación
+                </label>
+                <select
+                  className={selectClass + ' w-[220px]'}
+                  value={filtroResumen}
+                  onChange={(e) =>
+                    setFiltroResumen((e.target.value || '') as EstadoCap | '')
+                  }
+                >
+                  <option value="">Todos (con asignaciones)</option>
+                  {ESTADOS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            }
+            columns={[
+              {
+                id: 'colab',
+                label: 'Colaborador',
+                className: 'min-w-[200px]',
+                render: (r) => (
+                  <div className="flex items-center gap-2">
+                    <BoardAvatar name={r.colaborador.nombre} />
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium">{r.colaborador.nombre}</p>
+                      <p className="truncate text-[11px]" style={{ color: BOARD.muted }}>
+                        {r.colaborador.puesto} · {r.colaborador.codigo}
+                      </p>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  </div>
+                ),
+              },
+              {
+                id: 'avance',
+                label: 'Avance del plan',
+                className: 'min-w-[180px]',
+                render: (r) => (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span style={{ color: BOARD.muted }}>
+                        {r.done} de {r.total}
+                      </span>
+                      <span className="font-medium tabular-nums">{r.pct}%</span>
+                    </div>
+                    <div
+                      className="h-1.5 overflow-hidden rounded-full"
+                      style={{ backgroundColor: BOARD.borderSoft }}
+                    >
                       <div
-                        className="h-full rounded-full bg-[var(--lime)] transition-[width]"
-                        style={{ width: `${pct}%` }}
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${r.pct}%`,
+                          backgroundColor: estadoCapColor(r.estadoGrupo),
+                        }}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {m.done} de {m.total} capacitaciones completadas
-                    </p>
-                    {puedeEditar && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-full gap-1.5"
-                        onClick={() => setAvanceCol(c)}
-                      >
-                        <ClipboardList className="size-4" />
-                        Registrar avance
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-          <PaginationBar
-            page={pagResumen.page}
-            totalPages={pagResumen.totalPages}
-            pageSize={pagResumen.pageSize}
-            totalItems={pagResumen.totalItems}
-            fromItem={pagResumen.fromItem}
-            toItem={pagResumen.toItem}
-            onPageChange={pagResumen.setPage}
-            onPageSizeChange={pagResumen.setPageSize}
+                  </div>
+                ),
+              },
+              {
+                id: 'estado',
+                label: 'Estado',
+                render: (r) => (
+                  <BoardPill
+                    label={r.estadoGrupo}
+                    bg={estadoCapColor(r.estadoGrupo)}
+                    text="#fff"
+                  />
+                ),
+              },
+              ...(puedeEditar
+                ? [
+                    {
+                      id: 'acciones',
+                      label: 'Acciones',
+                      align: 'right' as const,
+                      render: (r: (typeof resumenBoardRows)[number]) => (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => setAvanceCol(r.colaborador)}
+                        >
+                          <ClipboardList className="size-3.5" />
+                          Registrar avance
+                        </Button>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
           />
-          {colaboradoresResumen.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No hay colaboradores con asignaciones
-              {filtroResumen ? ` en estado «${filtroResumen}»` : ''}.
-            </p>
-          )}
         </TabsContent>
 
         <TabsContent value="lista" className="mt-4 space-y-4">
@@ -428,103 +498,12 @@ export function CapacitacionesPage() {
               </select>
             </div>
           </div>
-          <Card>
-            <CardContent className="p-0">
-              <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Proveedor</TableHead>
-                    <TableHead>Departamentos elegibles</TableHead>
-                    <TableHead>Modalidad</TableHead>
-                    <TableHead className="text-right">Horas</TableHead>
-                    <TableHead className="text-right">Costo</TableHead>
-                    <TableHead>Fechas</TableHead>
-                    <TableHead>Asignados</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pageCapsTabla.map((cap) => {
-                    const depts = departamentosFromCap(cap)
-                    return (
-                      <TableRow key={cap._id}>
-                        <TableCell className="max-w-[200px] font-medium">{cap.nombre}</TableCell>
-                        <TableCell className="text-sm">{proveedorNombreFromCap(cap) || '—'}</TableCell>
-                        <TableCell>
-                          {depts.length === 0 ? (
-                            <Badge variant="secondary" className="bg-[var(--lime-lt)] py-0 text-[10px] text-[var(--navy)]">
-                              Abierta a todos
-                            </Badge>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {depts.slice(0, 3).map((d) => (
-                                <Badge key={d._id} variant="outline" className="gap-1 py-0 text-[10px]">
-                                  <span
-                                    className="size-2 rounded-full"
-                                    style={{ background: d.color ?? '#002060' }}
-                                  />
-                                  {d.codigo}
-                                </Badge>
-                              ))}
-                              {depts.length > 3 && (
-                                <Badge variant="outline" className="py-0 text-[10px]">+{depts.length - 3}</Badge>
-                              )}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>{cap.modalidad ?? '—'}</TableCell>
-                        <TableCell className="text-right">{cap.duracion_horas ?? '—'}</TableCell>
-                        <TableCell className="text-right">{formatLps(cap.costo ?? null)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">
-                          {formatDateDMY(cap.fecha_inicio)} — {formatDateDMY(cap.fecha_fin)}
-                        </TableCell>
-                        <TableCell className="text-xs">{cap.asignados.length}</TableCell>
-                        <TableCell>{cap.estado}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditCap(cap)}
-                            >
-                              Editar
-                            </Button>
-                            {puedeEditar && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="text-destructive hover:bg-destructive/10"
-                                onClick={() => void handleDeleteCap(cap)}
-                                title="Eliminar capacitación"
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-              <PaginationBar
-                page={pagLista.page}
-                totalPages={pagLista.totalPages}
-                pageSize={pagLista.pageSize}
-                totalItems={pagLista.totalItems}
-                fromItem={pagLista.fromItem}
-                toItem={pagLista.toItem}
-                onPageChange={pagLista.setPage}
-                onPageSizeChange={pagLista.setPageSize}
-              />
-              </>
-            </CardContent>
-          </Card>
+          <CapacitacionesTablaBoard
+            caps={capsTabla}
+            puedeEditar={puedeEditar}
+            onEdit={(cap) => setEditCap(cap)}
+            onDelete={puedeEditar ? (cap) => void handleDeleteCap(cap) : undefined}
+          />
         </TabsContent>
 
         <TabsContent value="asignar" className="mt-4 space-y-4">
@@ -635,116 +614,144 @@ export function CapacitacionesPage() {
         </TabsContent>
 
         <TabsContent value="reporte" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Detalle por persona y curso</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Colaborador</TableHead>
-                    <TableHead>Capacitación</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Fecha completado</TableHead>
-                    <TableHead className="text-right">Calificación</TableHead>
-                    <TableHead>Diploma (opcional)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pageReporteRows.map((r) => (
-                    <TableRow key={`${r.capId}-${r.colaborador_id}`}>
-                      <TableCell>{r.nombre}</TableCell>
-                      <TableCell className="max-w-[220px] text-sm">{r.capNombre}</TableCell>
-                      <TableCell>
-                        <select
-                          className={selectClass + ' min-w-[140px]'}
-                          value={r.estado}
-                          onChange={(e) => {
-                            const v = e.target.value as EstadoCap
-                            void patchAsignacion(r.capId, r.colaborador_id, { estado: v })
-                          }}
-                        >
-                          {ESTADOS.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="date"
-                          className="h-8 w-[140px]"
-                          defaultValue={
-                            r.fecha_completado
-                              ? r.fecha_completado.slice(0, 10)
-                              : ''
-                          }
-                          onBlur={(e) => {
-                            const v = e.target.value
-                            const iso = v ? `${v}T12:00:00.000Z` : null
-                            const prev = r.fecha_completado
-                              ? r.fecha_completado.slice(0, 10)
-                              : ''
-                            if (v === prev) return
-                            void patchAsignacion(r.capId, r.colaborador_id, {
-                              fecha_completado: iso,
-                            })
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          className="ml-auto h-8 w-20 text-right"
-                          key={`cal-${r.capId}-${r.colaborador_id}-${r.calificacion ?? ''}`}
-                          defaultValue={r.calificacion ?? ''}
-                          onBlur={(e) => {
-                            const raw = e.target.value
-                            const n = raw === '' ? null : Number(raw)
-                            if (raw !== '' && Number.isNaN(n)) return
-                            const prev =
-                              r.calificacion === undefined || r.calificacion === null
-                                ? ''
-                                : String(r.calificacion)
-                            if (raw === prev) return
-                            void patchAsignacion(r.capId, r.colaborador_id, {
-                              calificacion: n,
-                            })
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <DiplomaCelda
-                          capId={r.capId}
-                          colaboradorId={r.colaborador_id}
-                          estado={r.estado}
-                          certificado={r.certificado}
-                          certificadoNombre={r.certificado_nombre}
-                          onUpload={(file) => void uploadDiploma(r.capId, r.colaborador_id, file)}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationBar
-                page={pagReporte.page}
-                totalPages={pagReporte.totalPages}
-                pageSize={pagReporte.pageSize}
-                totalItems={pagReporte.totalItems}
-                fromItem={pagReporte.fromItem}
-                toItem={pagReporte.toItem}
-                onPageChange={pagReporte.setPage}
-                onPageSizeChange={pagReporte.setPageSize}
-              />
-              </>
-            </CardContent>
-          </Card>
+          <EntityBoard
+            rows={reporteRows}
+            countLabel="asignación"
+            emptyMessage="No hay asignaciones para reportar."
+            minWidth="980px"
+            groups={[
+              {
+                id: 'pendiente',
+                label: 'Pendientes',
+                color: BOARD.gray,
+                match: (r) => r.estado === 'Pendiente',
+              },
+              {
+                id: 'progreso',
+                label: 'En progreso',
+                color: BOARD.orange,
+                match: (r) => r.estado === 'En progreso',
+              },
+              {
+                id: 'completado',
+                label: 'Completadas',
+                color: BOARD.green,
+                match: (r) => r.estado === 'Completado',
+              },
+            ]}
+            searchTexts={(r) => [r.nombre, r.capNombre, r.estado]}
+            columns={[
+              {
+                id: 'colab',
+                label: 'Colaborador',
+                className: 'min-w-[160px]',
+                render: (r) => (
+                  <div className="flex items-center gap-2">
+                    <BoardAvatar name={r.nombre} />
+                    <span className="text-[13px] font-medium">{r.nombre}</span>
+                  </div>
+                ),
+              },
+              {
+                id: 'cap',
+                label: 'Capacitación',
+                className: 'max-w-[220px]',
+                render: (r) => (
+                  <span className="text-sm leading-snug">{r.capNombre}</span>
+                ),
+              },
+              {
+                id: 'estado',
+                label: 'Estado',
+                className: 'w-[160px]',
+                render: (r) => (
+                  <select
+                    className={selectClass + ' min-w-[140px]'}
+                    value={r.estado}
+                    onChange={(e) => {
+                      const v = e.target.value as EstadoCap
+                      void patchAsignacion(r.capId, r.colaborador_id, { estado: v })
+                    }}
+                  >
+                    {ESTADOS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                ),
+              },
+              {
+                id: 'fecha',
+                label: 'Fecha completado',
+                className: 'w-[160px]',
+                render: (r) => (
+                  <Input
+                    type="date"
+                    className="h-8 w-[140px]"
+                    defaultValue={
+                      r.fecha_completado ? r.fecha_completado.slice(0, 10) : ''
+                    }
+                    onBlur={(e) => {
+                      const v = e.target.value
+                      const iso = v ? `${v}T12:00:00.000Z` : null
+                      const prev = r.fecha_completado
+                        ? r.fecha_completado.slice(0, 10)
+                        : ''
+                      if (v === prev) return
+                      void patchAsignacion(r.capId, r.colaborador_id, {
+                        fecha_completado: iso,
+                      })
+                    }}
+                  />
+                ),
+              },
+              {
+                id: 'calif',
+                label: 'Calificación',
+                align: 'right' as const,
+                className: 'w-[100px]',
+                render: (r) => (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className="ml-auto h-8 w-20 text-right"
+                    key={`cal-${r.capId}-${r.colaborador_id}-${r.calificacion ?? ''}`}
+                    defaultValue={r.calificacion ?? ''}
+                    onBlur={(e) => {
+                      const raw = e.target.value
+                      const n = raw === '' ? null : Number(raw)
+                      if (raw !== '' && Number.isNaN(n)) return
+                      const prev =
+                        r.calificacion === undefined || r.calificacion === null
+                          ? ''
+                          : String(r.calificacion)
+                      if (raw === prev) return
+                      void patchAsignacion(r.capId, r.colaborador_id, {
+                        calificacion: n,
+                      })
+                    }}
+                  />
+                ),
+              },
+              {
+                id: 'diploma',
+                label: 'Diploma (opcional)',
+                className: 'min-w-[160px]',
+                render: (r) => (
+                  <DiplomaCelda
+                    capId={r.capId}
+                    colaboradorId={r.colaborador_id}
+                    estado={r.estado}
+                    certificado={r.certificado}
+                    certificadoNombre={r.certificado_nombre}
+                    onUpload={(file) => void uploadDiploma(r.capId, r.colaborador_id, file)}
+                  />
+                ),
+              },
+            ]}
+          />
         </TabsContent>
       </Tabs>
 

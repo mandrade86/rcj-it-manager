@@ -3,27 +3,17 @@ import {
   Cable, Factory, Pencil, Plus, RefreshCw, Save, Settings2, Trash2,
 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { MAESTRO_SELECT_CLASS, compareNumbers, compareStrings, type MaestroSortDir } from '@/lib/maestroList'
+import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
 import {
   createEmpresa, deleteEmpresa, fetchEmpresas, fetchEmpresasListUrl,
   saveEmpresasListUrl, syncEmpresas, updateEmpresa,
@@ -41,25 +31,6 @@ type FormState = { codigo: string; nombre: string; descripcion: string; color: s
 
 function emptyForm(): FormState {
   return { codigo: '', nombre: '', descripcion: '', color: '#002060', activo: true }
-}
-
-function compareEmpresas(
-  a: EmpresaDoc,
-  b: EmpresaDoc,
-  sortKey: string,
-  dir: MaestroSortDir,
-): number {
-  switch (sortKey) {
-    case 'origen':
-      return compareStrings(a.origen ?? 'manual', b.origen ?? 'manual', dir)
-    case 'ehr_id':
-      return compareNumbers(a.ehr_empresa_id ?? 0, b.ehr_empresa_id ?? 0, dir)
-    case 'nombre':
-      return compareStrings(a.nombre, b.nombre, dir)
-    case 'codigo':
-    default:
-      return compareStrings(a.codigo, b.codigo, dir)
-  }
 }
 
 function fromDoc(e: EmpresaDoc): FormState {
@@ -105,29 +76,14 @@ export function EmpresasPage() {
 
   const [filterOrigen, setFilterOrigen] = useState<'all' | 'ehr' | 'manual'>('all')
 
-  const maestro = useMaestroList({
-    items: rows,
-    defaultSortKey: 'nombre',
-    getActivo: (e) => e.activo !== false,
-    searchTexts: (e) => [e.codigo, e.nombre, e.descripcion, String(e.ehr_empresa_id ?? '')],
-    compare: compareEmpresas,
-  })
-  const { rows: filtered, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, total } =
-    maestro
-
   const displayed = useMemo(() => {
-    if (filterOrigen === 'all') return filtered
-    return filtered.filter((e) => (e.origen === 'ehr' ? 'ehr' : 'manual') === filterOrigen)
-  }, [filtered, filterOrigen])
-
-  const pagination = usePagination(displayed.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${filterOrigen}|${total}`,
-  })
-  const pageRows = pagination.slice(displayed)
+    if (filterOrigen === 'all') return rows
+    return rows.filter((e) => (e.origen === 'ehr' ? 'ehr' : 'manual') === filterOrigen)
+  }, [rows, filterOrigen])
 
   const eliminablesIds = useMemo(
-    () => pageRows.filter((e) => e.origen !== 'ehr').map((e) => e._id),
-    [pageRows],
+    () => displayed.filter((e) => e.origen !== 'ehr').map((e) => e._id),
+    [displayed],
   )
   const bulk = useMaestroBulkDelete({
     recurso: 'empresas',
@@ -251,14 +207,9 @@ export function EmpresasPage() {
             <Cable className="size-4" />
             Listado EHR
           </Button>
-          <Button
-            type="button"
-            className="gap-1.5 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
-            onClick={openNew}
-          >
-            <Plus className="size-4" />
-            Nueva empresa
-          </Button>
+          <BoardPrimaryButton onClick={openNew}>
+            <Plus className="size-4" /> Nueva empresa
+          </BoardPrimaryButton>
         </div>
       </div>
 
@@ -266,32 +217,6 @@ export function EmpresasPage() {
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {err}
         </div>
-      )}
-
-      {!loading && rows.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Código, nombre, ID EHR…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={displayed.length}
-          total={total}
-          countLabel="empresa(s)"
-        >
-          <div className="grid gap-1">
-            <label className="text-xs text-muted-foreground">Origen</label>
-            <select
-              className={MAESTRO_SELECT_CLASS + ' min-w-[120px]'}
-              value={filterOrigen}
-              onChange={(e) => setFilterOrigen(e.target.value as typeof filterOrigen)}
-            >
-              <option value="all">Todos</option>
-              <option value="ehr">EHR</option>
-              <option value="manual">Manual</option>
-            </select>
-          </div>
-        </MaestroListToolbar>
       )}
 
       {!loading && bulk.showBar && (
@@ -303,110 +228,119 @@ export function EmpresasPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              Sin empresas en base de datos. Abre «Listado EHR» y pulsa «Sincronizar ahora» para importar desde el
-              endpoint Company/list, o crea una empresa manual.
-            </p>
-          ) : displayed.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ninguna empresa coincide con los filtros.</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <MaestroSelectAllHeader
-                    allSelected={bulk.allSelected}
-                    someSelected={bulk.someSelected}
-                    onToggleAll={bulk.toggleAll}
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={displayed}
+          countLabel="empresa"
+          emptyMessage="Sin empresas en base de datos. Abre «Listado EHR» y pulsa «Sincronizar ahora», o crea una empresa manual."
+          searchTexts={(e) => [e.codigo, e.nombre, e.descripcion, String(e.ehr_empresa_id ?? '')]}
+          toolbarLeft={
+            <div className="grid gap-1">
+              <label className="text-xs" style={{ color: BOARD.muted }}>Origen</label>
+              <select
+                className={MAESTRO_SELECT_CLASS + ' min-w-[120px]'}
+                value={filterOrigen}
+                onChange={(e) => setFilterOrigen(e.target.value as typeof filterOrigen)}
+              >
+                <option value="all">Todos</option>
+                <option value="ehr">EHR</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+          }
+          columns={[
+            {
+              id: 'sel',
+              label: '',
+              className: 'w-8',
+              render: (e) =>
+                e.origen !== 'ehr' ? (
+                  <input
+                    type="checkbox"
+                    className="size-3.5 accent-[var(--navy)]"
+                    checked={bulk.selectedIds.has(e._id)}
+                    onChange={() => bulk.toggle(e._id)}
+                    aria-label={`Seleccionar ${e.nombre}`}
                   />
-                  <MaestroSortableHead column="codigo" label="Código" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[100px]" />
-                  <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="origen" label="Origen" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[88px]" />
-                  <MaestroSortableHead column="ehr_id" label="ID EHR" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[72px] text-right" />
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="w-[100px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((e) => (
-                  <TableRow key={e._id}>
-                    <TableCell className="w-10 pr-0">
-                      {e.origen !== 'ehr' ? (
-                        <input
-                          type="checkbox"
-                          className="size-3.5 accent-[var(--lime)]"
-                          checked={bulk.selectedIds.has(e._id)}
-                          onChange={() => bulk.toggle(e._id)}
-                          aria-label={`Seleccionar ${e.nombre}`}
-                        />
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs font-medium">{e.codigo}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          className="size-2.5 rounded-full"
-                          style={{ background: e.color ?? '#002060' }}
-                        />
-                        <Factory className="size-3.5 text-muted-foreground" />
-                        {e.nombre}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={e.origen === 'ehr' ? 'default' : 'outline'}
-                        className={`text-[10px] ${e.origen === 'ehr' ? 'bg-[var(--navy)] text-white' : ''}`}
-                      >
-                        {e.origen === 'ehr' ? 'EHR' : 'Manual'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                      {e.ehr_empresa_id != null ? e.ehr_empresa_id : '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={e.activo !== false ? 'secondary' : 'outline'} className="text-[10px]">
-                        {e.activo !== false ? 'Activa' : 'Inactiva'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => openEdit(e)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive hover:text-destructive"
-                        disabled={e.origen === 'ehr'}
-                        title={e.origen === 'ehr' ? 'No eliminable (EHR)' : 'Eliminar'}
-                        onClick={() => void handleDelete(e)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+                ) : null,
+            },
+            {
+              id: 'codigo',
+              label: 'Código',
+              className: 'w-[100px]',
+              render: (e) => <span className="font-mono text-xs font-medium">{e.codigo}</span>,
+            },
+            {
+              id: 'nombre',
+              label: 'Nombre',
+              render: (e) => (
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <span className="size-2.5 rounded-full" style={{ background: e.color ?? '#002060' }} />
+                  <Factory className="size-3.5" style={{ color: BOARD.muted }} />
+                  {e.nombre}
+                </span>
+              ),
+            },
+            {
+              id: 'origen',
+              label: 'Origen',
+              render: (e) => (
+                <BoardPill
+                  label={e.origen === 'ehr' ? 'EHR' : 'Manual'}
+                  bg={e.origen === 'ehr' ? BOARD.primary : BOARD.gray}
+                  text={e.origen === 'ehr' ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'ehr_id',
+              label: 'ID EHR',
+              align: 'right',
+              render: (e) => (
+                <span className="font-mono text-xs" style={{ color: BOARD.muted }}>
+                  {e.ehr_empresa_id != null ? e.ehr_empresa_id : '—'}
+                </span>
+              ),
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (e) => (
+                <BoardPill
+                  label={e.activo !== false ? 'Activa' : 'Inactiva'}
+                  bg={e.activo !== false ? BOARD.green : BOARD.gray}
+                  text={e.activo !== false ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (e) => (
+                <div className="flex justify-end gap-1">
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => openEdit(e)}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={e.origen === 'ehr'}
+                    title={e.origen === 'ehr' ? 'No eliminable (EHR)' : 'Eliminar'}
+                    onClick={() => void handleDelete(e)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">

@@ -3,25 +3,15 @@ import { Edit2, ExternalLink, GraduationCap, Lock, Plus, Trash2 } from 'lucide-r
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { compareStrings, type MaestroSortDir } from '@/lib/maestroList'
 import {
   createProveedorCapacitacion, deleteProveedorCapacitacion,
   fetchProveedoresCapacitacion, updateProveedorCapacitacion,
@@ -39,20 +29,6 @@ type FormState = {
 
 function emptyForm(): FormState {
   return { nombre: '', descripcion: '', sitio_web: '', contacto: '', activo: true }
-}
-function compareProveedores(
-  a: ProveedorCapacitacionDoc,
-  b: ProveedorCapacitacionDoc,
-  sortKey: string,
-  dir: MaestroSortDir,
-): number {
-  switch (sortKey) {
-    case 'contacto':
-      return compareStrings(a.contacto ?? '', b.contacto ?? '', dir)
-    case 'nombre':
-    default:
-      return compareStrings(a.nombre, b.nombre, dir)
-  }
 }
 
 function fromDoc(d: ProveedorCapacitacionDoc): FormState {
@@ -87,21 +63,7 @@ export function ProveedoresCapacitacionPage() {
 
   useEffect(() => { void reload() }, [reload])
 
-  const maestro = useMaestroList({
-    items: list,
-    defaultSortKey: 'nombre',
-    getActivo: (d) => d.activo,
-    searchTexts: (d) => [d.nombre, d.descripcion, d.contacto, d.sitio_web],
-    compare: compareProveedores,
-  })
-  const { rows, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, count, total } = maestro
-
-  const pagination = usePagination(rows.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${total}`,
-  })
-  const pageRows = pagination.slice(rows)
-
-  const visibleIds = useMemo(() => pageRows.map((d) => d._id), [pageRows])
+  const visibleIds = useMemo(() => list.map((d) => d._id), [list])
   const bulk = useMaestroBulkDelete({
     recurso: 'proveedores-capacitacion',
     visibleIds,
@@ -158,9 +120,9 @@ export function ProveedoresCapacitacionPage() {
           </p>
         </div>
         {puedeEditar ? (
-          <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
+          <BoardPrimaryButton onClick={openNew}>
             <Plus className="size-4" /> Nuevo proveedor
-          </Button>
+          </BoardPrimaryButton>
         ) : (
           <Badge variant="outline" className="gap-1.5 border-amber-300 bg-amber-50 text-amber-900">
             <Lock className="size-3" /> Solo lectura
@@ -177,19 +139,6 @@ export function ProveedoresCapacitacionPage() {
 
       {err && <p className="text-sm text-destructive">{err}</p>}
 
-      {!loading && list.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Nombre, contacto, sitio…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={count}
-          total={total}
-          countLabel="proveedor(es)"
-        />
-      )}
-
       {puedeEditar && !loading && bulk.showBar && (
         <MaestroBulkDeleteBar
           seleccionCount={bulk.seleccionCount}
@@ -199,124 +148,118 @@ export function ProveedoresCapacitacionPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : list.length === 0 ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              <GraduationCap className="mx-auto mb-2 size-8 text-muted-foreground/50" />
-              Aún no hay proveedores registrados.
-              {puedeEditar && (
-                <p className="mt-2 text-xs">
-                  Crea el primero con <strong>«Nuevo proveedor»</strong>.
-                </p>
-              )}
-            </div>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ningún proveedor coincide con los filtros.</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {puedeEditar && (
-                    <MaestroSelectAllHeader
-                      allSelected={bulk.allSelected}
-                      someSelected={bulk.someSelected}
-                      onToggleAll={bulk.toggleAll}
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={list}
+          countLabel="proveedor"
+          emptyMessage="Aún no hay proveedores registrados."
+          searchTexts={(d) => [d.nombre, d.descripcion, d.contacto, d.sitio_web]}
+          columns={[
+            ...(puedeEditar
+              ? [{
+                  id: 'sel',
+                  label: '',
+                  className: 'w-8',
+                  render: (d: ProveedorCapacitacionDoc) => (
+                    <input
+                      type="checkbox"
+                      className="size-3.5 accent-[var(--navy)]"
+                      checked={bulk.selectedIds.has(d._id)}
+                      onChange={() => bulk.toggle(d._id)}
+                      aria-label={`Seleccionar ${d.nombre}`}
                     />
-                  )}
-                  <MaestroSortableHead column="nombre" label="Proveedor" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Descripción</TableHead>
-                  <TableHead>Sitio web</TableHead>
-                  <MaestroSortableHead column="contacto" label="Contacto" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((d) => (
-                  <TableRow key={d._id}>
-                    {puedeEditar && (
-                      <MaestroSelectCell
-                        id={d._id}
-                        label={d.nombre}
-                        selected={bulk.selectedIds.has(d._id)}
-                        onToggle={bulk.toggle}
-                      />
-                    )}
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <GraduationCap className="size-4 text-muted-foreground" />
-                        {d.nombre}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
-                      {d.descripcion || '—'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {d.sitio_web ? (
-                        <a
-                          href={d.sitio_web}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[var(--navy)] hover:underline"
-                        >
-                          <ExternalLink className="size-3" />
-                          {d.sitio_web.replace(/^https?:\/\//, '').slice(0, 30)}
-                        </a>
-                      ) : '—'}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {d.contacto || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={d.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                        {d.activo ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={!puedeEditar}
-                          onClick={() => openEdit(d)}
-                          title={puedeEditar ? 'Editar' : 'Requiere permiso maestros:editar'}
-                        >
-                          <Edit2 className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={!puedeEditar}
-                          className="text-destructive hover:text-destructive disabled:opacity-50"
-                          onClick={() => setDeleteTarget(d)}
-                          title={puedeEditar ? 'Eliminar' : 'Requiere permiso maestros:editar'}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+                  ),
+                }]
+              : []),
+            {
+              id: 'nombre',
+              label: 'Proveedor',
+              render: (d) => (
+                <div className="flex items-center gap-2 font-medium">
+                  <GraduationCap className="size-4" style={{ color: BOARD.muted }} />
+                  {d.nombre}
+                </div>
+              ),
+            },
+            {
+              id: 'descripcion',
+              label: 'Descripción',
+              render: (d) => (
+                <span className="max-w-xs truncate text-sm" style={{ color: BOARD.muted }}>
+                  {d.descripcion || '—'}
+                </span>
+              ),
+            },
+            {
+              id: 'sitio',
+              label: 'Sitio web',
+              render: (d) =>
+                d.sitio_web ? (
+                  <a
+                    href={d.sitio_web}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm hover:underline"
+                    style={{ color: BOARD.primary }}
+                  >
+                    <ExternalLink className="size-3" />
+                    {d.sitio_web.replace(/^https?:\/\//, '').slice(0, 30)}
+                  </a>
+                ) : (
+                  <span style={{ color: BOARD.muted }}>—</span>
+                ),
+            },
+            {
+              id: 'contacto',
+              label: 'Contacto',
+              render: (d) => (
+                <span className="text-sm" style={{ color: BOARD.muted }}>{d.contacto || '—'}</span>
+              ),
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (d) => (
+                <BoardPill
+                  label={d.activo ? 'Activo' : 'Inactivo'}
+                  bg={d.activo ? BOARD.green : BOARD.gray}
+                  text={d.activo ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (d) => (
+                <div className="flex justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={!puedeEditar}
+                    onClick={() => openEdit(d)}
+                    title={puedeEditar ? 'Editar' : 'Requiere permiso maestros:editar'}
+                  >
+                    <Edit2 className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={!puedeEditar}
+                    className="text-destructive hover:text-destructive disabled:opacity-50"
+                    onClick={() => setDeleteTarget(d)}
+                    title={puedeEditar ? 'Eliminar' : 'Requiere permiso maestros:editar'}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">

@@ -1,8 +1,10 @@
 import { Router } from 'express'
 import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
+import multer from 'multer'
 
 import { Usuario } from '../db/models/Usuario.js'
+import { requirePermiso } from '../middleware/requireAuth.js'
 import {
   buildEliminarLoteResponse,
   parseEliminarLoteIds,
@@ -10,10 +12,27 @@ import {
 import { normalizeDomainLogin } from '../utils/directoryAuth.js'
 import { isAdLoginEnabled } from '../utils/ehrAuth.js'
 import { duplicateUsuarioMessage } from '../utils/usuarioErrors.js'
+import {
+  buildUsuarioExcelCaches,
+  buildUsuariosPlantillaWorkbook,
+  createUsuarioFromExcel,
+  readUsuariosExcelRows,
+  resolveUsuarioExcelRow,
+} from '../utils/usuariosExcel.js'
 
 export const usuariosRouter = Router()
 
 const BCRYPT_ROUNDS = 10
+
+const uploadUsuariosExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = file.originalname.toLowerCase()
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) cb(null, true)
+    else cb(new Error('Solo se permiten archivos Excel .xlsx o .xls'))
+  },
+})
 
 const ALLOWED = [
   'nombre', 'email', 'rol_id', 'empleado_id', 'empleados_ids', 'departamento_id', 'activo',
@@ -102,6 +121,82 @@ usuariosRouter.post('/eliminar-lote', async (req, res, next) => {
     next(err)
   }
 })
+
+/** GET /api/usuarios/plantilla-excel — plantilla de creación masiva. */
+usuariosRouter.get('/plantilla-excel', requirePermiso('usuarios:editar'), async (_req, res, next) => {
+  try {
+    const buf = await buildUsuariosPlantillaWorkbook()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="Usuarios-plantilla.xlsx"')
+    res.send(buf)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** POST /api/usuarios/importar-excel — crea usuarios desde Excel. */
+usuariosRouter.post(
+  '/importar-excel',
+  requirePermiso('usuarios:editar'),
+  (req, res, next) => {
+    uploadUsuariosExcel.single('archivo')(req, res, async (uploadErr) => {
+      if (uploadErr) {
+        next(uploadErr)
+        return
+      }
+      try {
+        if (!req.file?.buffer) {
+          res.status(400).json({ error: 'Archivo Excel es obligatorio' })
+          return
+        }
+
+        const { rows, hoja } = readUsuariosExcelRows(req.file.buffer)
+        const cache = await buildUsuarioExcelCaches()
+
+        let creados = 0
+        let omitidos = 0
+        const errores: { fila: number; error: string }[] = []
+
+        for (let i = 0; i < rows.length; i++) {
+          const fila = i + 2
+          const row = rows[i]!
+          // Saltar filas de ejemplo vacías / sin email
+          const emailProbe = String(row.email ?? row.Email ?? row.correo ?? '').trim()
+          const nombreProbe = String(row.nombre ?? row.Nombre ?? '').trim()
+          if (!emailProbe && !nombreProbe) {
+            continue
+          }
+
+          const resolved = await resolveUsuarioExcelRow(row, cache)
+          if (!resolved.ok) {
+            omitidos++
+            errores.push({ fila, error: resolved.error })
+            continue
+          }
+
+          const created = await createUsuarioFromExcel(resolved.data, cache)
+          if (!created.ok) {
+            omitidos++
+            errores.push({ fila, error: created.error })
+            continue
+          }
+          creados++
+        }
+
+        res.json({
+          ok: true,
+          hoja,
+          totalFilas: rows.length,
+          creados,
+          omitidos,
+          errores: errores.slice(0, 50),
+        })
+      } catch (err) {
+        next(err)
+      }
+    })
+  },
+)
 
 usuariosRouter.get('/:id', async (req, res, next) => {
   try {

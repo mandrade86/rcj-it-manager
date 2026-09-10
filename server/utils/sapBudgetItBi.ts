@@ -1,5 +1,12 @@
 import { resolveCostosItConnection, setUltimoSyncCostosIt } from './sapCostosItConfig.js'
-import { listViewColumns, querySapViewRaw, type SapViewRawFilter } from './sapBiQuery.js'
+import {
+  isSapViewNotFoundError,
+  listHanaViews,
+  listViewColumns,
+  querySapViewRaw,
+  type SapViewRawFilter,
+} from './sapBiQuery.js'
+import type { SapBiCosteoConfig } from './sapBiCosteoConfig.js'
 import {
   loadEmpresasMonedaMap,
   monedaDeEmpresa,
@@ -560,6 +567,39 @@ function buildDashboard(
   return { por_empresa, por_mes, por_empresa_mes, por_cuenta, top_sobre_presupuesto }
 }
 
+async function discoverBudgetItSchema(
+  sapCfg: SapBiCosteoConfig,
+  viewName: string,
+): Promise<string | null> {
+  try {
+    const views = await listHanaViews(sapCfg, { nameLike: viewName, limit: 30 })
+    const exact = views.filter((v) => v.viewName.toUpperCase() === viewName.toUpperCase())
+    if (!exact.length) return null
+    const preferred = exact.find((v) => /ZOLI|SBO|TS_/i.test(v.schema)) ?? exact[0]
+    return preferred?.schema ?? null
+  } catch {
+    return null
+  }
+}
+
+async function resolveBudgetItSchema(
+  sapCfg: SapBiCosteoConfig,
+  preferred: string,
+  viewName: string,
+): Promise<string> {
+  if (process.env.SAP_BUDGET_IT_SCHEMA?.trim()) {
+    return process.env.SAP_BUDGET_IT_SCHEMA.trim()
+  }
+  // RCJ_BI es el esquema de BI analítico; el presupuesto IT suele estar en compañía (TS_ZOLIHN).
+  if (preferred && !/^RCJ_BI$/i.test(preferred)) return preferred
+
+  const discovered = await discoverBudgetItSchema(sapCfg, viewName)
+  if (discovered) return discovered
+
+  // Nunca usar RCJ_BI por defecto para esta vista
+  return 'TS_ZOLIHN'
+}
+
 export async function fetchBudgetItSap(opts?: {
   anio?: number
   mes?: number
@@ -568,13 +608,44 @@ export async function fetchBudgetItSap(opts?: {
   limit?: number
 }): Promise<BudgetItSapResponse> {
   const { sapCfg, itCfg } = await resolveCostosItConnection()
-  const schema =
+  const viewName = process.env.SAP_BUDGET_IT_VIEW?.trim() || VISTA_BUDGET_IT
+  const preferredSchema =
     process.env.SAP_BUDGET_IT_SCHEMA?.trim()
     || itCfg.schema?.trim()
     || sapCfg.schema?.trim()
     || sapCfg.database?.trim()
     || ''
-  const viewName = process.env.SAP_BUDGET_IT_VIEW?.trim() || VISTA_BUDGET_IT
+  const schema = await resolveBudgetItSchema(sapCfg, preferredSchema, viewName)
+
+  try {
+    return await loadBudgetItSap(sapCfg, schema, viewName, opts)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (isSapViewNotFoundError(err) || /invalid table|could not find|no existe/i.test(msg)) {
+      const discovered = await discoverBudgetItSchema(sapCfg, viewName)
+      if (discovered && discovered.toUpperCase() !== schema.toUpperCase()) {
+        return await loadBudgetItSap(sapCfg, discovered, viewName, opts)
+      }
+    }
+    throw new Error(
+      `Presupuesto SAP (${schema || '(sin esquema)'}.${viewName}): ${msg}. `
+      + `Define SAP_BUDGET_IT_SCHEMA=TS_ZOLIHN en el servidor si la vista no está en ${schema || 'el esquema BI'}.`,
+    )
+  }
+}
+
+async function loadBudgetItSap(
+  sapCfg: SapBiCosteoConfig,
+  schema: string,
+  viewName: string,
+  opts?: {
+    anio?: number
+    mes?: number
+    busqueda?: string
+    empresa?: string
+    limit?: number
+  },
+): Promise<BudgetItSapResponse> {
   const viewCfg = { ...sapCfg, schema }
 
   const columnas = await listViewColumns(viewCfg, viewName)

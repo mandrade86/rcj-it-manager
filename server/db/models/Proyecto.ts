@@ -115,6 +115,18 @@ const ProyectoSchema = new Schema(
     /** Meta objetivo (sincronizada con el KPI seleccionado o texto legacy). */
     meta_kpi: { type: String },
     porcentaje_avance: { type: Number, default: 0 },
+    /** Presupuesto planificado del proyecto (envelope). */
+    presupuesto_planificado: { type: Number, default: null },
+    /** Suma de montos asignados a tareas (se recalcula automáticamente). */
+    presupuesto_asignado: { type: Number, default: null },
+    /** Monto ejecutado / comprometido (recalculado desde tareas). */
+    presupuesto_ejecutado: { type: Number, default: null },
+    moneda_presupuesto: {
+      type: String,
+      enum: ['HNL', 'USD'],
+      default: 'HNL',
+    },
+    presupuesto_notas: { type: String, default: '' },
     notas: { type: String },
     historial: { type: [ProyectoCambioSchema], default: [] },
     /**

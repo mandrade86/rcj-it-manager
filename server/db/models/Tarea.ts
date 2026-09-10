@@ -41,6 +41,18 @@ const TareaSchema = new Schema(
       enum: ['Pendiente', 'En progreso', 'Completado', 'Bloqueado'],
       default: 'Pendiente',
     },
+    prioridad: {
+      type: String,
+      enum: ['Alta', 'Media', 'Baja'],
+      default: null,
+    },
+    /** Presupuesto / gasto asignado a esta tarea (misma moneda del proyecto). */
+    monto_asignado: { type: Number, default: null },
+    /**
+     * Gasto real de la tarea (opcional). Si es null, el ejecutado se estima
+     * como monto_asignado × (porcentaje / 100).
+     */
+    monto_ejecutado: { type: Number, default: null },
     porcentaje: { type: Number, default: 0 },
     eje: { type: String },
     /** Archivos adjuntos (evidencia, anexos, etc.). */

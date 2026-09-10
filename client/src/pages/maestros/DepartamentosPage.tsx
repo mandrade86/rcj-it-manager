@@ -2,33 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Building2, Edit2, Factory, Plus, Target, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
 import { MetasDepartamentoDialog } from '@/components/kpis/MetasDepartamentoDialog'
 import {
   createDepartamento, deleteDepartamento, fetchDepartamentos, updateDepartamento,
 } from '@/lib/api/departamentos'
 import { useAuthStore } from '@/store/authStore'
 import { getMetasDepartamento } from '@/lib/metasDepartamento'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { usePagination } from '@/hooks/usePagination'
-import { MAESTRO_SELECT_CLASS, compareNumbers, compareStrings, type MaestroSortDir } from '@/lib/maestroList'
+import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
 import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import type { DepartamentoDoc } from '@/types/departamento'
@@ -95,31 +85,6 @@ function departamentoMatchesEmpresa(
   return false
 }
 
-function compareDepartamentos(
-  a: DepartamentoDoc,
-  b: DepartamentoDoc,
-  sortKey: string,
-  dir: MaestroSortDir,
-): number {
-  switch (sortKey) {
-    case 'nombre':
-      return compareStrings(a.nombre, b.nombre, dir)
-    case 'empresa':
-      return compareStrings(empresaLabel(a), empresaLabel(b), dir)
-    case 'ehr_id':
-      return compareNumbers(a.ehr_departamento_id ?? 0, b.ehr_departamento_id ?? 0, dir)
-    case 'metas':
-      return compareNumbers(
-        getMetasDepartamento(a).filter((m) => m.activa !== false).length,
-        getMetasDepartamento(b).filter((m) => m.activa !== false).length,
-        dir,
-      )
-    case 'codigo':
-    default:
-      return compareStrings(a.codigo, b.codigo, dir)
-  }
-}
-
 function fromDoc(d: DepartamentoDoc): FormState {
   return {
     codigo: d.codigo,
@@ -154,27 +119,12 @@ export function DepartamentosPage() {
     (s) => s.hasPermiso('*') || s.hasPermiso('kpis:editar') || s.hasPermiso('maestros:editar'),
   )
 
-  const maestro = useMaestroList({
-    items: list,
-    defaultSortKey: 'codigo',
-    getActivo: (d) => d.activo,
-    searchTexts: (d) => [d.codigo, d.nombre, d.descripcion, empresaLabel(d)],
-    compare: compareDepartamentos,
-  })
-  const { rows, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, total } =
-    maestro
-
   const filteredByEmpresa = useMemo(
-    () => rows.filter((d) => departamentoMatchesEmpresa(d, filterEmpresa, empresasCatalog)),
-    [rows, filterEmpresa, empresasCatalog],
+    () => list.filter((d) => departamentoMatchesEmpresa(d, filterEmpresa, empresasCatalog)),
+    [list, filterEmpresa, empresasCatalog],
   )
 
-  const pagination = usePagination(filteredByEmpresa.length, {
-    resetKey: `${busqueda}|${filterActivo}|${filterEmpresa}|${sortKey}|${sortDir}|${total}`,
-  })
-  const pageRows = pagination.slice(filteredByEmpresa)
-
-  const visibleIds = useMemo(() => pageRows.map((d) => d._id), [pageRows])
+  const visibleIds = useMemo(() => filteredByEmpresa.map((d) => d._id), [filteredByEmpresa])
 
   const maestroNombres = useMemo(
     () => new Set(ejesCatalogo.map((e) => e.nombre)),
@@ -209,10 +159,7 @@ export function DepartamentosPage() {
   const {
     selectedIds,
     seleccionCount,
-    allSelected,
-    someSelected,
     toggle,
-    toggleAll,
     bulkDeleting,
     showBar,
     handleEliminarSeleccionados,
@@ -275,45 +222,12 @@ export function DepartamentosPage() {
             Catálogo de departamentos u áreas de la organización. Se usan en colaboradores, perfiles y planes de carrera.
           </p>
         </div>
-        <Button onClick={openNew} className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90">
+        <BoardPrimaryButton onClick={openNew}>
           <Plus className="size-4" /> Nuevo departamento
-        </Button>
+        </BoardPrimaryButton>
       </div>
 
       {err && <p className="text-sm text-destructive">{err}</p>}
-
-      {!loading && list.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Código, nombre, empresa…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={filteredByEmpresa.length}
-          total={total}
-          countLabel="departamento(s)"
-        >
-          {empresasCatalog.length > 0 && (
-            <div className="grid gap-1">
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Factory className="size-3" /> Empresa
-              </label>
-              <select
-                className={selectClass + ' min-w-[200px]'}
-                value={filterEmpresa}
-                onChange={(e) => setFilterEmpresa(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {empresasCatalog.map((em) => (
-                  <option key={em._id} value={em._id}>
-                    {em.codigo} — {em.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </MaestroListToolbar>
-      )}
 
       {!loading && showBar && (
         <MaestroBulkDeleteBar
@@ -324,155 +238,180 @@ export function DepartamentosPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : list.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Sin departamentos registrados.</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ningún departamento coincide con los filtros.</p>
-          ) : filteredByEmpresa.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              Ningún departamento pertenece a la empresa seleccionada. Prueba con «Todas» u otra empresa.
-            </p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <MaestroSelectAllHeader
-                    allSelected={allSelected}
-                    someSelected={someSelected}
-                    onToggleAll={toggleAll}
-                  />
-                  <TableHead className="w-8" />
-                  <MaestroSortableHead column="codigo" label="Código" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="empresa" label="Empresa" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="ehr_id" label="Depto #" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Descripción</TableHead>
-                  <TableHead>Ejes de proyecto</TableHead>
-                  <TableHead>Gastos</TableHead>
-                  <MaestroSortableHead column="metas" label="Metas" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((d) => (
-                  <TableRow key={d._id}>
-                    <MaestroSelectCell
-                      id={d._id}
-                      label={d.nombre}
-                      selected={selectedIds.has(d._id)}
-                      onToggle={toggle}
-                    />
-                    <TableCell>
-                      <div
-                        className="size-4 rounded-full"
-                        style={{ background: d.color ?? '#002060' }}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-sm font-semibold">{d.codigo}</TableCell>
-                    <TableCell className="max-w-[160px] truncate text-xs text-muted-foreground">
-                      {typeof d.empresa_id === 'object' && d.empresa_id != null && 'nombre' in d.empresa_id
-                        ? d.empresa_id.nombre
-                        : d.ehr_empresa_id != null
-                          ? `EHR ${d.ehr_empresa_id}`
-                          : '—'}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums text-muted-foreground">
-                      {d.ehr_departamento_id ?? '—'}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="size-4 text-muted-foreground" />
-                        {d.nombre}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
-                      {d.descripcion || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex max-w-sm flex-wrap gap-1">
-                        {(d.ejes_proyecto ?? []).length > 0 ? (
-                          (d.ejes_proyecto ?? []).slice(0, 4).map((eje) => (
-                            <Badge key={eje} variant="outline" className="py-0 text-[10px]">
-                              {eje}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Sin ejes</span>
-                        )}
-                        {(d.ejes_proyecto ?? []).length > 4 && (
-                          <Badge variant="secondary" className="py-0 text-[10px]">
-                            +{(d.ejes_proyecto ?? []).length - 4}
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {d.lleva_gastos ? (
-                        <div className="flex flex-col gap-0.5">
-                          <Badge variant="outline" className="border-[var(--lime)] py-0 text-[10px] text-[var(--lime)]">
-                            Sí maneja
-                          </Badge>
-                          <code className="text-[10px] text-muted-foreground">
-                            {(d.archivo_gastos || defaultArchivoGastos(d.codigo))}
-                          </code>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {getMetasDepartamento(d).filter((m) => m.activa !== false).length} activas
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={d.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                        {d.activo ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={puedeEditarMetas ? 'Registrar metas anuales' : 'Ver metas anuales'}
-                          onClick={() => {
-                            setMetasDept(d)
-                            setMetasOpen(true)
-                          }}
-                        >
-                          <Target className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(d)}>
-                          <Edit2 className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(d)}>
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={filteredByEmpresa}
+          countLabel="departamento"
+          emptyMessage="Sin departamentos registrados."
+          searchTexts={(d) => [d.codigo, d.nombre, d.descripcion, empresaLabel(d)]}
+          toolbarLeft={
+            empresasCatalog.length > 0 ? (
+              <div className="grid gap-1">
+                <label className="flex items-center gap-1 text-xs" style={{ color: BOARD.muted }}>
+                  <Factory className="size-3" /> Empresa
+                </label>
+                <select
+                  className={selectClass + ' min-w-[200px]'}
+                  value={filterEmpresa}
+                  onChange={(e) => setFilterEmpresa(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {empresasCatalog.map((em) => (
+                    <option key={em._id} value={em._id}>
+                      {em.codigo} — {em.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : undefined
+          }
+          minWidth="1100px"
+          columns={[
+            {
+              id: 'sel',
+              label: '',
+              className: 'w-8',
+              render: (d) => (
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--navy)]"
+                  checked={selectedIds.has(d._id)}
+                  onChange={() => toggle(d._id)}
+                  aria-label={`Seleccionar ${d.nombre}`}
+                />
+              ),
+            },
+            {
+              id: 'codigo',
+              label: 'Código',
+              render: (d) => (
+                <span className="inline-flex items-center gap-2 font-mono text-sm font-semibold">
+                  <span className="size-3 rounded-full" style={{ background: d.color ?? '#002060' }} />
+                  {d.codigo}
+                </span>
+              ),
+            },
+            {
+              id: 'empresa',
+              label: 'Empresa',
+              render: (d) => (
+                <span className="max-w-[160px] truncate text-xs" style={{ color: BOARD.muted }}>
+                  {empresaLabel(d) || '—'}
+                </span>
+              ),
+            },
+            {
+              id: 'ehr_id',
+              label: 'Depto #',
+              render: (d) => (
+                <span className="font-mono text-xs tabular-nums" style={{ color: BOARD.muted }}>
+                  {d.ehr_departamento_id ?? '—'}
+                </span>
+              ),
+            },
+            {
+              id: 'nombre',
+              label: 'Nombre',
+              render: (d) => (
+                <div className="flex items-center gap-2 font-medium">
+                  <Building2 className="size-4" style={{ color: BOARD.muted }} />
+                  {d.nombre}
+                </div>
+              ),
+            },
+            {
+              id: 'descripcion',
+              label: 'Descripción',
+              render: (d) => (
+                <span className="max-w-xs truncate text-sm" style={{ color: BOARD.muted }}>
+                  {d.descripcion || '—'}
+                </span>
+              ),
+            },
+            {
+              id: 'ejes',
+              label: 'Ejes',
+              render: (d) => {
+                const ejes = d.ejes_proyecto ?? []
+                if (ejes.length === 0) return <span className="text-xs" style={{ color: BOARD.muted }}>Sin ejes</span>
+                return (
+                  <div className="flex max-w-sm flex-wrap gap-1">
+                    {ejes.slice(0, 4).map((eje) => (
+                      <BoardPill key={eje} label={eje} bg={BOARD.gray} text={BOARD.text} />
+                    ))}
+                    {ejes.length > 4 && (
+                      <BoardPill label={`+${ejes.length - 4}`} bg={BOARD.blue} />
+                    )}
+                  </div>
+                )
+              },
+            },
+            {
+              id: 'gastos',
+              label: 'Gastos',
+              render: (d) =>
+                d.lleva_gastos ? (
+                  <div className="flex flex-col gap-0.5">
+                    <BoardPill label="Sí maneja" bg={BOARD.green} />
+                    <code className="text-[10px]" style={{ color: BOARD.muted }}>
+                      {d.archivo_gastos || defaultArchivoGastos(d.codigo)}
+                    </code>
+                  </div>
+                ) : (
+                  <span className="text-xs" style={{ color: BOARD.muted }}>No</span>
+                ),
+            },
+            {
+              id: 'metas',
+              label: 'Metas',
+              render: (d) => (
+                <span className="text-xs" style={{ color: BOARD.muted }}>
+                  {getMetasDepartamento(d).filter((m) => m.activa !== false).length} activas
+                </span>
+              ),
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (d) => (
+                <BoardPill
+                  label={d.activo ? 'Activo' : 'Inactivo'}
+                  bg={d.activo ? BOARD.green : BOARD.gray}
+                  text={d.activo ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (d) => (
+                <div className="flex justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title={puedeEditarMetas ? 'Registrar metas anuales' : 'Ver metas anuales'}
+                    onClick={() => {
+                      setMetasDept(d)
+                      setMetasOpen(true)
+                    }}
+                  >
+                    <Target className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(d)}>
+                    <Edit2 className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(d)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       {/* Create/Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>

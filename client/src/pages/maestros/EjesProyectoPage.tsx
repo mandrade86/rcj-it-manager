@@ -1,27 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, RefreshCw, Tags, Trash2 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { BOARD, BoardPill, BoardPrimaryButton, EntityBoard } from '@/components/board/EntityBoard'
 import { MaestroBulkDeleteBar } from '@/components/maestros/MaestroBulkDeleteBar'
-import { MaestroListToolbar } from '@/components/maestros/MaestroListToolbar'
-import { MaestroSortableHead } from '@/components/maestros/MaestroSortableHead'
-import { MaestroSelectAllHeader, MaestroSelectCell } from '@/components/maestros/MaestroTableSelection'
-import { PaginationBar } from '@/components/ui/PaginationBar'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
-import { usePagination } from '@/hooks/usePagination'
-import { useMaestroList } from '@/hooks/useMaestroList'
-import { compareNumbers, compareStrings, type MaestroSortDir } from '@/lib/maestroList'
 import {
   createEjeProyecto, deleteEjeProyecto, fetchEjesProyecto, updateEjeProyecto,
 } from '@/lib/api/ejesProyecto'
@@ -43,23 +32,6 @@ type FormState = {
 
 function emptyForm(): FormState {
   return { codigo: '', nombre: '', descripcion: '', color: '#1F4E79', orden: 0, activo: true }
-}
-
-function compareEjes(
-  a: EjeProyectoDoc,
-  b: EjeProyectoDoc,
-  sortKey: string,
-  dir: MaestroSortDir,
-): number {
-  switch (sortKey) {
-    case 'nombre':
-      return compareStrings(a.nombre, b.nombre, dir)
-    case 'orden':
-      return compareNumbers(a.orden ?? 0, b.orden ?? 0, dir)
-    case 'codigo':
-    default:
-      return compareStrings(a.codigo, b.codigo, dir)
-  }
 }
 
 function fromDoc(e: EjeProyectoDoc): FormState {
@@ -145,22 +117,7 @@ export function EjesProyectoPage() {
     }
   }
 
-  const maestro = useMaestroList({
-    items: rows,
-    defaultSortKey: 'orden',
-    getActivo: (e) => e.activo !== false,
-    searchTexts: (e) => [e.codigo, e.nombre, e.descripcion],
-    compare: compareEjes,
-  })
-  const { rows: filtered, busqueda, setBusqueda, filterActivo, setFilterActivo, sortKey, sortDir, onSort, total } =
-    maestro
-
-  const pagination = usePagination(filtered.length, {
-    resetKey: `${busqueda}|${filterActivo}|${sortKey}|${sortDir}|${total}`,
-  })
-  const pageRows = pagination.slice(filtered)
-
-  const visibleIds = useMemo(() => pageRows.map((e) => e._id), [pageRows])
+  const visibleIds = useMemo(() => rows.map((e) => e._id), [rows])
   const bulk = useMaestroBulkDelete({
     recurso: 'ejes-proyecto',
     visibleIds,
@@ -182,30 +139,13 @@ export function EjesProyectoPage() {
           <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => void reload()}>
             <RefreshCw className="size-3.5" /> Actualizar
           </Button>
-          <Button
-            type="button"
-            onClick={openNew}
-            className="gap-2 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
-          >
+          <BoardPrimaryButton onClick={openNew}>
             <Plus className="size-4" /> Nuevo eje
-          </Button>
+          </BoardPrimaryButton>
         </div>
       </div>
 
       {err && <p className="text-sm text-destructive">{err}</p>}
-
-      {!loading && rows.length > 0 && (
-        <MaestroListToolbar
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          busquedaPlaceholder="Código, nombre, descripción…"
-          filterActivo={filterActivo}
-          onFilterActivoChange={setFilterActivo}
-          count={filtered.length}
-          total={total}
-          countLabel="eje(s)"
-        />
-      )}
 
       {!loading && bulk.showBar && (
         <MaestroBulkDeleteBar
@@ -216,93 +156,96 @@ export function EjesProyectoPage() {
         />
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Sin ejes en catálogo.</p>
-          ) : filtered.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Ningún eje coincide con los filtros.</p>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <MaestroSelectAllHeader
-                    allSelected={bulk.allSelected}
-                    someSelected={bulk.someSelected}
-                    onToggleAll={bulk.toggleAll}
-                  />
-                  <TableHead className="w-8" />
-                  <MaestroSortableHead column="codigo" label="Código" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="nombre" label="Nombre" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <MaestroSortableHead column="orden" label="Orden" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((e) => (
-                  <TableRow key={e._id}>
-                    <MaestroSelectCell
-                      id={e._id}
-                      label={e.nombre}
-                      selected={bulk.selectedIds.has(e._id)}
-                      onToggle={bulk.toggle}
-                    />
-                    <TableCell>
-                      <div className="size-4 rounded-full" style={{ background: e.color ?? '#1F4E79' }} />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs font-semibold">{e.codigo}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 font-medium">
-                        <Tags className="size-4 text-muted-foreground" />
-                        {e.nombre}
-                      </div>
-                      {e.descripcion ? (
-                        <p className="mt-0.5 max-w-md truncate text-xs text-muted-foreground">{e.descripcion}</p>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-sm tabular-nums">{e.orden ?? 0}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={e.activo !== false ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                        {e.activo !== false ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(e)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <EntityBoard
+          rows={rows}
+          countLabel="eje"
+          emptyMessage="Sin ejes en catálogo."
+          searchTexts={(e) => [e.codigo, e.nombre, e.descripcion]}
+          columns={[
+            {
+              id: 'sel',
+              label: '',
+              className: 'w-8',
+              render: (e) => (
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--navy)]"
+                  checked={bulk.selectedIds.has(e._id)}
+                  onChange={() => bulk.toggle(e._id)}
+                  aria-label={`Seleccionar ${e.nombre}`}
+                />
+              ),
+            },
+            {
+              id: 'color',
+              label: '',
+              className: 'w-8',
+              render: (e) => (
+                <div className="size-4 rounded-full" style={{ background: e.color ?? '#1F4E79' }} />
+              ),
+            },
+            {
+              id: 'codigo',
+              label: 'Código',
+              render: (e) => <span className="font-mono text-xs font-semibold">{e.codigo}</span>,
+            },
+            {
+              id: 'nombre',
+              label: 'Nombre',
+              render: (e) => (
+                <div>
+                  <div className="flex items-center gap-2 font-medium">
+                    <Tags className="size-4" style={{ color: BOARD.muted }} />
+                    {e.nombre}
+                  </div>
+                  {e.descripcion ? (
+                    <p className="mt-0.5 max-w-md truncate text-xs" style={{ color: BOARD.muted }}>{e.descripcion}</p>
+                  ) : null}
+                </div>
+              ),
+            },
+            {
+              id: 'orden',
+              label: 'Orden',
+              render: (e) => <span className="text-sm tabular-nums">{e.orden ?? 0}</span>,
+            },
+            {
+              id: 'estado',
+              label: 'Estado',
+              render: (e) => (
+                <BoardPill
+                  label={e.activo !== false ? 'Activo' : 'Inactivo'}
+                  bg={e.activo !== false ? BOARD.green : BOARD.gray}
+                  text={e.activo !== false ? '#fff' : BOARD.text}
+                />
+              ),
+            },
+            {
+              id: 'acciones',
+              label: 'Acciones',
+              align: 'right',
+              render: (e) => (
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(e)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">

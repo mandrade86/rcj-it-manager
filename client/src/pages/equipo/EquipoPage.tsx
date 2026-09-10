@@ -34,6 +34,7 @@ import {
   empresaNombrePorId,
 } from '@/lib/deptoEmpresaFilter'
 import { OrgChart, OrgDetailPanel, Avatar } from '@/pages/maestros/OrgChart'
+import { EquipoTablaBoard } from '@/pages/equipo/EquipoTablaBoard'
 import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { EmpleadoDoc } from '@/types/empleado'
@@ -466,7 +467,7 @@ export function EquipoPage() {
             className={vista === 'tabla' ? 'gap-1.5 bg-[var(--navy)] text-white hover:bg-[var(--navy)]/90' : 'gap-1.5'}
             onClick={() => setVista('tabla')}
           >
-            <List className="size-4" /> Tabla
+            <List className="size-4" /> Tablero
           </Button>
           <Button
             type="button"
@@ -497,161 +498,17 @@ export function EquipoPage() {
       )}
 
       {!loading && filtrados.length > 0 && vista === 'tabla' && (
-        <Card>
-          <CardContent className="p-0">
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12" />
-                  <TableHead>Código</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Puesto</TableHead>
-                  <TableHead>Departamento</TableHead>
-                  <TableHead>Empresa</TableHead>
-                  <TableHead>Reporta a</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead className="w-[150px]">Vacaciones</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageFiltrados.map((e) => {
-                  const dept = e.departamento_id && typeof e.departamento_id !== 'string' ? e.departamento_id : null
-                  const jefe = e.jefe_id && typeof e.jefe_id !== 'string' ? e.jefe_id : null
-                  return (
-                    <TableRow key={e._id}>
-                      <TableCell>
-                        <Avatar nombre={e.nombre} fotoUrl={e.foto_url} bg={dept?.color} size="sm" />
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{e.codigo}</TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <span>{e.nombre}</span>
-                          {data?.myEmpleadoId === e._id ? (
-                            <Badge variant="secondary" className="gap-1 bg-[var(--lime)] py-0 text-[10px] text-[var(--navy)]">
-                              <BadgeCheck className="size-2.5" /> Tú
-                            </Badge>
-                          ) : rootIdSet.has(e._id) && (
-                            <Badge variant="secondary" className="gap-1 bg-[var(--navy)] py-0 text-[10px] text-white">
-                              <Crown className="size-2.5" /> Directo
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{e.puesto || '—'}</TableCell>
-                        <TableCell>
-                          {dept ? (
-                            <div className="flex items-center gap-1.5">
-                              <div className="size-2.5 rounded-full" style={{ background: dept.color ?? '#002060' }} />
-                              <span className="text-sm">{dept.nombre}</span>
-                            </div>
-                          ) : (e.departamento || '—')}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {empresaNombrePorId(empleadoEmpresaId(e, deptToEmpresaId), empresasCatalog)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{jefe?.nombre ?? '—'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{e.email || '—'}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const v = vacResumen[e._id]
-                          if (!e.fecha_ingreso) {
-                            return (
-                              <span className="text-xs text-amber-700">
-                                Sin fecha de ingreso
-                              </span>
-                            )
-                          }
-                          if (!v) return <span className="text-xs text-muted-foreground">—</span>
-                          const disponibles = v.diasDisponibles
-                          const baja = disponibles <= 0
-                          const alta = disponibles >= 10
-                          return (
-                            <button
-                              type="button"
-                              className="flex flex-col items-start text-left transition hover:bg-muted/50 rounded px-1.5 py-0.5"
-                              onClick={() => setVacEmpleadoId(e._id)}
-                              title="Ver detalle de vacaciones"
-                            >
-                              <span
-                                className={
-                                  'text-sm font-semibold tabular-nums ' +
-                                  (baja
-                                    ? 'text-red-700'
-                                    : alta
-                                      ? 'text-[var(--lime)]'
-                                      : 'text-[var(--navy)]')
-                                }
-                              >
-                                {disponibles} {disponibles === 1 ? 'día' : 'días'}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {v.aniosServicio} año(s) · gozados {v.diasGozados}
-                              </span>
-                            </button>
-                          )
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={e.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
-                          {e.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5 text-xs"
-                            disabled={openingPerfil === e._id}
-                            onClick={() => void abrirPerfilCompleto(e._id)}
-                            title="Ver perfil completo (descriptor, evaluaciones, plan de carrera, capacitaciones)"
-                          >
-                            <FileText className="size-3.5" />
-                            {openingPerfil === e._id ? 'Abriendo…' : 'Perfil'}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setVacEmpleadoId(e._id)}
-                            title="Vacaciones (Honduras)"
-                          >
-                            <CalendarDays className="size-4 text-[var(--navy)]" />
-                          </Button>
-                          {puedeEditar && (
-                            <>
-                              <Button variant="ghost" size="icon" onClick={() => openEdit(e)} title="Editar empleado">
-                                <Edit2 className="size-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"
-                                title="Eliminar empleado"
-                                onClick={() => setDeleteTarget(e)}>
-                                <Trash2 className="size-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <PaginationBar
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              pageSize={pagination.pageSize}
-              totalItems={pagination.totalItems}
-              fromItem={pagination.fromItem}
-              toItem={pagination.toItem}
-              onPageChange={pagination.setPage}
-              onPageSizeChange={pagination.setPageSize}
-            />
-            </>
-          </CardContent>
-        </Card>
+        <EquipoTablaBoard
+          empleados={filtrados}
+          myEmpleadoId={data?.myEmpleadoId}
+          rootIdSet={rootIdSet}
+          vacResumen={vacResumen}
+          deptToEmpresaId={deptToEmpresaId}
+          empresasCatalog={empresasCatalog}
+          openingPerfil={openingPerfil}
+          onOpenPerfil={(id) => void abrirPerfilCompleto(id)}
+          onVacaciones={setVacEmpleadoId}
+        />
       )}
 
       {!loading && filtrados.length > 0 && vista === 'orgchart' && (

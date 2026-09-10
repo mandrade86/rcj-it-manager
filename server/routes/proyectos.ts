@@ -90,6 +90,8 @@ function pickBody(body: Record<string, unknown>) {
     'usuario_id', 'departamento_id', 'responsable',
     'fecha_inicio', 'fecha_fin', 'prioridad', 'estado',
     'meta_kpi', 'kpi_id', 'porcentaje_avance', 'notas',
+    'presupuesto_planificado',
+    'moneda_presupuesto', 'presupuesto_notas',
   ] as const
   const out: Record<string, unknown> = {}
   for (const k of allowed) {
@@ -98,6 +100,14 @@ function pickBody(body: Record<string, unknown>) {
       const v = body[k]
       if (v === '' || v === null) { out[k] = null; continue }
       if (typeof v === 'string' && mongoose.isValidObjectId(v)) out[k] = v
+    } else if (k === 'presupuesto_planificado') {
+      const v = body[k]
+      if (v === '' || v === null) { out[k] = null; continue }
+      const n = typeof v === 'number' ? v : Number(v)
+      out[k] = Number.isFinite(n) ? n : null
+    } else if (k === 'moneda_presupuesto') {
+      const m = String(body[k] ?? '').toUpperCase()
+      out[k] = m === 'USD' ? 'USD' : 'HNL'
     } else {
       out[k] = body[k]
     }
@@ -318,7 +328,9 @@ proyectosRouter.get('/exportar-excel', async (req, res, next) => {
     const COLS = [
       'Nombre', 'Descripción', 'Eje', 'Fase', 'Tipo', 'Departamento',
       'Empresas', 'Propietario', 'Responsable', 'Inicio', 'Fin',
-      'Prioridad', 'Estado', 'KPI', 'Meta KPI', '% Avance', 'Notas', 'Creado',
+      'Prioridad', 'Estado', 'KPI', 'Meta KPI', '% Avance',
+      'Presupuesto planificado', 'Presupuesto asignado', 'Presupuesto ejecutado', 'Moneda', 'Notas presupuesto',
+      'Notas', 'Creado',
     ] as const
 
     const rowsData = rows.map((p) => {
@@ -343,6 +355,11 @@ proyectosRouter.get('/exportar-excel', async (req, res, next) => {
         KPI: kpi?.nombre ?? '',
         'Meta KPI': p.meta_kpi ?? '',
         '% Avance': p.porcentaje_avance ?? 0,
+        'Presupuesto planificado': p.presupuesto_planificado ?? '',
+        'Presupuesto asignado': p.presupuesto_asignado ?? '',
+        'Presupuesto ejecutado': p.presupuesto_ejecutado ?? '',
+        Moneda: p.moneda_presupuesto ?? 'HNL',
+        'Notas presupuesto': p.presupuesto_notas ?? '',
         Notas: p.notas ?? '',
         Creado: toDate(p.createdAt),
       }
@@ -354,7 +371,8 @@ proyectosRouter.get('/exportar-excel', async (req, res, next) => {
       { wch: 36 }, { wch: 28 }, { wch: 16 }, { wch: 6 }, { wch: 14 },
       { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 12 },
       { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 24 }, { wch: 16 },
-      { wch: 10 }, { wch: 24 }, { wch: 12 },
+      { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 22 },
+      { wch: 24 }, { wch: 12 },
     ]
     xlsx.utils.book_append_sheet(wb, ws, 'Proyectos')
 

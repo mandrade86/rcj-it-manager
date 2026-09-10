@@ -37,12 +37,20 @@ const canConfig = requirePermiso('it:gastos:config')
 
 function respondCostosItError(err: unknown, res: Response, next: NextFunction): void {
   const msg = err instanceof Error ? err.message : String(err)
-  if (isSapViewNotFoundError(err) || /no existe en esquema/i.test(msg)) {
-    res.status(502).json({ error: msg })
+  console.error('[costos-it]', msg)
+  if (isSapViewNotFoundError(err) || /no existe en esquema|invalid table|could not find table|table or view not found|insufficient privilege|not authorized|authentication failed|connection refused|connect ETIMEDOUT|connect EHOSTUNREACH|socket hang up|SAP HANA|identificador inválido/i.test(msg)) {
+    res.status(502).json({
+      error: msg || 'No se pudo consultar SAP HANA. Revisa esquema/vista y conectividad.',
+    })
     return
   }
-  if (/Contraseña SAP|Conexión SAP|GEMINI_API_KEY|Ollama|Gemini:|columnas mínimas/i.test(msg)) {
+  if (/Contraseña SAP|Conexión SAP|GEMINI_API_KEY|Ollama|Gemini:|columnas mínimas|no configurada/i.test(msg)) {
     res.status(400).json({ error: msg })
+    return
+  }
+  // App interna: devolver el mensaje real (evita 500 opaco en portal)
+  if (msg && msg !== 'Error') {
+    res.status(500).json({ error: msg })
     return
   }
   next(err)

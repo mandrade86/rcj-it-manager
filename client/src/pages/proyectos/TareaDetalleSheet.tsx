@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { formatDateDMY } from '@/lib/format'
+import { formatDateDMY, formatMoney } from '@/lib/format'
 import {
   dependeDeIds,
   estadoTareaColor,
@@ -24,6 +24,7 @@ import {
 } from '@/lib/tareaDependencias'
 import { cn } from '@/lib/utils'
 import type { Tarea } from '@/types/tarea'
+import { tareaMontoEjecutadoEstimado } from '@/types/tarea'
 
 type Props = {
   tarea: Tarea | null
@@ -76,12 +77,12 @@ export function TareaDetalleSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
-        <SheetHeader>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+        <SheetHeader className="border-b border-border px-6 py-4">
           <SheetTitle className="pr-8 text-left leading-snug">{tarea.nombre}</SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto py-2 text-sm">
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={cn('text-xs', estadoTareaColor(tarea.estado))}>
               {tarea.estado}
@@ -138,6 +139,22 @@ export function TareaDetalleSheet({
             <div>
               <p className="text-xs text-muted-foreground">Fin</p>
               <p className="font-medium">{formatDateDMY(tarea.fecha_fin)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Monto asignado</p>
+              <p className="font-medium tabular-nums">
+                {tarea.monto_asignado != null && Number.isFinite(tarea.monto_asignado)
+                  ? formatMoney(tarea.monto_asignado, 'HNL')
+                  : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Ejecutado (est.)</p>
+              <p className="font-medium tabular-nums">
+                {tarea.monto_asignado != null || tarea.monto_ejecutado != null
+                  ? formatMoney(tareaMontoEjecutadoEstimado(tarea), 'HNL')
+                  : '—'}
+              </p>
             </div>
           </section>
 
@@ -238,7 +255,7 @@ export function TareaDetalleSheet({
           </section>
         </div>
 
-        <SheetFooter className="flex-row gap-2 border-t border-border pt-4">
+        <SheetFooter className="flex-row gap-2 border-t border-border px-6 py-4">
           <Button
             type="button"
             variant="outline"

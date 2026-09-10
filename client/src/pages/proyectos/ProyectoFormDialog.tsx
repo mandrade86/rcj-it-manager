@@ -51,6 +51,10 @@ type FormState = {
   estado: ProyectoEstado
   kpi_id: string
   meta_kpi: string
+  presupuesto_planificado: string
+  presupuesto_ejecutado: string
+  moneda_presupuesto: 'HNL' | 'USD'
+  presupuesto_notas: string
   notas: string
   empresa_ids: string[]
 }
@@ -76,6 +80,10 @@ function emptyForm(defaults: {
     estado: 'Planificado',
     kpi_id: '',
     meta_kpi: '',
+    presupuesto_planificado: '',
+    presupuesto_ejecutado: '',
+    moneda_presupuesto: 'HNL',
+    presupuesto_notas: '',
     notas: '',
     empresa_ids: [],
   }
@@ -98,9 +106,26 @@ function fromProyecto(p: Proyecto): FormState {
     estado: p.estado,
     kpi_id: proyectoKpiId(p) ?? '',
     meta_kpi: p.meta_kpi ?? '',
+    presupuesto_planificado:
+      p.presupuesto_planificado != null && Number.isFinite(p.presupuesto_planificado)
+        ? String(p.presupuesto_planificado)
+        : '',
+    presupuesto_ejecutado:
+      p.presupuesto_ejecutado != null && Number.isFinite(p.presupuesto_ejecutado)
+        ? String(p.presupuesto_ejecutado)
+        : '',
+    moneda_presupuesto: p.moneda_presupuesto === 'USD' ? 'USD' : 'HNL',
+    presupuesto_notas: p.presupuesto_notas ?? '',
     notas: p.notas ?? '',
     empresa_ids: proyectoEmpresaIdList(p),
   }
+}
+
+function parseMoneyInput(raw: string): number | null {
+  const t = raw.trim().replace(/,/g, '')
+  if (!t) return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
 }
 
 function toPayload(f: FormState, isEdit: boolean): Record<string, unknown> {
@@ -116,6 +141,9 @@ function toPayload(f: FormState, isEdit: boolean): Record<string, unknown> {
     prioridad: f.prioridad,
     kpi_id: f.kpi_id || null,
     meta_kpi: f.meta_kpi.trim() || undefined,
+    presupuesto_planificado: parseMoneyInput(f.presupuesto_planificado),
+    moneda_presupuesto: f.moneda_presupuesto,
+    presupuesto_notas: f.presupuesto_notas.trim() || '',
     notas: f.notas.trim() || undefined,
     empresa_ids: f.empresa_ids,
   }
@@ -654,6 +682,58 @@ export function ProyectoFormDialog({
                 con el departamento.
               </p>
             )}
+          </div>
+
+          <div className="grid gap-3 rounded-md border border-[var(--navy)]/20 bg-[var(--blue-lt)]/25 p-3">
+            <div>
+              <Label className="text-sm font-semibold text-[var(--navy)]">Presupuesto del proyecto</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Define el envelope. Los gastos se suman desde los montos de cada tarea.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-moneda">Moneda</Label>
+                <select
+                  id="p-moneda"
+                  className={selectClass}
+                  value={form.moneda_presupuesto}
+                  onChange={(e) =>
+                    setForm((s) => ({
+                      ...s,
+                      moneda_presupuesto: e.target.value === 'USD' ? 'USD' : 'HNL',
+                    }))
+                  }
+                >
+                  <option value="HNL">HNL (Lempiras)</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-pres-plan">Planificado (envelope)</Label>
+                <Input
+                  id="p-pres-plan"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.presupuesto_planificado}
+                  onChange={(e) => setForm((s) => ({ ...s, presupuesto_planificado: e.target.value }))}
+                />
+              </div>
+            </div>
+            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              Asignado y ejecutado se calculan solos desde las tareas (asignado × % avance).
+            </p>
+            <div className="grid gap-1.5">
+              <Label htmlFor="p-pres-notas">Notas de presupuesto</Label>
+              <Input
+                id="p-pres-notas"
+                placeholder="Ej. PO, contrato, cuenta SAP…"
+                value={form.presupuesto_notas}
+                onChange={(e) => setForm((s) => ({ ...s, presupuesto_notas: e.target.value }))}
+              />
+            </div>
           </div>
 
           <ProyectoParticipantesEditor

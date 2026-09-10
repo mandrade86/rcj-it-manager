@@ -106,6 +106,14 @@ function parseEstado(raw: unknown, porcentaje: number): TareaEstado {
 
 function rowToTarea(row: Record<string, unknown>, proyectoId: string, proyectoEje = '') {
   const porcentaje = pct(getCell(row, ['porcentaje', '%', '% avance', 'avance', 'progreso']))
+  const montoRaw = getCell(row, [
+    'monto_asignado', 'monto asignado', 'monto', 'presupuesto', 'costo', 'gasto',
+  ])
+  let monto_asignado: number | null = null
+  if (montoRaw != null && String(montoRaw).trim() !== '') {
+    const n = Number(String(montoRaw).replace(/,/g, '').replace(/[^\d.-]/g, ''))
+    if (Number.isFinite(n)) monto_asignado = n
+  }
   return {
     id: text(row, ['id', '_id', 'tarea_id', 'id tarea']),
     payload: {
@@ -117,6 +125,7 @@ function rowToTarea(row: Record<string, unknown>, proyectoId: string, proyectoEj
       fecha_fin: parseDate(getCell(row, ['fecha_fin', 'fin', 'fecha fin', 'vencimiento', 'due date'])),
       estado: parseEstado(getCell(row, ['estado', 'estatus', 'status']), porcentaje),
       porcentaje,
+      monto_asignado,
       eje: text(row, ['eje', 'categoria', 'categoría']) || proyectoEje || undefined,
       tags: parseTagsFromExcel(getCell(row, ['tags', 'tag', 'etiquetas', 'etiqueta', 'labels'])),
     },
@@ -142,6 +151,17 @@ async function resolverResponsableId(nombre: string | undefined): Promise<string
     activo: true,
   }).select('_id').lean() as { _id: mongoose.Types.ObjectId } | null
   return emp?._id ? String(emp._id) : null
+}
+
+function sanitizeMontoField(body: Record<string, unknown>, key: 'monto_asignado' | 'monto_ejecutado') {
+  if (!(key in body)) return
+  const v = body[key]
+  if (v === '' || v === null || v === undefined) {
+    body[key] = null
+    return
+  }
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, ''))
+  body[key] = Number.isFinite(n) ? n : null
 }
 
 tareasRouter.get('/', async (req, res, next) => {
@@ -226,6 +246,8 @@ tareasRouter.post('/', async (req, res, next) => {
     if ('tags' in body) {
       body.tags = normalizeTareaTags(body.tags)
     }
+    sanitizeMontoField(body, 'monto_asignado')
+    sanitizeMontoField(body, 'monto_ejecutado')
     const doc = await Tarea.create(body)
     await recalcularAvanceProyecto(req.body.proyecto_id)
     res.status(201).json(doc)
@@ -505,6 +527,8 @@ tareasRouter.get('/exportar-excel', async (req, res, next) => {
         fecha_fin?: Date
         estado?: string
         porcentaje?: number
+        monto_asignado?: number | null
+        monto_ejecutado?: number | null
         eje?: string
         tags?: string[]
         createdAt?: Date
@@ -522,7 +546,7 @@ tareasRouter.get('/exportar-excel', async (req, res, next) => {
 
     const COLS = [
       'Nombre', 'Descripción', 'Responsable', 'Inicio', 'Fin',
-      'Estado', '% Avance', 'Eje', 'Tags', 'Creado',
+      'Estado', '% Avance', 'Monto asignado', 'Monto ejecutado', 'Eje', 'Tags', 'Creado',
     ] as const
 
     const rowsData = tareas.map((t) => ({
@@ -533,6 +557,8 @@ tareasRouter.get('/exportar-excel', async (req, res, next) => {
       Fin: toDate(t.fecha_fin),
       Estado: t.estado ?? '',
       '% Avance': t.porcentaje ?? 0,
+      'Monto asignado': (t as { monto_asignado?: number | null }).monto_asignado ?? '',
+      'Monto ejecutado': (t as { monto_ejecutado?: number | null }).monto_ejecutado ?? '',
       Eje: t.eje ?? proyecto.eje ?? '',
       Tags: (t.tags ?? []).join(', '),
       Creado: toDate(t.createdAt),
@@ -729,6 +755,8 @@ tareasRouter.put('/:id', async (req, res, next) => {
     if ('tags' in rest) {
       rest.tags = normalizeTareaTags(rest.tags)
     }
+    sanitizeMontoField(rest, 'monto_asignado')
+    sanitizeMontoField(rest, 'monto_ejecutado')
 
     const doc = await Tarea.findByIdAndUpdate(id, rest, {
       new: true,

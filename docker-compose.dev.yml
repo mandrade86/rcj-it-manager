@@ -47,6 +47,8 @@ services:
       SAP_BI_PASSWORD: ${SAP_BI_PASSWORD:-}
       SAP_BI_ENCRYPT: ${SAP_BI_ENCRYPT:-true}
       SAP_BI_TRUST_CERT: ${SAP_BI_TRUST_CERT:-true}
+      SAP_BUDGET_IT_VIEW: ${SAP_BUDGET_IT_VIEW:-TS_VW_BUDGET_IT}
+      SAP_BUDGET_IT_SCHEMA: ${SAP_BUDGET_IT_SCHEMA:-TS_ZOLIHN}
     volumes:
       - ./data:/app/data
     depends_on:

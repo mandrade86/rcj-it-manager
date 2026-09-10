@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { fetchEmpleados } from '@/lib/api/empleados'
 import { collectTagsFromTareas } from '@/lib/tareaTags'
 import type { EmpleadoDoc } from '@/types/empleado'
-import type { Tarea, TareaEstado } from '@/types/tarea'
+import type { Tarea, TareaEstado, TareaPrioridad } from '@/types/tarea'
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -29,6 +29,9 @@ type FormState = {
   fecha_inicio: string
   fecha_fin: string
   estado: TareaEstado
+  prioridad: TareaPrioridad | ''
+  monto_asignado: string
+  monto_ejecutado: string
   porcentaje: string
   depende_de_ids: string[]
   tags: string[]
@@ -43,6 +46,9 @@ function emptyForm(): FormState {
     fecha_inicio: '',
     fecha_fin: '',
     estado: 'Pendiente',
+    prioridad: '',
+    monto_asignado: '',
+    monto_ejecutado: '',
     porcentaje: '0',
     depende_de_ids: [],
     tags: [],
@@ -58,6 +64,11 @@ function fromTarea(t: Tarea): FormState {
     fecha_inicio: t.fecha_inicio ? t.fecha_inicio.slice(0, 10) : '',
     fecha_fin: t.fecha_fin ? t.fecha_fin.slice(0, 10) : '',
     estado: t.estado,
+    prioridad: t.prioridad ?? '',
+    monto_asignado:
+      t.monto_asignado != null && Number.isFinite(t.monto_asignado) ? String(t.monto_asignado) : '',
+    monto_ejecutado:
+      t.monto_ejecutado != null && Number.isFinite(t.monto_ejecutado) ? String(t.monto_ejecutado) : '',
     porcentaje: String(t.porcentaje ?? 0),
     depende_de_ids: [...(t.depende_de_ids ?? [])],
     tags: [...(t.tags ?? [])],
@@ -160,7 +171,20 @@ export function TareaFormDialog({
         responsable: form.responsable.trim() || undefined,
         responsable_id: form.responsable_id || null,
         estado: form.estado,
+        prioridad: form.prioridad || null,
         porcentaje: Number(form.porcentaje) || 0,
+        monto_asignado: (() => {
+          const t = form.monto_asignado.trim().replace(/,/g, '')
+          if (!t) return null
+          const n = Number(t)
+          return Number.isFinite(n) ? n : null
+        })(),
+        monto_ejecutado: (() => {
+          const t = form.monto_ejecutado.trim().replace(/,/g, '')
+          if (!t) return null
+          const n = Number(t)
+          return Number.isFinite(n) ? n : null
+        })(),
         eje: proyectoEje,
         depende_de_ids: form.depende_de_ids,
         tags: form.tags,
@@ -265,6 +289,26 @@ export function TareaFormDialog({
               </select>
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="t-pri">Prioridad</Label>
+              <select
+                id="t-pri"
+                className={selectClass}
+                value={form.prioridad}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    prioridad: e.target.value as TareaPrioridad | '',
+                  }))
+                }
+              >
+                <option value="">— Sin prioridad —</option>
+                <option value="Alta">Alta</option>
+                <option value="Media">Media</option>
+                <option value="Baja">Baja</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid gap-2">
               <Label htmlFor="t-pct">% avance</Label>
               <Input
                 id="t-pct"
@@ -274,7 +318,41 @@ export function TareaFormDialog({
                 value={form.porcentaje}
                 onChange={(e) => setForm((s) => ({ ...s, porcentaje: e.target.value }))}
               />
+          </div>
+          <div className="grid gap-3 rounded-md border border-[var(--navy)]/15 bg-[var(--blue-lt)]/20 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--navy)]">
+              Presupuesto de la tarea
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="t-monto-asig">Monto asignado</Label>
+                <Input
+                  id="t-monto-asig"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.monto_asignado}
+                  onChange={(e) => setForm((s) => ({ ...s, monto_asignado: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="t-monto-ejec">Monto ejecutado (opcional)</Label>
+                <Input
+                  id="t-monto-ejec"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="Auto por % avance"
+                  value={form.monto_ejecutado}
+                  onChange={(e) => setForm((s) => ({ ...s, monto_ejecutado: e.target.value }))}
+                />
+              </div>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Si no indicas ejecutado, el sistema estima: asignado × % avance (o 100% si está Completado).
+              Los montos se suman al presupuesto del proyecto.
+            </p>
           </div>
           {candidatasDependencia.length > 0 && (
             <div className="grid gap-2">

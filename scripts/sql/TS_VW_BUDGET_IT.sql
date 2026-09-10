@@ -10,8 +10,10 @@
 -- Al hacer clic en una fila (Numero de Cuenta) se cargan los gastos reales
 -- desde la vista de costos IT (GET /api/costos-it/gastos-por-cuenta).
 
--- Opcional en .env:
+-- Opcional en .env (producción Docker):
 -- SAP_BUDGET_IT_VIEW=TS_VW_BUDGET_IT
 -- SAP_BUDGET_IT_SCHEMA=TS_ZOLIHN
+--
+-- Importante: no usar RCJ_BI aquí. Esa vista suele estar en el esquema de compañía SAP B1.
 
 SELECT * FROM "TS_VW_BUDGET_IT";

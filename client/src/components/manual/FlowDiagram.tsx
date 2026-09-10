@@ -10,7 +10,7 @@ async function ensureMermaid() {
     securityLevel: 'strict',
     theme: 'base',
     themeVariables: {
-      fontFamily: 'Inter, system-ui, sans-serif',
+      fontFamily: "Aptos, 'Segoe UI', system-ui, sans-serif",
       fontSize: '14px',
       primaryColor: '#EAF5D9',
       primaryTextColor: '#002060',
