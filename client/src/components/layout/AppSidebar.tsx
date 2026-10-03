@@ -83,13 +83,6 @@ const pmNav: NavItemDef[] = [
   { to: '/resumen-departamento', label: 'Resumen del plan', icon: BarChart3, permiso: 'dashboard:ver' },
 ]
 
-const gastosNav: NavItemDef = {
-  to: '/gastos',
-  label: 'Gastos',
-  icon: Wallet,
-  permiso: 'gastos:ver',
-}
-
 const rrHHNav: NavItemDef[] = [
   { to: '/maestros/empleados', label: 'Empleados', icon: UsersRound, permiso: 'empleados:ver' },
   { to: '/equipo', label: 'Organigrama', icon: Users, permiso: 'equipo:ver' },
@@ -226,7 +219,6 @@ export function AppSidebar() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed)
   const toggle = useUiStore((s) => s.toggleSidebar)
   const hasPermiso = useAuthStore((s) => s.hasPermiso)
-  const user = useAuthStore((s) => s.user)
   const { pathname, search } = useLocation()
   const [openIds, setOpenIds] = useState<string[]>(['workspace'])
   const [areaNombre, setAreaNombre] = useState('Project Management & Talent')
@@ -245,24 +237,10 @@ export function AppSidebar() {
   const mostrarBiCosteo = hasPermiso('bi:costeo:ver') || hasPermiso('*')
   const mostrarGastosIt = hasPermiso('it:gastos:ver') || hasPermiso('*')
 
-  const isAdmin = hasPermiso('*')
-  const llevaGastos = Boolean(user?.departamento_lleva_gastos)
-
-  const puedeVerItem = (item: NavItemDef) =>
-    cumplePermiso(item.permiso, hasPermiso, {
-      llevaGastos: item.permiso === 'gastos:ver' && llevaGastos,
-    })
+  const puedeVerItem = (item: NavItemDef) => cumplePermiso(item.permiso, hasPermiso)
 
   const navGroups: NavGroupDef[] = [
     ...navGroupsBase
-      .map((g) => {
-        if (g.id !== 'pm') return g
-        const items = [...g.items]
-        if (isAdmin || llevaGastos || hasPermiso('gastos:ver')) {
-          items.push(gastosNav)
-        }
-        return { ...g, items }
-      })
       .map((g) => ({ ...g, items: g.items.filter(puedeVerItem) }))
       .filter((g) => g.items.length > 0),
     ...(mostrarGastosIt

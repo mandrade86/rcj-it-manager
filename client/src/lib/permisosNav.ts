@@ -93,10 +93,7 @@ export function esPerfilSoloBiCosteo(hasPermiso: (p: string) => boolean): boolea
 }
 
 /** Ruta de inicio según permisos del usuario. */
-export function resolveDefaultRoute(
-  hasPermiso: (p: string) => boolean,
-  opts?: { llevaGastos?: boolean },
-): string {
+export function resolveDefaultRoute(hasPermiso: (p: string) => boolean): string {
   if (hasPermiso('*') || hasPermiso('dashboard:ver')) return '/'
   if (hasPermiso('bi:costeo:ver')) return '/bi/costeo-muestras'
   if (hasPermiso('it:gastos:ver')) return '/it/gastos-control'
@@ -104,7 +101,6 @@ export function resolveDefaultRoute(
   if (hasPermiso('equipo:ver')) return '/equipo'
   if (hasPermiso('capacitaciones:ver')) return '/capacitaciones'
   if (hasPermiso('kpis:ver')) return '/kpis'
-  if (cumplePermiso('gastos:ver', hasPermiso, opts)) return '/gastos'
   if (hasPermiso('it:arquitectura:ver')) return '/it/arquitectura'
   if (hasPermiso('maestros:ver')) return '/maestros'
   if (hasPermiso('empleados:ver')) return '/maestros/empleados'
@@ -122,5 +118,5 @@ export function resolvePostLoginPath(
   const required = permisoParaRuta(from)
   if (required && cumplePermiso(required, hasPermiso, opts)) return from
   if (!required && from !== '/login') return from
-  return resolveDefaultRoute(hasPermiso, opts)
+  return resolveDefaultRoute(hasPermiso)
 }

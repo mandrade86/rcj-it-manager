@@ -13,7 +13,6 @@ import { EvaluacionKpiPage } from '@/pages/equipo/EvaluacionKpiPage'
 import { EquipoPage } from '@/pages/equipo/EquipoPage'
 import { MiEvaluacionPage } from '@/pages/equipo/MiEvaluacionPage'
 import { ResumenDepartamentoPage } from '@/pages/resumen/ResumenDepartamentoPage'
-import { GastosPage } from '@/pages/gastos/GastosPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { ProyectoDetailPage } from '@/pages/proyectos/ProyectoDetailPage'
@@ -103,9 +102,7 @@ export function AppRoutes() {
             <Route path="capacitaciones" element={<CapacitacionesPage />} />
           </Route>
 
-          <Route element={<ProtectedRoute permiso="gastos:ver" allowGastosDept />}>
-            <Route path="gastos" element={<GastosPage />} />
-          </Route>
+          <Route path="gastos" element={<Navigate to="/" replace />} />
 
           <Route element={<ProtectedRoute permiso="kpis:ver" />}>
             <Route path="kpis" element={<KpisPage />} />
