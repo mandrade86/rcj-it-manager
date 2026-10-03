@@ -51,7 +51,7 @@ const POPULATE_FIELDS = [
   { path: 'departamento_id', select: 'codigo nombre color' },
   { path: 'empresa_ids', select: 'codigo nombre color activo' },
   { path: 'kpi_id', select: 'nombre eje meta unidad frecuencia descripcion' },
-  { path: 'participantes.usuario_id', select: 'nombre email activo' },
+  { path: 'participantes.usuario_id', select: 'nombre email activo empleado_id' },
 ] as const
 
 /** Construye el filtro Mongo basado en el scope del usuario actual. */
@@ -520,7 +520,7 @@ proyectosRouter.post('/eliminar-lote', async (req, res, next) => {
   try {
     const u = req.user
     if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
-    if (!u.permisos.includes('*') && !u.permisos.includes('proyectos:editar')) {
+    if (!u.permisos.includes('*') && !u.permisos.includes('proyectos:eliminar')) {
       res.status(403).json({ error: 'No tienes permiso para eliminar proyectos' })
       return
     }
@@ -854,11 +854,65 @@ proyectosRouter.put('/:id', async (req, res, next) => {
   }
 })
 
+proyectosRouter.put('/:id/seguimiento', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+    const scope = await buildScopeFilter(req)
+    if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
+    const exists = await Proyecto.findOne({ _id: id, ...scope }).select('_id usuario_id participantes').lean()
+    if (!exists) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    if (!usuarioPuedeEditarProyecto(u._id, u.permisos ?? [], exists)) {
+      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+      return
+    }
+    const body = req.body as { hitos?: unknown; incidencias?: unknown; documentos?: unknown }
+    const hitos = Array.isArray(body.hitos) ? body.hitos.slice(0, 40).map((row) => {
+      const r = row as Record<string, unknown>
+      return {
+        nombre: String(r.nombre ?? '').trim().slice(0, 120),
+        fecha: r.fecha ? new Date(String(r.fecha)) : null,
+        hecho: Boolean(r.hecho),
+      }
+    }).filter((h) => h.nombre) : []
+    const incidencias = Array.isArray(body.incidencias) ? body.incidencias.slice(0, 40).map((row) => {
+      const r = row as Record<string, unknown>
+      const estado = r.estado === 'En curso' || r.estado === 'Cerrada' ? r.estado : 'Abierta'
+      return {
+        titulo: String(r.titulo ?? '').trim().slice(0, 120),
+        detalle: String(r.detalle ?? '').trim().slice(0, 500),
+        estado,
+        fecha: r.fecha ? new Date(String(r.fecha)) : null,
+      }
+    }).filter((h) => h.titulo) : []
+    const documentos = Array.isArray(body.documentos) ? body.documentos.slice(0, 40).map((row) => {
+      const r = row as Record<string, unknown>
+      return {
+        nombre: String(r.nombre ?? '').trim().slice(0, 120),
+        enlace: String(r.enlace ?? '').trim().slice(0, 400),
+        notas: String(r.notas ?? '').trim().slice(0, 300),
+      }
+    }).filter((h) => h.nombre) : []
+    const doc = await Proyecto.findByIdAndUpdate(
+      id,
+      { hitos, incidencias, documentos },
+      { new: true },
+    ).select('hitos incidencias documentos riesgos_registro').lean()
+    res.json(doc)
+  } catch (err) {
+    next(err)
+  }
+})
+
 proyectosRouter.delete('/:id', async (req, res, next) => {
   try {
     const u = req.user
     if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
-    if (!u.permisos.includes('*') && !u.permisos.includes('proyectos:editar')) {
+    if (!u.permisos.includes('*') && !u.permisos.includes('proyectos:eliminar')) {
       res.status(403).json({ error: 'No tienes permiso para eliminar proyectos' })
       return
     }

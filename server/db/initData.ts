@@ -817,11 +817,11 @@ const ROLES_INICIALES = [
     nombre: 'Jefe IT',
     descripcion: 'Acceso completo a módulos operativos y administración de usuarios.',
     permisos: [
-      'dashboard:ver', 'proyectos:ver', 'proyectos:editar',
+      'dashboard:ver', 'proyectos:ver', 'proyectos:editar', 'proyectos:eliminar', 'tareas:asignar',
       'equipo:ver', 'equipo:editar', 'capacitaciones:ver', 'capacitaciones:editar',
-      'gastos:ver', 'kpis:ver', 'kpis:editar',
+      'gastos:ver', 'gastos:aprobar', 'kpis:ver', 'kpis:editar',
       'capacitaciones:ver-todos',
-      'maestros:ver', 'maestros:editar', 'empleados:ver', 'empleados:editar',
+      'maestros:ver', 'maestros:editar', 'empleados:ver', 'empleados:editar', 'empleados:ver-salario',
       'usuarios:ver', 'usuarios:editar', 'roles:ver', 'roles:editar',
       'it:arquitectura:ver', 'it:arquitectura:editar',
       'bi:costeo:ver', 'bi:costeo:config',
@@ -863,6 +863,39 @@ const ROLES_INICIALES = [
     descripcion: 'Solo control de gastos del departamento IT desde SAP HANA',
     permisos: ['it:gastos:ver'],
   },
+  {
+    nombre: 'Administrador de Proyectos',
+    descripcion: 'Gestión de proyectos, tareas, KPIs, roadmap y reportería. Sin administración ni RRHH.',
+    permisos: [
+      'dashboard:ver',
+      'proyectos:ver',
+      'proyectos:editar',
+      'proyectos:eliminar',
+      'tareas:asignar',
+      'kpis:ver',
+      'kpis:editar',
+      'gastos:ver',
+      'gastos:aprobar',
+      'equipo:ver',
+    ],
+  },
+  {
+    nombre: 'RRHH',
+    descripcion: 'Talento: empleados, organigrama, puestos, carrera, capacitaciones y evaluaciones.',
+    permisos: [
+      'dashboard:ver',
+      'empleados:ver',
+      'empleados:editar',
+      'equipo:ver',
+      'equipo:editar',
+      'capacitaciones:ver',
+      'capacitaciones:ver-todos',
+      'capacitaciones:editar',
+      'maestros:ver',
+      'maestros:editar',
+      'empleados:ver-salario',
+    ],
+  },
 ]
 
 export async function ensureRolesYAdmin(): Promise<void> {
@@ -887,6 +920,27 @@ export async function ensureRolesYAdmin(): Promise<void> {
     if (r.nombre === 'Jefe IT') {
       await Rol.updateOne({ nombre: 'Jefe IT' }, { $set: { permisos: r.permisos, descripcion: r.descripcion } })
     }
+  }
+
+  const finos = await Config.findOne({ clave: 'permisos_finos_v1' }).lean()
+  if (!finos) {
+    await Rol.updateMany(
+      { permisos: 'proyectos:editar' },
+      { $addToSet: { permisos: { $each: ['proyectos:eliminar', 'tareas:asignar'] } } },
+    )
+    await Rol.updateMany(
+      { permisos: 'empleados:editar' },
+      { $addToSet: { permisos: 'empleados:ver-salario' } },
+    )
+    await Rol.updateMany(
+      { permisos: 'equipo:editar' },
+      { $addToSet: { permisos: 'empleados:ver-salario' } },
+    )
+    await Rol.updateMany(
+      { nombre: 'Administrador de Proyectos' },
+      { $addToSet: { permisos: 'gastos:aprobar' } },
+    )
+    await Config.create({ clave: 'permisos_finos_v1', valor: '1' })
   }
 
   const removed = await Usuario.deleteOne({ email: 'admin@rcj.hn' })

@@ -7,8 +7,20 @@ async function parseError(res: Response): Promise<string> {
   } catch { return res.statusText }
 }
 
-export async function fetchDepartamentos(): Promise<DepartamentoDoc[]> {
-  const res = await fetch('/api/departamentos')
+/**
+ * Lista departamentos.
+ * - Por defecto: solo visibles (`activo !== false`).
+ * - `todos: true` → incluye ocultos (maestro / configuración).
+ * - `activo: true|false` → filtro explícito.
+ */
+export async function fetchDepartamentos(params?: {
+  activo?: boolean
+  todos?: boolean
+}): Promise<DepartamentoDoc[]> {
+  const q = new URLSearchParams()
+  if (params?.todos) q.set('todos', '1')
+  else if (params?.activo !== undefined) q.set('activo', String(params.activo))
+  const res = await fetch(`/api/departamentos${q.toString() ? `?${q}` : ''}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<DepartamentoDoc[]>
 }

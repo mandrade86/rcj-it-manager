@@ -17,6 +17,8 @@ export type UsuarioDoc = {
   login_dominio?: string
   es_usuario_dominio?: boolean
   rol_id?: string | RolDoc | null
+  /** Roles adicionales. El primero coincide con `rol_id` cuando viene poblado. */
+  roles_ids?: Array<string | RolDoc>
   /** Identidad del usuario en el maestro de empleados (su número de empleado). */
   empleado_id?: string | EmpleadoMini | null
   /** Asignaciones adicionales explícitas (alcance extra). */

@@ -1,5 +1,12 @@
 import { notifyKpiDataChanged } from '@/lib/kpiSync'
-import type { Proyecto, ProyectoRiesgoAdjunto, ProyectoRiesgoRegistro } from '@/types/proyecto'
+import type {
+  Proyecto,
+  ProyectoDocumento,
+  ProyectoHito,
+  ProyectoIncidencia,
+  ProyectoRiesgoAdjunto,
+  ProyectoRiesgoRegistro,
+} from '@/types/proyecto'
 import type { ReporteStatusProyectos } from '@/types/reporteProyectos'
 
 async function parseError(res: Response): Promise<string> {
@@ -265,4 +272,16 @@ export async function updateProyectoParticipantes(
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<Proyecto>
+}
+
+export async function saveProyectoSeguimiento(
+  id: string,
+  body: { hitos: ProyectoHito[]; incidencias: ProyectoIncidencia[]; documentos: ProyectoDocumento[] },
+): Promise<void> {
+  const res = await fetch(`/api/proyectos/${encodeURIComponent(id)}/seguimiento`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
 }

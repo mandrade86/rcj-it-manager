@@ -60,7 +60,8 @@ export function RolesPage() {
   const [list, setList] = useState<RolDoc[]>([])
   const [depts, setDepts] = useState<DepartamentoDoc[]>([])
   const [perfiles, setPerfiles] = useState<PerfilPuestoDoc[]>([])
-  const [permisos, setPermisos] = useState<{ clave: string; descripcion: string }[]>([])
+  const [permisos, setPermisos] = useState<{ clave: string; descripcion: string; grupo?: string }[]>([])
+  const [vistaRoles, setVistaRoles] = useState<'lista' | 'matriz'>('lista')
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -119,6 +120,44 @@ export function RolesPage() {
     })
   }
 
+  const permisosPorGrupo = useMemo(() => {
+    const map = new Map<string, typeof permisos>()
+    for (const p of permisos) {
+      const g = p.grupo ?? 'Otros'
+      const arr = map.get(g) ?? []
+      arr.push(p)
+      map.set(g, arr)
+    }
+    return [...map.entries()]
+  }, [permisos])
+
+  const matrizModulos = useMemo(
+    () => [
+      { id: 'inicio', label: 'Inicio / Mi día', permiso: 'dashboard:ver' },
+      { id: 'proyectos', label: 'Proyectos', permiso: 'proyectos:ver' },
+      { id: 'tareas', label: 'Tareas', permiso: 'proyectos:ver' },
+      { id: 'kpis', label: 'KPIs', permiso: 'kpis:ver' },
+      { id: 'gastos', label: 'Gastos', permiso: 'gastos:ver' },
+      { id: 'empleados', label: 'Empleados', permiso: 'empleados:ver' },
+      { id: 'capacitaciones', label: 'Capacitaciones', permiso: 'capacitaciones:ver' },
+      { id: 'evaluaciones', label: 'Evaluaciones', permiso: 'equipo:ver' },
+      { id: 'roles', label: 'Roles', permiso: 'roles:ver' },
+      { id: 'usuarios', label: 'Usuarios', permiso: 'usuarios:ver' },
+    ],
+    [],
+  )
+
+  function setGrupoPermisos(claves: string[], on: boolean) {
+    setForm((f) => {
+      const set = new Set(f.permisos)
+      for (const c of claves) {
+        if (on) set.add(c)
+        else set.delete(c)
+      }
+      return { ...f, permisos: [...set] }
+    })
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     try {
@@ -153,9 +192,27 @@ export function RolesPage() {
             Define los roles del sistema y los permisos asociados a cada uno.
           </p>
         </div>
-        <BoardPrimaryButton onClick={openNew}>
-          <Plus className="size-4" /> Nuevo rol
-        </BoardPrimaryButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border p-0.5 text-xs">
+            <button
+              type="button"
+              className={`rounded px-2 py-1 ${vistaRoles === 'lista' ? 'bg-[var(--navy)] text-white' : 'text-muted-foreground'}`}
+              onClick={() => setVistaRoles('lista')}
+            >
+              Lista
+            </button>
+            <button
+              type="button"
+              className={`rounded px-2 py-1 ${vistaRoles === 'matriz' ? 'bg-[var(--navy)] text-white' : 'text-muted-foreground'}`}
+              onClick={() => setVistaRoles('matriz')}
+            >
+              Matriz
+            </button>
+          </div>
+          <BoardPrimaryButton onClick={openNew}>
+            <Plus className="size-4" /> Nuevo rol
+          </BoardPrimaryButton>
+        </div>
       </div>
 
       {err && <p className="text-sm text-destructive">{err}</p>}
@@ -171,6 +228,40 @@ export function RolesPage() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : vistaRoles === 'matriz' ? (
+        <div className="overflow-x-auto rounded-lg border bg-white">
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="px-3 py-2 font-medium">Módulo</th>
+                {list.map((r) => (
+                  <th key={r._id} className="px-2 py-2 text-center font-medium">
+                    {r.nombre}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrizModulos.map((m) => (
+                <tr key={m.id} className="border-b last:border-0">
+                  <td className="px-3 py-2">{m.label}</td>
+                  {list.map((r) => {
+                    const ok = r.permisos.includes('*') || r.permisos.includes(m.permiso)
+                    return (
+                      <td key={r._id} className="px-2 py-2 text-center">
+                        {ok ? (
+                          <span className="font-semibold" style={{ color: BOARD.green }}>✓</span>
+                        ) : (
+                          <span style={{ color: BOARD.muted }}>—</span>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <EntityBoard
           rows={list}
@@ -384,33 +475,74 @@ export function RolesPage() {
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Permisos ({form.permisos.length} seleccionado{form.permisos.length === 1 ? '' : 's'})
-              </Label>
-              <div className="max-h-[300px] space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
-                {permisos.map((p) => {
-                  const checked = form.permisos.includes(p.clave)
-                  const isAdmin = p.clave === '*'
-                  return (
-                    <label
-                      key={p.clave}
-                      className={`flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-white ${
-                        checked ? 'bg-[var(--blue-lt)]' : ''
-                      } ${isAdmin ? 'border-l-2 border-red-400' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => togglePermiso(p.clave)}
-                        className="mt-0.5 size-4 accent-[var(--lime)]"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className={`font-medium ${isAdmin ? 'text-red-700' : ''}`}>{p.descripcion}</p>
-                        <code className="text-[10px] text-muted-foreground">{p.clave}</code>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Permisos ({form.permisos.length} seleccionado{form.permisos.length === 1 ? '' : 's'})
+                </Label>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    type="button"
+                    className="underline-offset-2 hover:underline"
+                    onClick={() => setF('permisos', permisos.map((p) => p.clave))}
+                  >
+                    Seleccionar todos
+                  </button>
+                  <button
+                    type="button"
+                    className="underline-offset-2 hover:underline"
+                    onClick={() => setF('permisos', [])}
+                  >
+                    Deseleccionar todos
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[360px] space-y-3 overflow-y-auto rounded-md border bg-muted/20 p-2">
+                {permisosPorGrupo.map(([grupo, items]) => (
+                  <div key={grupo}>
+                    <div className="mb-1 flex items-center justify-between px-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--navy)]">
+                        {grupo}
+                      </p>
+                      <div className="flex gap-2 text-[10px] text-muted-foreground">
+                        <button
+                          type="button"
+                          onClick={() => setGrupoPermisos(items.map((i) => i.clave), true)}
+                        >
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGrupoPermisos(items.map((i) => i.clave), false)}
+                        >
+                          Ninguno
+                        </button>
                       </div>
-                    </label>
-                  )
-                })}
+                    </div>
+                    {items.map((p) => {
+                      const checked = form.permisos.includes(p.clave)
+                      const isAdmin = p.clave === '*'
+                      return (
+                        <label
+                          key={p.clave}
+                          className={`flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-white ${
+                            checked ? 'bg-[var(--blue-lt)]' : ''
+                          } ${isAdmin ? 'border-l-2 border-red-400' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => togglePermiso(p.clave)}
+                            className="mt-0.5 size-4 accent-[var(--lime)]"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className={`font-medium ${isAdmin ? 'text-red-700' : ''}`}>{p.descripcion}</p>
+                            <code className="text-[10px] text-muted-foreground">{p.clave}</code>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
 

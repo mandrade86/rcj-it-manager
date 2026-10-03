@@ -116,7 +116,7 @@ export function EmpleadosPage() {
     setLoading(true); setErr(null)
     try {
       const [e, d, emp] = await Promise.all([
-        fetchEmpleados(),
+        fetchEmpleados({ todos: true }),
         fetchDepartamentos(),
         fetchEmpresas({ activo: true }),
       ])

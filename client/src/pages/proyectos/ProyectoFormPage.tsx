@@ -50,7 +50,7 @@ export function ProyectoFormPage() {
   }
   if (isEdit && loadErr) {
     return (
-      <div className="mx-auto max-w-lg space-y-4">
+      <div className="w-full space-y-4">
         <p className="text-sm text-destructive">{loadErr}</p>
         <Button type="button" variant="outline" onClick={() => navigate('/proyectos')}>
           Volver a proyectos
@@ -60,7 +60,7 @@ export function ProyectoFormPage() {
   }
   if (isEdit && !editing) {
     return (
-      <div className="mx-auto max-w-lg space-y-4">
+      <div className="w-full space-y-4">
         <p className="text-sm text-muted-foreground">No se encontró el proyecto.</p>
         <Button type="button" variant="outline" onClick={() => navigate('/proyectos')}>
           Volver a proyectos

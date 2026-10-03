@@ -27,7 +27,6 @@ type Props = {
   onSortPreset: (presetId: string) => void
   displayCount: number
   totalCount: number
-  ejesCatalogo: string[]
   empresasOptions: [string, string][]
   departamentosOptions: [string, string][]
   showDepartamentoFilter: boolean
@@ -75,7 +74,6 @@ export function ProyectosFiltrosBar({
   onSortPreset,
   displayCount,
   totalCount,
-  ejesCatalogo,
   empresasOptions,
   departamentosOptions,
   showDepartamentoFilter,
@@ -86,7 +84,6 @@ export function ProyectosFiltrosBar({
     const chips: { key: keyof ProyectosFiltersState; label: string }[] = []
     if (filters.estado) chips.push({ key: 'estado', label: `Estado: ${filters.estado}` })
     if (filters.fase) chips.push({ key: 'fase', label: `Fase ${filters.fase}` })
-    if (filters.eje) chips.push({ key: 'eje', label: `Eje: ${filters.eje}` })
     if (filters.prioridad) chips.push({ key: 'prioridad', label: `Prioridad: ${filters.prioridad}` })
     if (filters.tipo) {
       chips.push({
@@ -201,7 +198,7 @@ export function ProyectosFiltrosBar({
       )}
 
       {open && (
-        <div className="grid gap-2 border-t border-border bg-muted/20 p-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid gap-2 border-t border-border bg-muted/20 p-2 sm:grid-cols-3 lg:grid-cols-5">
           <FilterField
             label="Estado"
             value={filters.estado}
@@ -218,12 +215,6 @@ export function ProyectosFiltrosBar({
               ['2', 'Fase 2'],
               ['3', 'Fase 3'],
             ]}
-          />
-          <FilterField
-            label="Eje"
-            value={filters.eje}
-            onChange={(v) => setFilters({ eje: v })}
-            options={[['', 'Todos'], ...ejesCatalogo.map((e) => [e, e] as [string, string])]}
           />
           <FilterField
             label="Prioridad"

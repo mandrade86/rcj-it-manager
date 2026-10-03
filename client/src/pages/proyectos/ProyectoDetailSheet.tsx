@@ -51,6 +51,16 @@ import { TareaFormDialog } from '@/pages/proyectos/TareaFormDialog'
 import { ProyectoParticipantesPanel } from '@/pages/proyectos/ProyectoParticipantesPanel'
 import { TareasPanel } from '@/pages/proyectos/TareasPanel'
 import { TareasMiniGantt } from '@/pages/proyectos/TareasMiniGantt'
+import { ProyectoCalendario } from '@/pages/proyectos/ProyectoCalendario'
+import { ProyectoSeguimiento } from '@/pages/proyectos/ProyectoSeguimiento'
+import { TareaEstadosDialog } from '@/pages/proyectos/TareaEstadosDialog'
+import {
+  loadColLayout,
+  loadVistas,
+  saveColLayout,
+  saveVistas,
+  type VistaGuardada,
+} from '@/lib/tareaBoardPrefs'
 import { TareasTablaBoard } from '@/pages/proyectos/TareasTablaBoard'
 import { useAuthStore } from '@/store/authStore'
 import { useProyectosStore } from '@/store/proyectosStore'
@@ -59,11 +69,12 @@ import {
   estadoColor, proyectoDeptDoc, proyectoEmpresasDocs, proyectoKpiDoc, proyectoOwnerName,
   proyectoPresupuestoAsignacionPct, proyectoPresupuestoConsumoPct,
   proyectoPresupuestoDisponible, proyectoPuedeEditar, proyectoTienePresupuesto,
+  empleadoIdsDelEquipo,
   PROYECTO_ESTADOS, TRANSICIONES_SUGERIDAS,
 } from '@/types/proyecto'
 import type { Tarea, TareaAdjunto } from '@/types/tarea'
 
-type VistaProyecto = 'tablero' | 'canvas' | 'gantt' | 'lista' | 'resumen' | 'participantes'
+type VistaProyecto = 'tablero' | 'canvas' | 'gantt' | 'lista' | 'calendario' | 'seguimiento' | 'resumen' | 'participantes'
 
 const ESTADO_BOARD: Record<ProyectoEstado, { label: string; bg: string; text: string }> = {
   Idea: { label: 'Idea', bg: BOARD.gray, text: '#fff' },
@@ -82,6 +93,8 @@ const VISTAS: Array<{ id: VistaProyecto; label: string }> = [
   { id: 'canvas', label: 'Canvas' },
   { id: 'gantt', label: 'Timeline' },
   { id: 'lista', label: 'Lista' },
+  { id: 'calendario', label: 'Calendario' },
+  { id: 'seguimiento', label: 'Seguimiento' },
   { id: 'resumen', label: 'Resumen' },
   { id: 'participantes', label: 'Equipo' },
 ]
@@ -112,12 +125,20 @@ export function ProyectoDetailView({
   const [tareaDetalle, setTareaDetalle] = useState<Tarea | null>(null)
   /** Vista principal del proyecto: tablero Monday por defecto. */
   const [vista, setVista] = useState<VistaProyecto>('tablero')
+  const userId = useAuthStore((s) => s.user?._id ?? '')
+  const [vistasGuardadas, setVistasGuardadas] = useState<VistaGuardada[]>([])
+  const [colsNonce, setColsNonce] = useState(0)
+  const [estadosOpen, setEstadosOpen] = useState(false)
 
   const tareaIds = useMemo(() => tareas.map((t) => t._id), [tareas])
   const mapaTareasProyecto = useMemo(() => mapaTareas(tareas), [tareas])
   const seleccionTareas = useMaestroSeleccion(tareaIds)
 
-  const puedeEliminarProyecto = useAuthStore((s) => s.hasPermiso('proyectos:editar'))
+  useEffect(() => {
+    if (!userId || !proyectoId) return
+    setVistasGuardadas(loadVistas(userId, proyectoId))
+  }, [userId, proyectoId])
+  const puedeEliminarProyecto = useAuthStore((s) => s.hasPermiso('proyectos:eliminar'))
   const puedeEditarProyecto = proyecto ? proyectoPuedeEditar(proyecto) : false
 
   const reload = useCallback(async () => {
@@ -271,7 +292,7 @@ export function ProyectoDetailView({
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col pb-10">
+      <div className="flex w-full min-w-0 flex-col pb-10">
         {!proyectoId || loadErr ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
             {loadErr ?? 'No se pudo cargar el proyecto.'}
@@ -450,6 +471,51 @@ export function ProyectoDetailView({
                   )
                 })}
               </nav>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <select
+                  className="h-8 rounded-md border bg-white px-2 text-xs"
+                  value=""
+                  aria-label="Vistas guardadas"
+                  onChange={(e) => {
+                    const found = vistasGuardadas.find((v) => v.id === e.target.value)
+                    if (!found || !userId) return
+                    saveColLayout(userId, found.columnas)
+                    setColsNonce((n) => n + 1)
+                    if (VISTAS.some((v) => v.id === found.vista)) setVista(found.vista as VistaProyecto)
+                  }}
+                >
+                  <option value="">Vistas guardadas</option>
+                  {vistasGuardadas.map((v) => (
+                    <option key={v.id} value={v.id}>{v.nombre}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="text-xs text-[var(--navy)] underline-offset-2 hover:underline"
+                  onClick={() => {
+                    if (!userId || !proyectoId) return
+                    const nombre = window.prompt('Nombre de la vista')?.trim()
+                    if (!nombre) return
+                    const next = [
+                      ...vistasGuardadas,
+                      { id: `${Date.now()}`, nombre, vista, columnas: loadColLayout(userId) },
+                    ]
+                    setVistasGuardadas(next)
+                    saveVistas(userId, proyectoId, next)
+                  }}
+                >
+                  Guardar vista
+                </button>
+                {puedeEditarProyecto && (
+                  <button
+                    type="button"
+                    className="text-xs text-[var(--navy)] underline-offset-2 hover:underline"
+                    onClick={() => setEstadosOpen(true)}
+                  >
+                    Estados
+                  </button>
+                )}
+              </div>
             </header>
 
             <div className="min-w-0">
@@ -469,6 +535,19 @@ export function ProyectoDetailView({
                       : undefined
                   }
                   onChanged={reload}
+                  columnasNonce={colsNonce}
+                />
+              )}
+
+              {vista === 'calendario' && (
+                <ProyectoCalendario tareas={tareas} onSelect={(t) => setTareaDetalle(t)} />
+              )}
+
+              {vista === 'seguimiento' && (
+                <ProyectoSeguimiento
+                  proyecto={proyecto}
+                  puedeEditar={puedeEditarProyecto}
+                  onSaved={reload}
                 />
               )}
 
@@ -911,10 +990,6 @@ export function ProyectoDetailView({
                               <span className="font-medium">{k.nombre}</span>
                             </p>
                             <p>
-                              <span className="text-muted-foreground">Eje: </span>
-                              {k.eje}
-                            </p>
-                            <p>
                               <span className="text-muted-foreground">Meta (departamento): </span>
                               {k.meta ?? '—'}
                               {k.unidad ? ` (${k.unidad})` : ''}
@@ -994,6 +1069,7 @@ export function ProyectoDetailView({
           proyectoEje={proyecto.eje ?? ''}
           editing={tareaEditing}
           tareasProyecto={tareas}
+          equipoEmpleadoIds={empleadoIdsDelEquipo(proyecto)}
           onSave={async (payload) => {
             if (tareaEditing) {
               await updateTarea(tareaEditing._id, payload)
@@ -1004,6 +1080,12 @@ export function ProyectoDetailView({
           }}
         />
       )}
+
+      <TareaEstadosDialog
+        open={estadosOpen}
+        onOpenChange={setEstadosOpen}
+        onSaved={() => setColsNonce((n) => n + 1)}
+      />
 
       {proyecto && (
         <TareaDetalleSheet

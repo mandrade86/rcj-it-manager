@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react'
+import { fetchWorkspaceNombre } from '@/lib/api/workspace'
 import type { LucideIcon } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   BarChart3,
   BookOpen,
   BookMarked,
   Building2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Factory,
@@ -15,17 +18,21 @@ import {
   HelpCircle,
   LayoutDashboard,
   Map,
+  Bell,
+  CalendarCheck,
+  ClipboardList,
+  ListChecks,
   PanelLeft,
   Route,
+  Settings,
+  ScrollText,
   Shield,
   ShieldCheck,
-  Tags,
   Target,
   Users,
   UsersRound,
   Wallet,
   Briefcase,
-  Layers,
   Server,
   Store,
   PieChart,
@@ -60,21 +67,20 @@ const ayudaNav: NavItemDef[] = [
   { to: '/manual/preguntas-frecuentes', label: 'Preguntas frecuentes', icon: HelpCircle },
 ]
 
-const dashboardNav: NavItemDef = {
-  to: '/',
-  label: 'Dashboard',
-  icon: LayoutDashboard,
-  end: true,
-  permiso: 'dashboard:ver',
-}
+const workspaceNav: NavItemDef[] = [
+  { to: '/', label: 'Mi día', icon: CalendarCheck, end: true, permiso: 'dashboard:ver' },
+  { to: '/dashboard', label: 'Dashboards', icon: LayoutDashboard, permiso: 'dashboard:ver' },
+  { to: '/mis-tareas', label: 'Mis tareas', icon: ListChecks, permiso: 'dashboard:ver' },
+  { to: '/notificaciones', label: 'Notificaciones', icon: Bell, permiso: 'dashboard:ver' },
+]
 
-const operacionNav: NavItemDef[] = [
-  { to: '/resumen-departamento', label: 'Resumen metas y plan', icon: BarChart3, permiso: 'dashboard:ver' },
+const pmNav: NavItemDef[] = [
   { to: '/proyectos', label: 'Proyectos', icon: FolderKanban, permiso: 'proyectos:ver' },
+  { to: '/proyectos?mios=1', label: 'Mis proyectos', icon: ClipboardList, permiso: 'proyectos:ver' },
   { to: '/proyectos?vista=roadmap', label: 'Roadmap', icon: Map, permiso: 'proyectos:ver' },
-  { to: '/reportes', label: 'Reportería', icon: FileText, permiso: 'proyectos:ver' },
-  { to: '/equipo', label: 'Equipo', icon: Users, permiso: 'equipo:ver' },
   { to: '/kpis', label: 'KPIs', icon: Target, permiso: 'kpis:ver' },
+  { to: '/reportes', label: 'Reportería', icon: FileText, permiso: 'proyectos:ver' },
+  { to: '/resumen-departamento', label: 'Resumen del plan', icon: BarChart3, permiso: 'dashboard:ver' },
 ]
 
 const gastosNav: NavItemDef = {
@@ -84,30 +90,30 @@ const gastosNav: NavItemDef = {
   permiso: 'gastos:ver',
 }
 
-const talentoNav: NavItemDef[] = [
+const rrHHNav: NavItemDef[] = [
   { to: '/maestros/empleados', label: 'Empleados', icon: UsersRound, permiso: 'empleados:ver' },
-  { to: '/maestros/planes-carrera', label: 'Plan de carrera', icon: Route, permiso: 'maestros:ver' },
+  { to: '/equipo', label: 'Organigrama', icon: Users, permiso: 'equipo:ver' },
   { to: '/maestros/perfiles-puesto', label: 'Perfiles de puesto', icon: BookOpen, permiso: 'maestros:ver' },
+  { to: '/maestros/planes-carrera', label: 'Plan de carrera', icon: Route, permiso: 'maestros:ver' },
   { to: '/capacitaciones', label: 'Capacitaciones', icon: GraduationCap, permiso: 'capacitaciones:ver' },
+  { to: '/equipo', label: 'Evaluaciones', icon: ClipboardList, permiso: 'equipo:ver' },
   { to: '/maestros/proveedores-capacitacion', label: 'Proveedores', icon: Store, permiso: 'maestros:ver' },
 ]
 
-const estructuraNav: NavItemDef[] = [
-  { to: '/maestros/departamentos', label: 'Departamentos', icon: Building2, permiso: 'maestros:ver' },
-  { to: '/maestros/empresas', label: 'Empresas', icon: Factory, permiso: 'maestros:ver' },
-  { to: '/maestros/ejes-proyecto', label: 'Ejes de proyecto', icon: Tags, permiso: 'maestros:ver' },
-  { to: '/maestros/metas', label: 'Objetivos estratégicos', icon: Target, permiso: 'maestros:ver' },
-]
-
-const adminNav: { to: string; label: string; icon: LucideIcon; permiso: string }[] = [
+const adminNav: NavItemDef[] = [
   { to: '/admin/usuarios', label: 'Usuarios', icon: Users, permiso: 'usuarios:ver' },
   { to: '/admin/roles', label: 'Roles y permisos', icon: ShieldCheck, permiso: 'roles:ver' },
+  { to: '/maestros/empresas', label: 'Empresas', icon: Factory, permiso: 'maestros:ver' },
+  { to: '/maestros/departamentos', label: 'Departamentos', icon: Building2, permiso: 'maestros:ver' },
+  { to: '/admin/configuracion', label: 'Configuración', icon: Settings, permiso: 'usuarios:editar' },
+  { to: '/admin/auditoria', label: 'Auditoría', icon: ScrollText, permiso: 'roles:ver' },
 ]
 
 const navGroupsBase: NavGroupDef[] = [
-  { id: 'operacion', label: 'Operación', icon: Briefcase, items: operacionNav },
-  { id: 'talento', label: 'Talento', icon: UsersRound, items: talentoNav },
-  { id: 'estructura', label: 'Estructura', icon: Layers, items: estructuraNav },
+  { id: 'workspace', label: 'Workspace', icon: CalendarCheck, items: workspaceNav },
+  { id: 'pm', label: 'Project Management', icon: Briefcase, items: pmNav },
+  { id: 'rrhh', label: 'RRHH / Talento', icon: UsersRound, items: rrHHNav },
+  { id: 'admin', label: 'Administración', icon: Shield, items: adminNav },
 ]
 
 function NavItem({
@@ -144,42 +150,75 @@ function NavItem({
   )
 }
 
-function GroupLabel({ icon: Icon, label, collapsed }: { icon: LucideIcon; label: string; collapsed: boolean }) {
-  if (collapsed) {
-    return (
-      <div className="mb-1 mt-3 flex justify-center">
-        <Icon className="size-4 text-white/40" />
-      </div>
-    )
+function itemMatches(to: string, end: boolean | undefined, pathname: string, search: string) {
+  const [path, query] = to.split('?')
+  if (query) {
+    return pathname === path && (search === `?${query}` || search.includes(query))
   }
-  return (
-    <div className="mb-1 mt-3 flex items-center gap-2 px-2">
-      <Icon className="size-3.5 text-white/40" />
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
-        {label}
-      </span>
-    </div>
-  )
+  if (end || path === '/') return pathname === path
+  return pathname === path || pathname.startsWith(`${path}/`)
+}
+
+function groupHasActive(group: NavGroupDef, pathname: string, search: string) {
+  return group.items.some((item) => itemMatches(item.to, item.end, pathname, search))
 }
 
 function NavGroup({
   group,
   collapsed,
+  open,
+  onToggle,
 }: {
   group: NavGroupDef
   collapsed: boolean
+  open: boolean
+  onToggle: () => void
 }) {
   if (group.items.length === 0) return null
+  const { pathname, search } = useLocation()
+  const active = groupHasActive(group, pathname, search)
 
   return (
-    <>
-      <GroupLabel icon={group.icon} label={group.label} collapsed={collapsed} />
-      <div className="flex flex-col gap-0.5">
-        {group.items.map(({ to, label, icon, end }) => (
-          <NavItem key={to} to={to} label={label} icon={icon} end={end} collapsed={collapsed} />
-        ))}
+    <div className="mb-0.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        title={collapsed ? group.label : undefined}
+        aria-expanded={open}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors',
+          collapsed && 'justify-center px-1',
+          active ? 'bg-white/10 text-white' : 'text-white/55 hover:bg-white/5 hover:text-white/80',
+        )}
+      >
+        <group.icon className="size-4 shrink-0" aria-hidden />
+        {!collapsed && (
+          <>
+            <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-widest">
+              {group.label}
+            </span>
+            <ChevronDown
+              className={cn('size-3.5 shrink-0 transition-transform duration-200', open && 'rotate-180')}
+              aria-hidden
+            />
+          </>
+        )}
+      </button>
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200 ease-out',
+          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-0.5 pt-0.5">
+            {group.items.map(({ to, label, icon, end }) => (
+              <NavItem key={`${to}-${label}`} to={to} label={label} icon={icon} end={end} collapsed={collapsed} />
+            ))}
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -188,8 +227,20 @@ export function AppSidebar() {
   const toggle = useUiStore((s) => s.toggleSidebar)
   const hasPermiso = useAuthStore((s) => s.hasPermiso)
   const user = useAuthStore((s) => s.user)
+  const { pathname, search } = useLocation()
+  const [openIds, setOpenIds] = useState<string[]>(['workspace'])
+  const [areaNombre, setAreaNombre] = useState('Project Management & Talent')
 
-  const adminItems = adminNav.filter((i) => hasPermiso(i.permiso))
+  useEffect(() => {
+    void fetchWorkspaceNombre().then(setAreaNombre).catch(() => {})
+    function onNombre(ev: Event) {
+      const detail = (ev as CustomEvent<string>).detail
+      if (typeof detail === 'string' && detail.trim()) setAreaNombre(detail.trim())
+    }
+    window.addEventListener('rcj-workspace-nombre', onNombre)
+    return () => window.removeEventListener('rcj-workspace-nombre', onNombre)
+  }, [])
+
   const mostrarArqIT = hasPermiso('it:arquitectura:ver') || hasPermiso('*')
   const mostrarBiCosteo = hasPermiso('bi:costeo:ver') || hasPermiso('*')
   const mostrarGastosIt = hasPermiso('it:gastos:ver') || hasPermiso('*')
@@ -202,31 +253,78 @@ export function AppSidebar() {
       llevaGastos: item.permiso === 'gastos:ver' && llevaGastos,
     })
 
-  const navGroups = navGroupsBase
-    .map((g) => {
-      if (g.id !== 'operacion') return g
-      const items = [...g.items]
-      if (isAdmin || llevaGastos || hasPermiso('gastos:ver')) {
-        items.push(gastosNav)
-      }
-      return { ...g, items }
-    })
-    .map((g) => ({ ...g, items: g.items.filter(puedeVerItem) }))
-    .filter((g) => g.items.length > 0)
+  const navGroups: NavGroupDef[] = [
+    ...navGroupsBase
+      .map((g) => {
+        if (g.id !== 'pm') return g
+        const items = [...g.items]
+        if (isAdmin || llevaGastos || hasPermiso('gastos:ver')) {
+          items.push(gastosNav)
+        }
+        return { ...g, items }
+      })
+      .map((g) => ({ ...g, items: g.items.filter(puedeVerItem) }))
+      .filter((g) => g.items.length > 0),
+    ...(mostrarGastosIt
+      ? [
+          {
+            id: 'finanzas',
+            label: 'Finanzas IT',
+            icon: Wallet,
+            items: [
+              { to: '/it/gastos-dashboard', label: 'Dashboard de Gastos', icon: BarChart3 },
+              { to: '/it/gastos-presupuesto', label: 'Presupuesto IT', icon: Target },
+              { to: '/it/gastos-control', label: 'Control gastos IT', icon: Wallet },
+            ],
+          } satisfies NavGroupDef,
+        ]
+      : []),
+    ...(mostrarBiCosteo
+      ? [
+          {
+            id: 'bi',
+            label: 'Business Intelligence',
+            icon: PieChart,
+            items: [{ to: '/bi/costeo-muestras', label: 'Costeo muestras', icon: FlaskConical }],
+          } satisfies NavGroupDef,
+        ]
+      : []),
+    ...(mostrarArqIT
+      ? [
+          {
+            id: 'it',
+            label: 'IT Técnico',
+            icon: Server,
+            items: [{ to: '/it/arquitectura', label: 'Arquitectura IT', icon: Server }],
+          } satisfies NavGroupDef,
+        ]
+      : []),
+    ...(!esPerfilSoloBiCosteo(hasPermiso)
+      ? [{ id: 'ayuda', label: 'Ayuda', icon: BookMarked, items: ayudaNav } satisfies NavGroupDef]
+      : []),
+  ]
 
-  const soloBiCosteo = esPerfilSoloBiCosteo(hasPermiso)
-  const mostrarDashboard = puedeVerItem(dashboardNav)
+  const activeGroupId = navGroups.find((g) => groupHasActive(g, pathname, search))?.id
+
+  useEffect(() => {
+    if (!activeGroupId) return
+    setOpenIds((prev) => (prev.includes(activeGroupId) ? prev : [...prev, activeGroupId]))
+  }, [activeGroupId])
+
+  function toggleGroup(id: string) {
+    setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
 
   return (
     <aside
       className={cn(
-        'flex h-full shrink-0 flex-col border-r border-white/10 bg-[var(--navy)] text-white transition-[width] duration-200 ease-out',
+        'flex h-svh shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[var(--navy)] text-white transition-[width] duration-200 ease-out',
         collapsed ? 'w-[72px]' : 'w-[240px]',
       )}
     >
       <div
         className={cn(
-          'flex h-14 items-center gap-2 border-b border-white/10 px-3',
+          'flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3',
           collapsed && 'justify-center px-2',
         )}
       >
@@ -235,9 +333,7 @@ export function AppSidebar() {
             <span className="rounded bg-white px-1.5 py-0.5">RCJ</span>
           </span>
           <span className="text-xs font-medium leading-snug text-[var(--lime)]">
-            Project Management
-            <br />
-            &amp; Talent
+            {areaNombre}
           </span>
         </div>
         <Button
@@ -252,77 +348,22 @@ export function AppSidebar() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1 py-2">
+      <ScrollArea className="min-h-0 flex-1 py-2">
         <nav className="flex flex-col gap-0.5 px-2">
-          {mostrarDashboard && (
-            <NavItem
-              to={dashboardNav.to}
-              label={dashboardNav.label}
-              icon={dashboardNav.icon}
-              end={dashboardNav.end}
-              collapsed={collapsed}
-            />
-          )}
-
           {navGroups.map((group) => (
-            <NavGroup key={group.id} group={group} collapsed={collapsed} />
+            <NavGroup
+              key={group.id}
+              group={group}
+              collapsed={collapsed}
+              open={openIds.includes(group.id)}
+              onToggle={() => toggleGroup(group.id)}
+            />
           ))}
-
-          {mostrarGastosIt && (
-            <>
-              <GroupLabel icon={Wallet} label="Finanzas IT" collapsed={collapsed} />
-              <div className="flex flex-col gap-0.5">
-                <NavItem to="/it/gastos-dashboard" label="Dashboard de Gastos" icon={BarChart3} collapsed={collapsed} />
-                <NavItem to="/it/gastos-presupuesto" label="Presupuesto IT" icon={Target} collapsed={collapsed} />
-                <NavItem to="/it/gastos-control" label="Control gastos IT" icon={Wallet} collapsed={collapsed} />
-              </div>
-            </>
-          )}
-
-          {mostrarBiCosteo && (
-            <>
-              <GroupLabel icon={PieChart} label="Business Intelligence" collapsed={collapsed} />
-              <div className="flex flex-col gap-0.5">
-                <NavItem to="/bi/costeo-muestras" label="Costeo muestras" icon={FlaskConical} collapsed={collapsed} />
-              </div>
-            </>
-          )}
-
-          {mostrarArqIT && (
-            <>
-              <GroupLabel icon={Server} label="IT Técnico" collapsed={collapsed} />
-              <div className="flex flex-col gap-0.5">
-                <NavItem to="/it/arquitectura" label="Arquitectura IT" icon={Server} collapsed={collapsed} />
-              </div>
-            </>
-          )}
-
-          {adminItems.length > 0 && (
-            <>
-              <GroupLabel icon={Shield} label="Administración" collapsed={collapsed} />
-              <div className="flex flex-col gap-0.5">
-                {adminItems.map(({ to, label, icon }) => (
-                  <NavItem key={to} to={to} label={label} icon={icon} collapsed={collapsed} />
-                ))}
-              </div>
-            </>
-          )}
-
-          {!soloBiCosteo && (
-            <>
-              <GroupLabel icon={BookMarked} label="Ayuda" collapsed={collapsed} />
-              <div className="flex flex-col gap-0.5">
-                {ayudaNav.map(({ to, label, icon, end }) => (
-                  <NavItem key={to} to={to} label={label} icon={icon} end={end} collapsed={collapsed} />
-                ))}
-              </div>
-            </>
-          )}
         </nav>
       </ScrollArea>
 
-      <Separator className="bg-white/10" />
-      <div className={cn('p-2', collapsed && 'flex justify-center')}>
+      <Separator className="shrink-0 bg-white/10" />
+      <div className={cn('shrink-0 p-2', collapsed && 'flex justify-center')}>
         <div
           className={cn(
             'flex items-center gap-2 rounded-md bg-white/5 px-3 py-2 text-xs text-white/70',

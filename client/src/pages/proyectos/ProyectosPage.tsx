@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Download, FolderKanban, Map, Plus, RotateCw, Table2, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, Download, FileText, FolderKanban, Map, Plus, RotateCw, Table2, Trash2, Upload } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
-import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import {
   descargarPlantillaProyectos,
@@ -30,7 +29,6 @@ import { usePagination } from '@/hooks/usePagination'
 import { useAuthStore } from '@/store/authStore'
 import { useProyectosStore } from '@/store/proyectosStore'
 import type { DepartamentoDoc } from '@/types/departamento'
-import type { EjeProyectoDoc } from '@/types/ejeProyecto'
 import type { EmpresaDoc } from '@/types/empresa'
 import type { Proyecto } from '@/types/proyecto'
 import { participanteUsuarioId } from '@/types/proyecto'
@@ -49,10 +47,11 @@ export function ProyectosPage() {
   const user = useAuthStore((s) => s.user)
   const hasPermiso = useAuthStore((s) => s.hasPermiso)
   const puedeVerTodos = hasPermiso('proyectos:ver-todos')
-  const puedeEliminar = hasPermiso('proyectos:editar')
-  const puedeEditar = puedeEliminar
+  const puedeEditar = hasPermiso('proyectos:editar')
+  const puedeEliminar = hasPermiso('proyectos:eliminar')
 
   const proyectosFileRef = useRef<HTMLInputElement>(null)
+  const [excelOpen, setExcelOpen] = useState(false)
   const [importando, setImportando] = useState(false)
 
   const vistaFromUrl = searchParams.get('vista')
@@ -84,7 +83,6 @@ export function ProyectosPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [departamentos, setDepartamentos] = useState<DepartamentoDoc[]>([])
   const [empresas, setEmpresas] = useState<EmpresaDoc[]>([])
-  const [ejesMaestro, setEjesMaestro] = useState<EjeProyectoDoc[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [sortKey, setSortKey] = useState('nombre')
   const [sortDir, setSortDir] = useState<MaestroSortDir>('asc')
@@ -92,7 +90,8 @@ export function ProyectosPage() {
   /** Identidad + departamento: primero JWT (carga inmediata); luego maestro /usuarios si difiere. */
   useEffect(() => {
     if (!user) return
-    if (puedeVerTodos) setAlcance('todos')
+    if (searchParams.get('mios') === '1') setAlcance('mis')
+    else if (puedeVerTodos) setAlcance('todos')
     const depJwt = user.departamento_id ?? null
     setIdentidad(user._id, depJwt)
     let cancel = false
@@ -113,7 +112,7 @@ export function ProyectosPage() {
       }
     })()
     return () => { cancel = true }
-  }, [user, puedeVerTodos, setIdentidad, setAlcance])
+  }, [user, puedeVerTodos, setIdentidad, setAlcance, searchParams])
 
   useEffect(() => {
     if (!user) return
@@ -121,15 +120,6 @@ export function ProyectosPage() {
     void fetchEmpresas({ activo: true })
       .then((rows) => { if (!cancel) setEmpresas(rows) })
       .catch(() => { if (!cancel) setEmpresas([]) })
-    return () => { cancel = true }
-  }, [user])
-
-  useEffect(() => {
-    if (!user) return
-    let cancel = false
-    void fetchEjesProyecto({ activo: true })
-      .then((rows) => { if (!cancel) setEjesMaestro(rows) })
-      .catch(() => { if (!cancel) setEjesMaestro([]) })
     return () => { cancel = true }
   }, [user])
 
@@ -230,11 +220,6 @@ export function ProyectosPage() {
 
   const seleccionCount = selectedIds.size
 
-  const departamentoNombre = useMemo(() => {
-    if (!miDepartamentoId) return null
-    return departamentos.find((d) => d._id === miDepartamentoId)?.nombre ?? null
-  }, [miDepartamentoId, departamentos])
-
   const cuentas = useMemo(() => {
     const mias = list.filter((p) => {
       const u = p.usuario_id
@@ -284,18 +269,6 @@ export function ProyectosPage() {
       if (proyectosFileRef.current) proyectosFileRef.current.value = ''
     }
   }
-
-  const ejesCatalogo = useMemo(() => {
-    const fromMaestro = ejesMaestro
-      .filter((e) => e.activo !== false)
-      .map((e) => e.nombre.trim())
-      .filter(Boolean)
-    const fromDept = departamentos.flatMap((d) => d.ejes_proyecto ?? [])
-    const fromProyectos = list.map((p) => p.eje?.trim()).filter(Boolean) as string[]
-    return [...new Set([...fromMaestro, ...fromDept, ...fromProyectos])].sort((a, b) =>
-      a.localeCompare(b),
-    )
-  }, [departamentos, ejesMaestro, list])
 
   const displayList = useMemo(
     () =>
@@ -350,46 +323,20 @@ export function ProyectosPage() {
     [departamentos],
   )
 
-  const alcanceContext = useMemo(() => {
-    if (alcance === 'mis') {
-      return (
-        <>
-          Proyectos donde <strong>{user?.nombre}</strong> es propietario.
-        </>
-      )
-    }
-    if (alcance === 'depto' && departamentoNombre) {
-      return (
-        <>
-          Departamento <strong>{departamentoNombre}</strong>.
-        </>
-      )
-    }
-    if (alcance === 'equipo') {
-      return <>Proyectos de tu equipo (subalternos directos e indirectos).</>
-    }
-    if (alcance === 'participo') {
-      return <>Proyectos donde estás incluido como participante (lectura o editor).</>
-    }
-    if (alcance === 'depto' && !departamentoNombre) {
-      return <>Sin departamento asignado en tu perfil.</>
-    }
-    if (alcance === 'todos' && puedeVerTodos) {
-      return <>Vista global de la organización.</>
-    }
-    return <>Sin permiso para ver todos los proyectos.</>
-  }, [alcance, user?.nombre, departamentoNombre, puedeVerTodos])
-
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Proyectos</h2>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Gestión del plan — use filtros solo cuando necesite acotar la lista.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <ProyectosAlcanceBar
+          alcance={alcance}
+          onAlcanceChange={(next) => {
+            setAlcance(next)
+            if (next !== 'todos') setFilters({ departamento_id: '' })
+          }}
+          cuentas={cuentas}
+          puedeVerTodos={puedeVerTodos}
+          miDepartamentoId={miDepartamentoId}
+        />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <input
             ref={proyectosFileRef}
             type="file"
@@ -399,76 +346,91 @@ export function ProyectosPage() {
           />
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() =>
-              void exportarProyectosExcel({ ...plantillaQuery, alcance }).catch((e) =>
-                window.alert(e instanceof Error ? e.message : 'Error al exportar'),
-              )
-            }
-          >
-            <Download className="size-3.5" /> Exportar Excel
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon-sm"
             onClick={() => void load()}
-            className="gap-1.5"
+            aria-label="Actualizar"
+            title="Actualizar"
           >
-            <RotateCw className="size-3.5" /> Actualizar
+            <RotateCw className="size-4" />
           </Button>
-          {puedeEditar && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() =>
-                  void descargarPlantillaProyectos(plantillaQuery).catch((e) =>
-                    window.alert(e instanceof Error ? e.message : 'Error al descargar'),
-                  )
-                }
-              >
-                <Download className="size-3.5" /> Plantilla Excel
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                disabled={importando}
-                onClick={() => proyectosFileRef.current?.click()}
-              >
-                <Upload className={`size-3.5 ${importando ? 'animate-pulse' : ''}`} />
-                {importando ? 'Importando…' : 'Subir Excel'}
-              </Button>
-            </>
-          )}
           <Button
             type="button"
-            className="shrink-0 gap-1.5 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1"
+            onClick={() => navigate('/reportes')}
+          >
+            <FileText className="size-3.5" />
+            Resumen
+          </Button>
+          <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={() => setExcelOpen((v) => !v)}
+              >
+                Excel
+                <ChevronDown className="size-3.5" />
+              </Button>
+              {excelOpen && (
+                <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-md border bg-white py-1 text-sm shadow-lg">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                    onClick={() => {
+                      setExcelOpen(false)
+                      void exportarProyectosExcel({ ...plantillaQuery, alcance }).catch((e) =>
+                        window.alert(e instanceof Error ? e.message : 'Error al exportar'),
+                      )
+                    }}
+                  >
+                    <Download className="size-3.5" /> Exportar
+                  </button>
+                  {puedeEditar && (
+                    <>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                        onClick={() => {
+                          setExcelOpen(false)
+                          void descargarPlantillaProyectos(plantillaQuery).catch((e) =>
+                            window.alert(e instanceof Error ? e.message : 'Error al descargar'),
+                          )
+                        }}
+                      >
+                        <Download className="size-3.5" /> Plantilla
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted disabled:opacity-50"
+                        disabled={importando}
+                        onClick={() => {
+                          setExcelOpen(false)
+                          proyectosFileRef.current?.click()
+                        }}
+                      >
+                        <Upload className="size-3.5" />
+                        {importando ? 'Importando…' : 'Subir archivo'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 gap-1.5 bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
             onClick={() => navigate('/proyectos/nuevo')}
           >
             <Plus className="size-4" />
-            Nuevo proyecto
+            Nuevo
           </Button>
         </div>
       </div>
-
-      <ProyectosAlcanceBar
-        alcance={alcance}
-        onAlcanceChange={(next) => {
-          setAlcance(next)
-          if (next !== 'todos') setFilters({ departamento_id: '' })
-        }}
-        cuentas={cuentas}
-        puedeVerTodos={puedeVerTodos}
-        miDepartamentoId={miDepartamentoId}
-        contextLine={alcanceContext}
-      />
 
       <ProyectosFiltrosBar
         filters={filters}
@@ -485,7 +447,6 @@ export function ProyectosPage() {
         }}
         displayCount={displayList.length}
         totalCount={list.length}
-        ejesCatalogo={ejesCatalogo}
         empresasOptions={empresasOptions}
         departamentosOptions={departamentosOptions}
         showDepartamentoFilter={puedeVerTodos && alcance === 'todos'}
@@ -517,8 +478,6 @@ export function ProyectosPage() {
             <ProyectosTablaBoard
               rows={displayList}
               onRowClick={openDetail}
-              puedeEditar={puedeEditar}
-              onAdd={puedeEditar ? () => navigate('/proyectos/nuevo') : undefined}
               emptyMessage={emptyTablaMsg}
             />
           )}

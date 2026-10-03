@@ -10,6 +10,27 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
+export type TareaMia = {
+  _id: string
+  nombre: string
+  descripcion?: string
+  proyecto_id: string
+  proyecto_nombre: string
+  responsable: string
+  responsable_id: string
+  fecha_fin: string | null
+  estado: string
+  prioridad: string | null
+  porcentaje: number
+  creado_por_usuario_id?: string
+}
+
+export async function fetchTareasMias(): Promise<{ asignadas: TareaMia[]; creadas: TareaMia[] }> {
+  const res = await fetch('/api/tareas/mias')
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<{ asignadas: TareaMia[]; creadas: TareaMia[] }>
+}
+
 export async function fetchTareas(proyectoId: string): Promise<Tarea[]> {
   const q = new URLSearchParams({ proyecto_id: proyectoId })
   const res = await fetch(`/api/tareas?${q}`)

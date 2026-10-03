@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BadgeCheck, Briefcase, Crown, Mail, Phone, User, Users } from 'lucide-react'
+import { BadgeCheck, Briefcase, ChevronDown, ChevronRight, Crown, Mail, Phone, User, Users } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import type { EmpleadoDoc } from '@/types/empleado'
@@ -106,7 +106,7 @@ function buildTree(
     if (forcedRoots?.has(node._id)) continue
     const j = node.jefe_id
     const jefeId = typeof j === 'string' ? j : j?._id
-    if (jefeId && map.has(jefeId)) {
+    if (jefeId && jefeId !== node._id && map.has(jefeId)) {
       map.get(jefeId)!.children.push(node)
       childrenIds.add(node._id)
     }
@@ -115,27 +115,22 @@ function buildTree(
   const roots: Node[] = []
   for (const node of map.values()) {
     if (childrenIds.has(node._id)) continue
-    if (forcedRoots?.has(node._id)) { roots.push(node); continue }
-    const j = node.jefe_id
-    const jefeId = typeof j === 'string' ? j : j?._id
-    if (!jefeId || !map.has(jefeId)) {
-      // jefe missing or outside the visible set → natural root
-      // (when jefeId is set but outside visible, we still treat as root —
-      // these are entry points "from above" into the visible scope.)
-      if (!jefeId) roots.push(node)
+    roots.push(node)
+  }
+
+  // Ciclo (todos tienen jefe visible): soltar una raíz para que el árbol exista.
+  if (roots.length === 0 && map.size > 0) {
+    const fallback = [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))[0]
+    if (fallback) {
+      for (const n of map.values()) {
+        n.children = n.children.filter((c) => c._id !== fallback._id)
+      }
+      childrenIds.delete(fallback._id)
+      roots.push(fallback)
     }
   }
 
-  // Orphans: have a jefe_id but the jefe is not in the visible set AND the
-  // node was not promoted to a forced root.
   const orphans: Node[] = []
-  for (const node of map.values()) {
-    if (childrenIds.has(node._id)) continue
-    if (roots.includes(node)) continue
-    const j = node.jefe_id
-    const jefeId = typeof j === 'string' ? j : j?._id
-    if (jefeId && !map.has(jefeId)) orphans.push(node)
-  }
 
   // Sort: self first, then forced roots, then alphabetical.
   const sortFn = (a: Node, b: Node) => {
@@ -160,11 +155,22 @@ function buildTree(
   return { roots, orphans }
 }
 
-function NodeCard({ node, onSelect, selectedId }: { node: Node; onSelect?: (id: string) => void; selectedId?: string | null }) {
+function NodeCard({
+  node,
+  onSelect,
+  selectedId,
+  depth = 0,
+}: {
+  node: Node
+  onSelect?: (id: string) => void
+  selectedId?: string | null
+  depth?: number
+}) {
   const dept = node.departamento_id && typeof node.departamento_id !== 'string' ? node.departamento_id : null
   const isSelected = selectedId === node._id
   const isSubManager = node.children.length > 0
   const directReports = node.children.length
+  const [open, setOpen] = useState(depth === 0)
 
   return (
     <div className="flex flex-col items-center">
@@ -216,20 +222,31 @@ function NodeCard({ node, onSelect, selectedId }: { node: Node; onSelect?: (id: 
         </div>
       </button>
 
-      {node.children.length > 0 && (
+      {isSubManager && (
+        <button
+          type="button"
+          className="mt-1 inline-flex items-center gap-1 rounded-full border bg-white px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted"
+          onClick={(e) => {
+            e.stopPropagation()
+            setOpen((v) => !v)
+          }}
+        >
+          {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          {open ? 'Ocultar equipo' : `Ver equipo (${directReports})`}
+        </button>
+      )}
+
+      {open && node.children.length > 0 && (
         <>
-          {/* Vertical line down */}
           <div className="h-4 w-0.5 bg-border" />
-          {/* Horizontal connector */}
           {node.children.length > 1 && (
-            <div className="relative h-0.5 w-full bg-border" style={{ maxWidth: `${node.children.length * 240}px` }} />
+            <div className="relative h-0.5 w-full bg-border" style={{ maxWidth: `${Math.min(node.children.length, 8) * 240}px` }} />
           )}
-          <div className="flex items-start gap-4 pt-0">
+          <div className="flex flex-wrap items-start justify-center gap-4 pt-0">
             {node.children.map((child) => (
               <div key={child._id} className="relative flex flex-col items-center">
-                {/* Vertical line up to horizontal */}
                 <div className="h-4 w-0.5 bg-border" />
-                <NodeCard node={child} onSelect={onSelect} selectedId={selectedId} />
+                <NodeCard node={child} onSelect={onSelect} selectedId={selectedId} depth={depth + 1} />
               </div>
             ))}
           </div>
@@ -259,12 +276,16 @@ export function OrgChart({
     () => (forcedRootIds && forcedRootIds.length > 0 ? new Set(forcedRootIds) : undefined),
     [forcedRootIds],
   )
+  const activos = useMemo(
+    () => empleados.filter((e) => e.activo !== false),
+    [empleados],
+  )
   const { roots, orphans } = useMemo(
-    () => buildTree(empleados, forced, myEmpleadoId ?? undefined),
-    [empleados, forced, myEmpleadoId],
+    () => buildTree(activos, forced, myEmpleadoId ?? undefined),
+    [activos, forced, myEmpleadoId],
   )
 
-  if (empleados.length === 0) {
+  if (activos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-12 text-center">
         <User className="size-10 text-muted-foreground" />
@@ -277,26 +298,19 @@ export function OrgChart({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-fit space-y-12 p-6">
+    <div className="max-h-[min(70vh,720px)] overflow-auto">
+      <p className="sticky top-0 z-10 border-b bg-card/95 px-4 py-2 text-xs text-muted-foreground backdrop-blur">
+        {activos.length} activa{activos.length === 1 ? '' : 's'} · {roots.length} raíz
+        {roots.length === 1 ? '' : 'ces'}.
+        Usa «Ver equipo» para bajar en la jerarquía.
+      </p>
+      <div className="flex flex-wrap items-start justify-start gap-8 p-6">
         {roots.map((root) => (
-          <div key={root._id} className="flex justify-center">
-            <NodeCard node={root} onSelect={onSelect} selectedId={selectedId} />
-          </div>
+          <NodeCard key={root._id} node={root} onSelect={onSelect} selectedId={selectedId} depth={0} />
         ))}
-
-        {orphans.length > 0 && (
-          <div>
-            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Sin jefe visible en este alcance
-            </p>
-            <div className="flex flex-wrap justify-center gap-4">
-              {orphans.map((o) => (
-                <NodeCard key={o._id} node={o} onSelect={onSelect} selectedId={selectedId} />
-              ))}
-            </div>
-          </div>
-        )}
+        {orphans.map((o) => (
+          <NodeCard key={o._id} node={o} onSelect={onSelect} selectedId={selectedId} depth={0} />
+        ))}
       </div>
     </div>
   )

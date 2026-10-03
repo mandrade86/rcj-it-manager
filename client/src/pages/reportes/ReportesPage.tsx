@@ -7,41 +7,41 @@ import { ReporteStatusProyectosPage } from '@/pages/reportes/ReporteStatusProyec
 
 export function ReportesPage() {
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') === 'status' ? 'status' : 'semanal'
+  const tab = params.get('tab') === 'semanal' ? 'semanal' : 'status'
 
   function setTab(value: string) {
-    setParams(value === 'semanal' ? {} : { tab: value }, { replace: true })
+    setParams(value === 'status' ? {} : { tab: value }, { replace: true })
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--navy)]">
           <FileText className="size-7" />
           Reportería
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Reportes ejecutivos para gerencia: resumen semanal de tareas y dashboard del portafolio de proyectos.
+          Un clic: resumen de todo el portafolio. El detalle semanal de tareas queda en la segunda pestaña.
         </p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="print:hidden">
-          <TabsTrigger value="semanal" className="gap-1.5">
-            <FileText className="size-3.5" />
-            Resumen ejecutivo de tareas
-          </TabsTrigger>
           <TabsTrigger value="status" className="gap-1.5">
             <BarChart3 className="size-3.5" />
-            Project Status Dashboard
+            Resumen de proyectos
+          </TabsTrigger>
+          <TabsTrigger value="semanal" className="gap-1.5">
+            <FileText className="size-3.5" />
+            Tareas de la semana
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="semanal" className="mt-4">
-          <ReporteSemanalTareasPage embedded />
-        </TabsContent>
         <TabsContent value="status" className="mt-4">
           <ReporteStatusProyectosPage embedded />
+        </TabsContent>
+        <TabsContent value="semanal" className="mt-4">
+          <ReporteSemanalTareasPage embedded />
         </TabsContent>
       </Tabs>
     </div>

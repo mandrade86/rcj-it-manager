@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 import { formatDateDMY } from '@/lib/format'
-import type { ReporteStatusProyectos } from '@/types/reporteProyectos'
+import type { ReporteStatusProyectoItem, ReporteStatusProyectos } from '@/types/reporteProyectos'
 
 type Props = {
   data: ReporteStatusProyectos
@@ -21,6 +21,19 @@ function AvanceBar({ pct }: { pct: number }) {
   )
 }
 
+function cerrado(p: ReporteStatusProyectoItem): boolean {
+  return p.estado === 'Completado' || p.estado === 'Cancelado'
+}
+
+function atrasado(p: ReporteStatusProyectoItem): boolean {
+  if (cerrado(p) || !p.fecha_fin) return false
+  const fin = new Date(p.fecha_fin)
+  if (Number.isNaN(fin.getTime())) return false
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  return fin.getTime() < hoy.getTime()
+}
+
 export function ReporteStatusPrintSheet({ data, tituloAlcance, onMounted }: Props) {
   useEffect(() => {
     onMounted?.()
@@ -30,88 +43,101 @@ export function ReporteStatusPrintSheet({ data, tituloAlcance, onMounted }: Prop
   const proyectos = data.departamentos.flatMap((d) =>
     d.proyectos.map((p) => ({ ...p, departamento_nombre: d.departamento_nombre })),
   )
+  const nAtrasados = proyectos.filter(atrasado).length
+  const nAlto = proyectos.filter((p) => p.riesgo_auto.nivel === 'Alto').length
+  const atencion = proyectos.filter(
+    (p) => !cerrado(p) && (atrasado(p) || p.riesgo_auto.nivel === 'Alto' || p.estado === 'Bloqueado'),
+  )
 
   return (
-    <article className="reporte-print-sheet" aria-label="Project Status Report PDF">
+    <article className="reporte-print-sheet" aria-label="Resumen general de proyectos PDF">
       <header className="reporte-print-header">
         <div>
           <p className="reporte-print-org">RCJ Corporación — IT Manager</p>
-          <h1 className="reporte-print-title">Project Status Report</h1>
+          <h1 className="reporte-print-title">Resumen general de proyectos</h1>
           <p className="reporte-print-sub">{tituloAlcance}</p>
         </div>
         <p className="reporte-print-meta">Generado: {formatDateDMY(data.generado_en)}</p>
       </header>
 
       <section className="reporte-print-section">
-        <h2 className="reporte-print-h2">Resumen del portafolio</h2>
+        <h2 className="reporte-print-h2">Portafolio</h2>
         <table className="reporte-print-kpi">
           <tbody>
             <tr>
               <td><strong>{r.total_proyectos}</strong><br /><span>Proyectos</span></td>
-              <td><strong>{r.total_departamentos}</strong><br /><span>Departamentos</span></td>
               <td><strong>{r.activos}</strong><br /><span>Activos</span></td>
               <td><strong>{r.completados}</strong><br /><span>Completados</span></td>
               <td><strong>{r.avance_promedio}%</strong><br /><span>Avance prom.</span></td>
-              <td><strong>{r.riesgos_registrados}</strong><br /><span>Riesgos doc.</span></td>
+              <td><strong>{nAtrasados}</strong><br /><span>Atrasados</span></td>
+              <td><strong>{nAlto}</strong><br /><span>Riesgo alto</span></td>
             </tr>
           </tbody>
         </table>
       </section>
 
-      {data.departamentos.map((dept) => (
-        <section key={dept.departamento_id ?? 'sin'} className="reporte-print-section">
-          <h2 className="reporte-print-h2">{dept.departamento_nombre}</h2>
-          <p className="reporte-print-sub">
-            {dept.resumen.total_proyectos} proyectos · Avance {dept.resumen.avance_promedio}%
-          </p>
-        </section>
-      ))}
+      <section className="reporte-print-section">
+        <h2 className="reporte-print-h2">Todos los proyectos</h2>
+        <table className="reporte-print-table">
+          <thead>
+            <tr>
+              <th>Proyecto</th>
+              <th>Depto</th>
+              <th>Estado</th>
+              <th>Avance</th>
+              <th>Vence</th>
+              <th>Riesgo</th>
+              <th>Tareas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {proyectos.map((p) => (
+              <tr key={p.proyecto_id}>
+                <td>
+                  <strong>{p.nombre}</strong>
+                  <div className="reporte-print-muted">{p.propietario || p.responsable || '—'}</div>
+                </td>
+                <td>{p.departamento_nombre}</td>
+                <td>{p.estado}</td>
+                <td><AvanceBar pct={p.porcentaje_avance} /></td>
+                <td>{formatDateDMY(p.fecha_fin)}</td>
+                <td>
+                  <strong style={{ color: p.riesgo_auto.color }}>{p.riesgo_auto.nivel}</strong>
+                </td>
+                <td>
+                  {p.tareas_completadas}/{p.tareas_total}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
 
-      {proyectos.map((p) => (
-        <section key={p.proyecto_id} className="reporte-print-section reporte-print-break">
-          <h2 className="reporte-print-h2">
-            {p.nombre} <span className="reporte-print-muted">({p.proyecto_id})</span>
-          </h2>
-          <p className="reporte-print-sub">
-            {p.departamento_nombre} · {p.estado} · Prioridad {p.prioridad} · Riesgo {p.riesgo_auto.nivel}
-          </p>
-          <p className="reporte-print-sub">
-            Avance proyecto: {p.porcentaje_avance}% · Avance tareas: {p.avance_tareas_promedio}% ·{' '}
-            {p.tareas_completadas}/{p.tareas_total} tareas completadas
-            {p.riesgos_registrados > 0 ? ` · ${p.riesgos_registrados} riesgo(s) documentado(s)` : ''}
-          </p>
-          <p className="reporte-print-muted" style={{ fontSize: 10 }}>{p.riesgo_auto.motivo}</p>
-
-          {p.tareas.length > 0 ? (
-            <table className="reporte-print-table">
-              <thead>
-                <tr>
-                  <th>Tarea</th>
-                  <th>Responsable</th>
-                  <th>Estado</th>
-                  <th>Avance</th>
-                  <th>Inicio</th>
-                  <th>Fin</th>
+      {atencion.length > 0 && (
+        <section className="reporte-print-section">
+          <h2 className="reporte-print-h2">Atención inmediata</h2>
+          <table className="reporte-print-table">
+            <thead>
+              <tr>
+                <th>Proyecto</th>
+                <th>Señal</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {atencion.map((p) => (
+                <tr key={p.proyecto_id}>
+                  <td><strong>{p.nombre}</strong></td>
+                  <td>
+                    {p.estado === 'Bloqueado' ? 'Bloqueado' : atrasado(p) ? 'Atrasado' : p.riesgo_auto.nivel}
+                  </td>
+                  <td>{p.riesgo_auto.motivo}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {p.tareas.map((t) => (
-                  <tr key={t.tarea_id}>
-                    <td><strong>{t.nombre}</strong></td>
-                    <td>{t.responsable ?? '—'}</td>
-                    <td>{t.estado}</td>
-                    <td><AvanceBar pct={t.porcentaje} /></td>
-                    <td>{formatDateDMY(t.fecha_inicio)}</td>
-                    <td>{formatDateDMY(t.fecha_fin)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="reporte-print-muted">Sin tareas registradas.</p>
-          )}
+              ))}
+            </tbody>
+          </table>
         </section>
-      ))}
+      )}
 
       <footer className="reporte-print-footer">
         <p>Documento generado por RCJ IT Manager — uso interno gerencia</p>

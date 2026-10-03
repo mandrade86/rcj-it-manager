@@ -11,7 +11,8 @@ import {
 
 type TareaPermisoLean = {
   responsable_id?: mongoose.Types.ObjectId | string | null
-  proyecto_id: string
+  proyecto_id?: string | null
+  creado_por_usuario_id?: mongoose.Types.ObjectId | string | null
 }
 
 async function empleadoIdUsuario(req: Request): Promise<string | null> {
@@ -31,24 +32,28 @@ async function proyectoAcceso(proyectoId: string): Promise<ProyectoAccesoLean | 
     .lean() as Promise<ProyectoAccesoLean | null>
 }
 
-/** Dueño del proyecto, participante editor, responsable de la tarea o permiso global. */
+/** Dueño del proyecto, participante editor, responsable de la tarea, creador o permiso global. */
 export async function usuarioPuedeMoverTarea(
   req: Request,
   tarea: TareaPermisoLean,
 ): Promise<boolean> {
   const userId = req.user?._id
   if (!userId) return false
-
-  const proyecto = await proyectoAcceso(tarea.proyecto_id)
-  if (!proyecto) return false
-
-  if (usuarioPuedeEditarProyecto(userId, req.user?.permisos ?? [], proyecto)) return true
+  const permisos = req.user?.permisos ?? []
+  if (permisos.includes('*') || permisos.includes('proyectos:editar')) return true
+  if (tarea.creado_por_usuario_id && String(tarea.creado_por_usuario_id) === String(userId)) {
+    return true
+  }
 
   const empId = await empleadoIdUsuario(req)
   const respId = tarea.responsable_id ? String(tarea.responsable_id) : null
   if (empId && respId && empId === respId) return true
 
-  return false
+  if (!tarea.proyecto_id) return false
+
+  const proyecto = await proyectoAcceso(tarea.proyecto_id)
+  if (!proyecto) return false
+  return usuarioPuedeEditarProyecto(userId, permisos, proyecto)
 }
 
 /** Puede crear, editar o eliminar tareas del proyecto. */
@@ -61,6 +66,17 @@ export async function usuarioPuedeEditarTareasProyecto(
   const proyecto = await proyectoAcceso(proyectoId)
   if (!proyecto) return false
   return usuarioPuedeEditarProyecto(userId, req.user?.permisos ?? [], proyecto)
+}
+
+/** Editar una tarea concreta (con o sin proyecto). */
+export async function usuarioPuedeEditarTarea(
+  req: Request,
+  tarea: TareaPermisoLean,
+): Promise<boolean> {
+  if (tarea.proyecto_id) {
+    if (await usuarioPuedeEditarTareasProyecto(req, tarea.proyecto_id)) return true
+  }
+  return usuarioPuedeMoverTarea(req, tarea)
 }
 
 /** Rol del usuario en el proyecto (null si no es participante explícito). */

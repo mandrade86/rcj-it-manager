@@ -11,7 +11,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { ejeBarClass } from '@/lib/ejeColors'
 import { formatDateDMY } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Proyecto } from '@/types/proyecto'
@@ -92,7 +91,6 @@ export function ProyectosTabla({
                 <MaestroSortableHead column="propietario" label="Propietario" sortKey={sortKey!} sortDir={sortDir!} onSort={onSort!} />
                 <MaestroSortableHead column="departamento" label="Departamento" sortKey={sortKey!} sortDir={sortDir!} onSort={onSort!} />
                 <TableHead>Empresas</TableHead>
-                <MaestroSortableHead column="eje" label="Eje" sortKey={sortKey!} sortDir={sortDir!} onSort={onSort!} />
                 <MaestroSortableHead column="inicio" label="Inicio" sortKey={sortKey!} sortDir={sortDir!} onSort={onSort!} />
                 <MaestroSortableHead column="fin" label="Fin" sortKey={sortKey!} sortDir={sortDir!} onSort={onSort!} />
                 <MaestroSortableHead column="avance" label="Avance" sortKey={sortKey!} sortDir={sortDir!} onSort={onSort!} />
@@ -107,7 +105,6 @@ export function ProyectosTabla({
                 <TableHead>Propietario</TableHead>
                 <TableHead>Departamento</TableHead>
                 <TableHead>Empresas</TableHead>
-                <TableHead>Eje</TableHead>
                 <TableHead>Inicio</TableHead>
                 <TableHead>Fin</TableHead>
                 <TableHead>Avance</TableHead>
@@ -121,7 +118,7 @@ export function ProyectosTabla({
           {rows.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={selectable ? 13 : 12}
+                colSpan={selectable ? 12 : 11}
                 className="h-24 text-center text-muted-foreground"
               >
                 {emptyMessage}
@@ -202,18 +199,6 @@ export function ProyectosTabla({
                         </span>
                       )
                     })()}
-                  </TableCell>
-                  <TableCell>
-                    {p.eje ? (
-                      <Badge
-                        variant="secondary"
-                        className={cn('text-[10px] text-white', ejeBarClass(p.eje))}
-                      >
-                        {p.eje}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-xs">
                     {formatDateDMY(p.fecha_inicio)}

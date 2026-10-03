@@ -30,12 +30,14 @@ export function MainLayout() {
   }, [token, setUser])
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex h-svh w-full overflow-hidden">
       <AppSidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppHeader />
-        <main className="flex-1 overflow-auto bg-[var(--gray-bg)] p-6">
-          <Outlet />
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto bg-[var(--gray-bg)] p-4 lg:p-5">
+          <div className="w-full min-w-0">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

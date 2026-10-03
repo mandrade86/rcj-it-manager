@@ -356,7 +356,7 @@ export function EvaluacionDesarrolloPage() {
 
   if (loadErr || !colaborador || !rubrica) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 p-4">
+      <div className="w-full space-y-4 p-4">
         <Button variant="outline" size="sm" asChild>
           <Link to={id ? `/equipo/${id}` : '/equipo'} className="gap-2">
             <ArrowLeft className="size-4" />
@@ -381,7 +381,7 @@ export function EvaluacionDesarrolloPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-24">
+    <div className="w-full space-y-6 pb-24">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" size="sm" asChild>
@@ -705,7 +705,7 @@ export function EvaluacionDesarrolloPage() {
         </Card>
 
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] backdrop-blur">
-          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground">Resultado global:</span>
               <Badge

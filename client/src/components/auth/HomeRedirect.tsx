@@ -1,10 +1,10 @@
 import { Navigate } from 'react-router-dom'
 
 import { resolveDefaultRoute } from '@/lib/permisosNav'
-import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { MiDiaPage } from '@/pages/inicio/MiDiaPage'
 import { useAuthStore } from '@/store/authStore'
 
-/** Inicio inteligente: dashboard o el primer módulo permitido (p. ej. BI Costeo). */
+/** Inicio: Mi día si puede ver el workspace; si no, el primer módulo permitido. */
 export function HomeRedirect() {
   const hasPermiso = useAuthStore((s) => s.hasPermiso)
   const user = useAuthStore((s) => s.user)
@@ -12,6 +12,6 @@ export function HomeRedirect() {
     llevaGastos: Boolean(user?.departamento_lleva_gastos),
   })
 
-  if (to === '/') return <DashboardPage />
+  if (to === '/') return <MiDiaPage />
   return <Navigate to={to} replace />
 }

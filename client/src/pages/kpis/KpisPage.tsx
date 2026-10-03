@@ -43,9 +43,7 @@ import {
   metasEditorFromDepartamento,
   tituloMeta,
 } from '@/lib/metasDepartamento'
-import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchProyectos } from '@/lib/api/proyectos'
-import { normalizeKpiTipo } from '@/lib/kpiProyectoVinculo'
 import {
   aplicarKpiSugerencias,
   createKpi,
@@ -178,7 +176,6 @@ export function KpisPage() {
   const [editorKpi, setEditorKpi] = useState<KpiDoc | null>(null)
   const [editorForm, setEditorForm] = useState<EditorForm>(emptyForm)
   const [editorSaving, setEditorSaving] = useState(false)
-  const [ejesMaestro, setEjesMaestro] = useState<string[]>([])
   const [proyectosCandidatos, setProyectosCandidatos] = useState<Proyecto[]>([])
   const [proyectosCargando, setProyectosCargando] = useState(false)
 
@@ -207,23 +204,16 @@ export function KpisPage() {
   const reload = useCallback(async () => {
     setErr(null)
     try {
-      const [k, d, ejes] = await Promise.all([
+      const [k, d] = await Promise.all([
         fetchKpis(
           filtroDepto === 'all'
             ? undefined
             : { departamento_id: filtroDepto === 'none' ? 'none' : filtroDepto },
         ),
         fetchDepartamentos(),
-        fetchEjesProyecto({ activo: true }).catch(() => []),
       ])
       setKpis(k)
       setDepartamentos(d.filter((x) => x.activo !== false))
-      setEjesMaestro(
-        ejes
-          .filter((e) => e.activo !== false)
-          .map((e) => e.nombre.trim())
-          .filter(Boolean),
-      )
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error')
     }
@@ -361,19 +351,9 @@ export function KpisPage() {
     setEditorOpen(true)
   }
 
-  const ejesTipoOpciones = useMemo(() => {
-    const set = new Set<string>(ejesMaestro)
-    for (const k of kpis) {
-      if (k.eje?.trim()) set.add(k.eje.trim())
-    }
-    if (editorForm.eje.trim()) set.add(editorForm.eje.trim())
-    return [...set].sort((a, b) => a.localeCompare(b, 'es'))
-  }, [ejesMaestro, kpis, editorForm.eje])
-
   useEffect(() => {
     if (!editorOpen) return
     const dept = editorForm.departamento_id
-    const tipo = normalizeKpiTipo(editorForm.eje)
     if (!dept) {
       setProyectosCandidatos([])
       return
@@ -384,14 +364,11 @@ export function KpisPage() {
       try {
         const rows = await fetchProyectos({ departamento_id: dept })
         if (cancel) return
-        const filtrados = tipo
-          ? rows.filter((p) => normalizeKpiTipo(p.eje) === tipo)
-          : rows
-        setProyectosCandidatos(filtrados)
+        setProyectosCandidatos(rows)
         if (!editorKpi) {
           setEditorForm((f) => ({
             ...f,
-            proyecto_ids: filtrados.map((p) => p._id),
+            proyecto_ids: rows.map((p) => p._id),
           }))
         }
       } catch {
@@ -407,8 +384,8 @@ export function KpisPage() {
 
   async function submitEditor(e: React.FormEvent) {
     e.preventDefault()
-    if (!editorForm.nombre.trim() || !editorForm.eje.trim()) {
-      window.alert('Nombre y tipo (eje) son obligatorios.')
+    if (!editorForm.nombre.trim()) {
+      window.alert('El nombre es obligatorio.')
       return
     }
     if (!editorForm.departamento_id) {
@@ -424,8 +401,8 @@ export function KpisPage() {
       const payload = {
         departamento_id: editorForm.departamento_id || null,
         meta_id: editorForm.meta_id,
-        tipo: editorForm.eje.trim(),
-        eje: editorForm.eje.trim(),
+        tipo: editorForm.eje.trim() || 'General',
+        eje: editorForm.eje.trim() || 'General',
         nombre: editorForm.nombre.trim(),
         descripcion: editorForm.descripcion.trim() || null,
         meta: editorForm.meta.trim() || null,
@@ -782,7 +759,7 @@ export function KpisPage() {
                       const dRef = kpiDepartamentoRef(k)
                       return (
                         <option key={k._id} value={k._id}>
-                          {dRef?.codigo ?? '—'} · {k.eje} · {k.nombre}
+                          {dRef?.codigo ?? '—'} · {k.nombre}
                         </option>
                       )
                     })}
@@ -1086,7 +1063,6 @@ export function KpisPage() {
           searchTexts={(k) => [
             k.nombre,
             k.descripcion,
-            k.eje,
             k.meta,
             k.frecuencia,
             k.responsable,
@@ -1152,16 +1128,6 @@ export function KpisPage() {
                   </Badge>
                 )
               },
-            },
-            {
-              id: 'eje',
-              label: 'Eje',
-              className: 'w-[120px]',
-              render: (k) => (
-                <span className="text-xs uppercase" style={{ color: BOARD.muted }}>
-                  {k.eje}
-                </span>
-              ),
             },
             {
               id: 'meta',
@@ -1416,44 +1382,15 @@ export function KpisPage() {
                 Agrupa el KPI bajo una meta del departamento (Maestros → Metas).
               </p>
             </div>
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="ed-eje">Tipo de KPI (eje del proyecto) *</Label>
-              <select
-                id="ed-eje"
-                className={selectClass}
-                required
-                value={editorForm.eje}
-                onChange={(e) =>
-                  setEditorForm((f) => ({
-                    ...f,
-                    eje: e.target.value,
-                    proyecto_ids: [],
-                  }))
-                }
-              >
-                <option value="">— Selecciona tipo / eje —</option>
-                {ejesTipoOpciones.map((eje) => (
-                  <option key={eje} value={eje}>
-                    {eje}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Al guardar, el KPI se vincula a los proyectos del departamento con este mismo eje
-                (puedes ajustar la lista abajo).
-              </p>
-            </div>
             <div className="grid gap-2 sm:col-span-2 rounded-md border border-border bg-muted/20 p-3">
-              <Label className="text-sm font-medium">Proyectos vinculados (mismo tipo / eje)</Label>
+              <Label className="text-sm font-medium">Proyectos vinculados</Label>
               {!editorForm.departamento_id ? (
                 <p className="text-xs text-muted-foreground">Selecciona un departamento primero.</p>
-              ) : !editorForm.eje.trim() ? (
-                <p className="text-xs text-muted-foreground">Selecciona el tipo de KPI (eje).</p>
               ) : proyectosCargando ? (
                 <p className="text-xs text-muted-foreground">Cargando proyectos…</p>
               ) : proyectosCandidatos.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No hay proyectos en este departamento con el eje «{editorForm.eje}».
+                  No hay proyectos en este departamento.
                 </p>
               ) : (
                 <div className="max-h-36 space-y-2 overflow-y-auto">
@@ -1660,7 +1597,6 @@ export function KpisPage() {
                           }}
                         />
                       </TableHead>
-                      <TableHead>Eje</TableHead>
                       <TableHead>Nombre</TableHead>
                       <TableHead>Meta</TableHead>
                       <TableHead>Frecuencia</TableHead>
@@ -1684,9 +1620,6 @@ export function KpisPage() {
                               })
                             }}
                           />
-                        </TableCell>
-                        <TableCell className="text-xs uppercase text-muted-foreground">
-                          {s.eje}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

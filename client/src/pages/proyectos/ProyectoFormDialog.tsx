@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Building2, Factory, User } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ArrowLeft, Building2, ChevronDown, Factory, User } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -9,19 +9,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
-import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import { fetchKpis } from '@/lib/api/kpis'
 import { updateProyectoParticipantes } from '@/lib/api/proyectos'
-import { kpiMatchesProyectoEje } from '@/lib/kpiProyectoVinculo'
 import { fetchUsuarios } from '@/lib/api/usuarios'
+import { cn } from '@/lib/utils'
 import { ProyectoParticipantesEditor, type ParticipanteDraft } from '@/pages/proyectos/ProyectoParticipantesEditor'
 import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'
-import type { EjeProyectoDoc } from '@/types/ejeProyecto'
 import type { EmpresaDoc } from '@/types/empresa'
 import type { KpiDoc } from '@/types/kpi'
 import type { UsuarioDoc } from '@/types/usuario'
+import { empleadoIdFromUsuario } from '@/types/usuario'
 import type {
   Proyecto, ProyectoEstado, ProyectoFase, ProyectoPrioridad, ProyectoTipo,
 } from '@/types/proyecto'
@@ -31,6 +30,54 @@ import {
 } from '@/types/proyecto'
 
 const EJE_GENERAL = 'General'
+
+const PASOS_NUEVO = [
+  { id: 'datos', label: 'Proyecto' },
+  { id: 'equipo', label: 'Equipo' },
+  { id: 'org', label: 'Organización' },
+  { id: 'meta', label: 'Meta' },
+] as const
+
+function suggestProjectId() {
+  const d = new Date()
+  const y = String(d.getFullYear()).slice(2)
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const r = Math.random().toString(36).slice(2, 6).toUpperCase()
+  return `P-${y}${m}-${r}`
+}
+
+function FormSection({
+  title,
+  hint,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string
+  hint?: string
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-[var(--navy)]">{title}</p>
+          {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
+        </div>
+        <ChevronDown
+          className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
+        />
+      </button>
+      {open ? <div className="space-y-4 border-t border-border px-4 py-4">{children}</div> : null}
+    </div>
+  )
+}
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -65,7 +112,7 @@ function emptyForm(defaults: {
   eje?: string
 }): FormState {
   return {
-    _id: '',
+    _id: suggestProjectId(),
     nombre: '',
     descripcion: '',
     eje: defaults.eje ?? EJE_GENERAL,
@@ -185,7 +232,6 @@ export function ProyectoFormDialog({
 }: Props) {
   const user = useAuthStore((s) => s.user)
   const [departamentos, setDepartamentos] = useState<DepartamentoDoc[]>([])
-  const [ejesMaestro, setEjesMaestro] = useState<EjeProyectoDoc[]>([])
   const [empresas, setEmpresas] = useState<EmpresaDoc[]>([])
   const [usuarios, setUsuarios] = useState<UsuarioDoc[]>([])
   const [kpisDept, setKpisDept] = useState<KpiDoc[]>([])
@@ -201,7 +247,14 @@ export function ProyectoFormDialog({
   )
   const [participantesDraft, setParticipantesDraft] = useState<ParticipanteDraft[]>([])
   const [saving, setSaving] = useState(false)
+  const [openOrg, setOpenOrg] = useState(!editing)
+  const [openMeta, setOpenMeta] = useState(false)
+  const [openEquipo, setOpenEquipo] = useState(false)
+  const [openNotas, setOpenNotas] = useState(false)
+  const [paso, setPaso] = useState(0)
+  const [pasoError, setPasoError] = useState<string | null>(null)
   const isEdit = Boolean(editing)
+  const wizard = !isEdit
 
   const active = variant === 'page' || open
 
@@ -210,15 +263,13 @@ export function ProyectoFormDialog({
     let cancel = false
     void (async () => {
       try {
-        const [deps, emps, usrs, ejes] = await Promise.all([
+        const [deps, emps, usrs] = await Promise.all([
           fetchDepartamentos().catch(() => [] as DepartamentoDoc[]),
           fetchEmpresas({ activo: true }).catch(() => [] as EmpresaDoc[]),
           fetchUsuarios().catch(() => [] as UsuarioDoc[]),
-          fetchEjesProyecto({ activo: true }).catch(() => [] as EjeProyectoDoc[]),
         ])
         if (cancel) return
         setDepartamentos(deps)
-        setEjesMaestro(ejes)
         setEmpresas(emps)
         setUsuarios(usrs)
         // Si pudo leer >1 usuario o uno distinto a sí mismo, asumimos permiso
@@ -253,14 +304,20 @@ export function ProyectoFormDialog({
   useEffect(() => {
     if (!active) return
     if (editing) {
-      setForm(fromProyecto(editing))
-      setParticipantesDraft(
-        (editing.participantes ?? []).map((p, i) => ({
-          key: p._id ?? `p-${i}`,
-          usuario_id: participanteUsuarioId(p) ?? '',
-          rol: p.rol ?? 'lectura',
-        })).filter((p) => p.usuario_id),
-      )
+      const next = fromProyecto(editing)
+      setForm(next)
+      const parts = (editing.participantes ?? []).map((p, i) => ({
+        key: p._id ?? `p-${i}`,
+        usuario_id: participanteUsuarioId(p) ?? '',
+        rol: p.rol ?? 'lectura',
+      })).filter((p) => p.usuario_id)
+      setParticipantesDraft(parts)
+      setOpenOrg(Boolean(next.empresa_ids.length || next.fase || (next.eje && next.eje !== EJE_GENERAL)))
+      setOpenMeta(Boolean(next.kpi_id || next.presupuesto_planificado || next.presupuesto_notas))
+      setOpenEquipo(Boolean(parts.length || next.responsable))
+      setOpenNotas(Boolean(next.notas))
+      setPaso(0)
+      setPasoError(null)
     } else {
       setForm(emptyForm({
         usuario_id: user?._id,
@@ -268,62 +325,16 @@ export function ProyectoFormDialog({
         eje: EJE_GENERAL,
       }))
       setParticipantesDraft([])
+      setOpenOrg(false)
+      setOpenMeta(false)
+      setOpenEquipo(false)
+      setOpenNotas(false)
+      setPaso(0)
+      setPasoError(null)
     }
   }, [active, editing, user?._id, user?.departamento_id])
 
-  const propietarioDefault = useMemo(() => {
-    if (editing) return null
-    return user
-  }, [editing, user])
-
-  const ejesDisponibles = useMemo(() => {
-    const nombresMaestro = [...ejesMaestro]
-      .filter((e) => e.activo !== false)
-      .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0) || a.nombre.localeCompare(b.nombre))
-      .map((e) => e.nombre)
-
-    const dept = departamentos.find((d) => d._id === form.departamento_id)
-    const deptEjes = (dept?.ejes_proyecto ?? []).map((x) => x.trim()).filter(Boolean)
-
-    const legacyPool = (): string[] => {
-      const base: string[] = dept?.ejes_proyecto?.length
-        ? dept.ejes_proyecto
-        : departamentos.flatMap((d) => d.ejes_proyecto ?? [])
-      return [...new Set(base.map((x) => x.trim()).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b),
-      )
-    }
-
-    if (nombresMaestro.length > 0) {
-      let pool =
-        deptEjes.length > 0
-          ? nombresMaestro.filter((n) => deptEjes.includes(n))
-          : [...nombresMaestro]
-      for (const d of deptEjes) {
-        if (!pool.includes(d)) pool.push(d)
-      }
-      if (nombresMaestro.includes(EJE_GENERAL) && !pool.includes(EJE_GENERAL)) {
-        pool.unshift(EJE_GENERAL)
-      }
-      pool.sort((a, b) => {
-        if (a === EJE_GENERAL) return -1
-        if (b === EJE_GENERAL) return 1
-        return a.localeCompare(b)
-      })
-      if (form.eje && !pool.includes(form.eje)) pool = [form.eje, ...pool]
-      return pool
-    }
-
-    const unique = legacyPool()
-    if (form.eje && !unique.includes(form.eje)) unique.unshift(form.eje)
-    return unique
-  }, [departamentos, ejesMaestro, form.departamento_id, form.eje])
-
-  const kpisPorTipo = useMemo(() => {
-    if (!form.eje.trim()) return kpisDept
-    return kpisDept.filter((k) => kpiMatchesProyectoEje(k, form.eje))
-  }, [kpisDept, form.eje])
-
+  const kpisPorTipo = kpisDept
   const kpiIdsEnLista = useMemo(() => new Set(kpisPorTipo.map((k) => k._id)), [kpisPorTipo])
   const kpiHuerfano = Boolean(form.kpi_id && !kpiIdsEnLista.has(form.kpi_id))
 
@@ -331,8 +342,38 @@ export function ProyectoFormDialog({
     ? proyectoPuedeGestionarParticipantes(editing)
     : true
 
+  const equipoSinFicha = useMemo(() => {
+    const ids = [form.usuario_id, ...participantesDraft.map((p) => p.usuario_id)].filter(Boolean)
+    return ids
+      .map((id) => usuarios.find((u) => u._id === id))
+      .filter((u): u is UsuarioDoc => Boolean(u && !empleadoIdFromUsuario(u)))
+  }, [form.usuario_id, participantesDraft, usuarios])
+
+  function mensajePaso(n: number): string | null {
+    if (n === 0 && !form._id.trim()) return 'Indica el código del proyecto.'
+    if (n === 0 && !form.nombre.trim()) return 'Escribe el nombre del proyecto.'
+    if (n === 1 && !form.usuario_id) return 'Elige quién lleva el proyecto. Esa persona forma parte del equipo.'
+    return null
+  }
+
+  function irAPaso(n: number) {
+    setPasoError(null)
+    setPaso(n)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (wizard && paso < PASOS_NUEVO.length - 1) {
+      const msg = mensajePaso(paso)
+      setPasoError(msg)
+      if (!msg) setPaso((p) => p + 1)
+      return
+    }
+    const msg = wizard ? mensajePaso(paso) : null
+    if (msg) {
+      setPasoError(msg)
+      return
+    }
     if (!form._id.trim() || !form.nombre.trim()) return
     setSaving(true)
     try {
@@ -362,12 +403,12 @@ export function ProyectoFormDialog({
     }
   }
 
-  const title = isEdit ? 'Editar proyecto' : 'Nuevo proyecto'
+  const title = isEdit ? 'Actualizar proyecto' : 'Nuevo proyecto'
 
   const formInner = (
     <>
       {variant === 'page' && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 border-b border-border pb-4">
+        <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-border pb-4">
           <Button
             type="button"
             variant="outline"
@@ -378,318 +419,381 @@ export function ProyectoFormDialog({
             <ArrowLeft className="size-4" />
             Volver
           </Button>
-          <h1 className="text-xl font-semibold text-[var(--navy)]">{title}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-[var(--navy)]">{title}</h1>
+            <p className="text-xs text-muted-foreground">
+              {isEdit
+                ? 'Cambia lo esencial y guarda. Lo demás está en las secciones de abajo.'
+                : `Paso ${paso + 1} de ${PASOS_NUEVO.length}. ${PASOS_NUEVO[paso]?.label}.`}
+            </p>
+          </div>
+          {isEdit ? (
+            <span className="ml-auto rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
+              {form._id}
+            </span>
+          ) : null}
         </div>
       )}
       {variant === 'dialog' && (
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {!isEdit && propietarioDefault && (
-            <p className="text-xs text-muted-foreground">
-              Por defecto, el propietario serás tú (<strong>{propietarioDefault.nombre}</strong>).
-              Puedes cambiarlo abajo si tienes permisos.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {isEdit
+              ? 'Cambia lo que necesites. Empresas, KPI y presupuesto están plegados.'
+              : `Paso ${paso + 1} de ${PASOS_NUEVO.length}: ${PASOS_NUEVO[paso]?.label}.`}
+          </p>
         </DialogHeader>
       )}
-      {variant === 'page' && !isEdit && propietarioDefault && (
-        <p className="-mt-2 mb-2 text-xs text-muted-foreground">
-          Por defecto, el propietario serás tú (<strong>{propietarioDefault.nombre}</strong>).
-          Puedes cambiarlo abajo si tienes permisos.
-        </p>
-      )}
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="p-id">ID del proyecto <span className="text-destructive">*</span></Label>
-              <Input
-                id="p-id" required
-                disabled={isEdit}
-                value={form._id}
-                onChange={(e) => setForm((s) => ({ ...s, _id: e.target.value }))}
-                placeholder="P-001, MKT-2026-01…"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="p-tipo">Tipo</Label>
-              <select
-                id="p-tipo"
-                className={selectClass}
-                value={form.tipo}
-                onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value as ProyectoTipo }))}
-              >
-                <option value="individual">Individual (de un usuario)</option>
-                <option value="departamental">Departamental (del área)</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="p-nombre">Nombre <span className="text-destructive">*</span></Label>
-            <Input
-              id="p-nombre" required
-              value={form.nombre}
-              onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="p-desc">Descripción</Label>
-            <Textarea
-              id="p-desc" rows={2}
-              value={form.descripcion}
-              onChange={(e) => setForm((s) => ({ ...s, descripcion: e.target.value }))}
-            />
-          </div>
-
-          <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-3 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label className="flex items-center gap-1"><User className="size-3.5" /> Propietario</Label>
-              <select
-                className={selectClass}
-                value={form.usuario_id}
-                onChange={(e) => setForm((s) => ({ ...s, usuario_id: e.target.value }))}
-                disabled={!puedeAsignarOtro && !isEdit && form.usuario_id === user?._id}
-              >
-                <option value="">— Sin propietario —</option>
-                {usuarios.map((u) => (
-                  <option key={u._id} value={u._id}>
-                    {u.nombre}{u._id === user?._id ? ' (tú)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-2">
-              <Label className="flex items-center gap-1"><Building2 className="size-3.5" /> Departamento</Label>
-              <select
-                className={selectClass}
-                value={form.departamento_id}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setForm((s) => ({ ...s, departamento_id: v, kpi_id: '', meta_kpi: '' }))
-                }}
-              >
-                <option value="">— Sin departamento —</option>
-                {departamentos.map((d) => (
-                  <option key={d._id} value={d._id}>
-                    {d.codigo} · {d.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-2 rounded-md border border-border bg-muted/20 p-3">
-            <Label className="flex items-center gap-1.5 text-sm">
-              <Factory className="size-3.5 text-muted-foreground" />
-              Empresas del grupo involucradas
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Marca una o varias empresas RCJ a las que aplica este proyecto (opcional).
-            </p>
-            <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-background p-2">
-              {empresas.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No hay empresas en el catálogo.</p>
-              ) : (
-                empresas.map((e) => (
-                  <label
-                    key={e._id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/60"
-                  >
-                    <input
-                      type="checkbox"
-                      className="size-3.5 accent-[var(--lime)]"
-                      checked={form.empresa_ids.includes(e._id)}
-                      onChange={() => {
-                        setForm((s) => ({
-                          ...s,
-                          empresa_ids: s.empresa_ids.includes(e._id)
-                            ? s.empresa_ids.filter((id) => id !== e._id)
-                            : [...s.empresa_ids, e._id],
-                        }))
+          {wizard && (
+            <ol className="flex flex-wrap gap-2">
+              {PASOS_NUEVO.map((p, i) => {
+                const activo = i === paso
+                const listo = i < paso
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        'rounded-full px-3 py-1 text-xs font-medium',
+                        activo && 'bg-[var(--navy)] text-white',
+                        listo && 'bg-[var(--lime-lt)] text-[var(--navy)]',
+                        !activo && !listo && 'bg-muted text-muted-foreground',
+                      )}
+                      onClick={() => {
+                        if (i <= paso) irAPaso(i)
                       }}
-                    />
-                    <span
-                      className="size-2 shrink-0 rounded-full"
-                      style={{ background: e.color ?? '#002060' }}
-                    />
-                    <span className="font-mono text-[10px] text-muted-foreground">{e.codigo}</span>
-                    <span>{e.nombre}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="p-eje">Eje / Categoría</Label>
-              <select
-                id="p-eje"
-                className={selectClass}
-                value={form.eje}
-                onChange={(e) => setForm((s) => ({ ...s, eje: e.target.value }))}
-              >
-                <option value="">— Sin eje —</option>
-                {ejesDisponibles.map((eje) => (
-                  <option key={eje} value={eje}>{eje}</option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Catálogo en Maestro · Ejes de proyecto; por departamento se eligen los aplicables en
-                Maestro · Departamentos.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="p-fase">Fase (opcional)</Label>
-              <select
-                id="p-fase"
-                className={selectClass}
-                value={form.fase}
-                onChange={(e) => setForm((s) => ({ ...s, fase: e.target.value }))}
-              >
-                <option value="">— Sin fase —</option>
-                <option value="1">Fase 1</option>
-                <option value="2">Fase 2</option>
-                <option value="3">Fase 3</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="p-resp">Responsable (texto libre, opcional)</Label>
-            <Input
-              id="p-resp"
-              value={form.responsable}
-              onChange={(e) => setForm((s) => ({ ...s, responsable: e.target.value }))}
-              placeholder="Si difiere del propietario o lo importas desde Excel"
-            />
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="p-fi">Fecha inicio</Label>
-              <Input
-                id="p-fi" type="date"
-                value={form.fecha_inicio}
-                onChange={(e) => setForm((s) => ({ ...s, fecha_inicio: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="p-ff">Fecha fin</Label>
-              <Input
-                id="p-ff" type="date"
-                value={form.fecha_fin}
-                onChange={(e) => setForm((s) => ({ ...s, fecha_fin: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="p-prio">Prioridad</Label>
-              <select
-                id="p-prio"
-                className={selectClass}
-                value={form.prioridad}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, prioridad: e.target.value as ProyectoPrioridad }))
-                }
-              >
-                <option value="Alta">Alta</option>
-                <option value="Media">Media</option>
-                <option value="Baja">Baja</option>
-              </select>
-            </div>
+                    >
+                      {i + 1}. {p.label}
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+          {pasoError && <p className="text-xs text-destructive">{pasoError}</p>}
+          {(!wizard || paso === 0) && (
+          <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+            <p className="text-sm font-semibold text-[var(--navy)]">Datos principales</p>
             {!isEdit && (
-              <div className="grid gap-2">
-                <Label htmlFor="p-est">Estado inicial</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-id">Código</Label>
+                  <Input
+                    id="p-id"
+                    required
+                    value={form._id}
+                    onChange={(e) => setForm((s) => ({ ...s, _id: e.target.value }))}
+                    placeholder="Se genera solo"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-tipo">Tipo</Label>
+                  <select
+                    id="p-tipo"
+                    className={selectClass}
+                    value={form.tipo}
+                    onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value as ProyectoTipo }))}
+                  >
+                    <option value="individual">Individual</option>
+                    <option value="departamental">Del área</option>
+                  </select>
+                </div>
+              </div>
+            )}
+            <div className="grid gap-1.5">
+              <Label htmlFor="p-nombre">Nombre <span className="text-destructive">*</span></Label>
+              <Input
+                id="p-nombre" required
+                value={form.nombre}
+                onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))}
+                placeholder="Ej. Renovar VPN corporativa"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="p-desc">Para qué es (opcional)</Label>
+              <Textarea
+                id="p-desc" rows={2}
+                value={form.descripcion}
+                onChange={(e) => setForm((s) => ({ ...s, descripcion: e.target.value }))}
+                placeholder="Una o dos líneas para el equipo"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-fi">Inicio</Label>
+                <Input
+                  id="p-fi" type="date"
+                  value={form.fecha_inicio}
+                  onChange={(e) => setForm((s) => ({ ...s, fecha_inicio: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-ff">Fin</Label>
+                <Input
+                  id="p-ff" type="date"
+                  value={form.fecha_fin}
+                  onChange={(e) => setForm((s) => ({ ...s, fecha_fin: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-prio">Prioridad</Label>
                 <select
-                  id="p-est"
+                  id="p-prio"
                   className={selectClass}
-                  value={form.estado}
+                  value={form.prioridad}
                   onChange={(e) =>
-                    setForm((s) => ({ ...s, estado: e.target.value as ProyectoEstado }))
+                    setForm((s) => ({ ...s, prioridad: e.target.value as ProyectoPrioridad }))
                   }
                 >
-                  {PROYECTO_ESTADOS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Media">Media</option>
+                  <option value="Baja">Baja</option>
+                </select>
+              </div>
+              {!isEdit ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-est">Estado inicial</Label>
+                  <select
+                    id="p-est"
+                    className={selectClass}
+                    value={form.estado}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, estado: e.target.value as ProyectoEstado }))
+                    }
+                  >
+                    {PROYECTO_ESTADOS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className="self-end text-xs text-muted-foreground">
+                  Avance {avanceActual ?? editing?.porcentaje_avance ?? 0}%. El estado se cambia en el tablero.
+                </p>
+              )}
+            </div>
+            {!wizard && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label className="flex items-center gap-1"><User className="size-3.5" /> Quién lo lleva</Label>
+                <select
+                  className={selectClass}
+                  value={form.usuario_id}
+                  onChange={(e) => setForm((s) => ({ ...s, usuario_id: e.target.value }))}
+                  disabled={!puedeAsignarOtro && !isEdit && form.usuario_id === user?._id}
+                >
+                  <option value="">— Sin propietario —</option>
+                  {usuarios.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.nombre}{u._id === user?._id ? ' (tú)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="flex items-center gap-1"><Building2 className="size-3.5" /> Área</Label>
+                <select
+                  className={selectClass}
+                  value={form.departamento_id}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setForm((s) => ({ ...s, departamento_id: v, kpi_id: '', meta_kpi: '' }))
+                  }}
+                >
+                  <option value="">— Sin departamento —</option>
+                  {departamentos.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.codigo} · {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            )}
+          </div>
+          )}
+
+          {wizard && paso === 1 && (
+            <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+              <div>
+                <p className="text-sm font-semibold text-[var(--navy)]">Equipo</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Quien lleva el proyecto y las personas que invites. Al asignar una tarea solo aparece este equipo.
+                </p>
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="flex items-center gap-1"><User className="size-3.5" /> Quién lo lleva</Label>
+                <select
+                  className={selectClass}
+                  value={form.usuario_id}
+                  onChange={(e) => setForm((s) => ({ ...s, usuario_id: e.target.value }))}
+                  disabled={!puedeAsignarOtro && form.usuario_id === user?._id}
+                >
+                  <option value="">— Elige a alguien —</option>
+                  {usuarios.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.nombre}{u._id === user?._id ? ' (tú)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <ProyectoParticipantesEditor
+                ownerId={form.usuario_id || null}
+                draft={participantesDraft}
+                onChange={setParticipantesDraft}
+                usuarios={usuarios}
+                puedeGestionar={puedeGestionarParticipantes}
+              />
+              {equipoSinFicha.length > 0 && (
+                <p className="text-xs text-amber-800">
+                  Sin ficha de empleado, no se pueden asignar tareas a:{' '}
+                  {equipoSinFicha.map((u) => u.nombre).join(', ')}.
+                </p>
+              )}
+            </div>
+          )}
+
+          {(!wizard || paso === 2) && (
+          <FormSection
+            title="Organización"
+            hint="Área, fase y empresas del grupo"
+            open={wizard || openOrg}
+            onToggle={() => { if (!wizard) setOpenOrg((v) => !v) }}
+          >
+            {wizard && (
+              <div className="grid gap-1.5">
+                <Label className="flex items-center gap-1"><Building2 className="size-3.5" /> Área</Label>
+                <select
+                  className={selectClass}
+                  value={form.departamento_id}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setForm((s) => ({ ...s, departamento_id: v, kpi_id: '', meta_kpi: '' }))
+                  }}
+                >
+                  <option value="">— Sin departamento —</option>
+                  {departamentos.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.codigo} · {d.nombre}
+                    </option>
                   ))}
                 </select>
               </div>
             )}
-          </div>
-
-          {isEdit && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-              El estado del proyecto se cambia desde el panel de detalle (botones de flujo).
-              Avance actual: <strong>{avanceActual ?? editing?.porcentaje_avance ?? 0}%</strong>.
-            </p>
+            {isEdit && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-tipo">Tipo</Label>
+                <select
+                  id="p-tipo"
+                  className={selectClass}
+                  value={form.tipo}
+                  onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value as ProyectoTipo }))}
+                >
+                  <option value="individual">Individual</option>
+                  <option value="departamental">Del área</option>
+                </select>
+              </div>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-fase">Fase</Label>
+                <select
+                  id="p-fase"
+                  className={selectClass}
+                  value={form.fase}
+                  onChange={(e) => setForm((s) => ({ ...s, fase: e.target.value }))}
+                >
+                  <option value="">— Sin fase —</option>
+                  <option value="1">Fase 1</option>
+                  <option value="2">Fase 2</option>
+                  <option value="3">Fase 3</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Factory className="size-3.5 text-muted-foreground" />
+                Empresas
+              </Label>
+              <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border border-border bg-background p-2">
+                {empresas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No hay empresas en el catálogo.</p>
+                ) : (
+                  empresas.map((e) => (
+                    <label
+                      key={e._id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/60"
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-3.5 accent-[var(--lime)]"
+                        checked={form.empresa_ids.includes(e._id)}
+                        onChange={() => {
+                          setForm((s) => ({
+                            ...s,
+                            empresa_ids: s.empresa_ids.includes(e._id)
+                              ? s.empresa_ids.filter((id) => id !== e._id)
+                              : [...s.empresa_ids, e._id],
+                          }))
+                        }}
+                      />
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: e.color ?? '#002060' }}
+                      />
+                      <span>{e.nombre}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          </FormSection>
           )}
 
-          <div className="grid gap-2 rounded-md border border-border bg-muted/20 p-3">
-            <Label htmlFor="p-kpi-dep">KPI / meta (catálogo del departamento)</Label>
-            <p className="text-xs text-muted-foreground">
-              KPIs del departamento con el mismo tipo (eje) que el proyecto. Si cambias el eje del
-              proyecto, la lista se actualiza.
-            </p>
-            {!deptParaKpis ? (
-              <p className="text-xs text-amber-900">
-                Indica un departamento en el proyecto o en tu perfil para cargar el catálogo de KPIs.
-              </p>
-            ) : kpisPorTipo.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {form.eje.trim()
-                  ? `No hay KPIs para el eje «${form.eje}» en este departamento. Créalos en KPIs / Metas.`
-                  : 'Indica el eje del proyecto o crea KPIs en KPIs / Metas.'}
-              </p>
-            ) : null}
-            <select
-              id="p-kpi-dep"
-              className={selectClass}
-              disabled={!deptParaKpis || kpisPorTipo.length === 0}
-              value={form.kpi_id}
-              onChange={(e) => {
-                const id = e.target.value
-                if (!id) {
-                  setForm((s) => ({ ...s, kpi_id: '', meta_kpi: '' }))
-                  return
-                }
-                const k = kpisPorTipo.find((x) => x._id === id) ?? kpisDept.find((x) => x._id === id)
-                const meta = (k?.meta?.trim() || k?.nombre?.trim() || '').trim()
-                setForm((s) => ({ ...s, kpi_id: id, meta_kpi: meta }))
-              }}
-            >
-              <option value="">— Sin KPI vinculado —</option>
-              {kpiHuerfano && (
-                <option value={form.kpi_id}>
-                  (KPI guardado no está en la lista del departamento mostrado)
-                </option>
-              )}
-              {kpisPorTipo.map((k) => (
-                <option key={k._id} value={k._id}>
-                  {k.nombre}
-                  {k.meta ? ` — meta: ${k.meta}` : ''}
-                </option>
-              ))}
-            </select>
-            {form.meta_kpi.trim() !== '' && (
-              <p className="text-xs text-muted-foreground">
-                Meta objetivo: <strong>{form.meta_kpi}</strong>
-              </p>
-            )}
-            {kpiHuerfano && (
-              <p className="text-xs text-amber-900">
-                Ajusta el departamento del proyecto o elige un KPI de la lista para alinear la meta
-                con el departamento.
-              </p>
-            )}
-          </div>
-
-          <div className="grid gap-3 rounded-md border border-[var(--navy)]/20 bg-[var(--blue-lt)]/25 p-3">
-            <div>
-              <Label className="text-sm font-semibold text-[var(--navy)]">Presupuesto del proyecto</Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Define el envelope. Los gastos se suman desde los montos de cada tarea.
-              </p>
+          {(!wizard || paso === 3) && (
+          <FormSection
+            title="KPI y presupuesto"
+            hint="Opcional. El gasto ejecutado se suma desde las tareas."
+            open={wizard || openMeta}
+            onToggle={() => { if (!wizard) setOpenMeta((v) => !v) }}
+          >
+            <div className="grid gap-1.5">
+              <Label htmlFor="p-kpi-dep">KPI del área</Label>
+              <select
+                id="p-kpi-dep"
+                className={selectClass}
+                disabled={!deptParaKpis || kpisPorTipo.length === 0}
+                value={form.kpi_id}
+                onChange={(e) => {
+                  const id = e.target.value
+                  if (!id) {
+                    setForm((s) => ({ ...s, kpi_id: '', meta_kpi: '' }))
+                    return
+                  }
+                  const k = kpisPorTipo.find((x) => x._id === id) ?? kpisDept.find((x) => x._id === id)
+                  const meta = (k?.meta?.trim() || k?.nombre?.trim() || '').trim()
+                  setForm((s) => ({ ...s, kpi_id: id, meta_kpi: meta }))
+                }}
+              >
+                <option value="">— Sin KPI —</option>
+                {kpiHuerfano && (
+                  <option value={form.kpi_id}>(KPI guardado, no está en esta lista)</option>
+                )}
+                {kpisPorTipo.map((k) => (
+                  <option key={k._id} value={k._id}>
+                    {k.nombre}
+                    {k.meta ? ` — ${k.meta}` : ''}
+                  </option>
+                ))}
+              </select>
+              {!deptParaKpis ? (
+                <p className="text-xs text-muted-foreground">Elige un área para ver sus KPIs.</p>
+              ) : kpisPorTipo.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Este área aún no tiene KPIs.</p>
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
@@ -710,7 +814,7 @@ export function ProyectoFormDialog({
                 </select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="p-pres-plan">Planificado (envelope)</Label>
+                <Label htmlFor="p-pres-plan">Presupuesto planificado</Label>
                 <Input
                   id="p-pres-plan"
                   type="number"
@@ -722,36 +826,60 @@ export function ProyectoFormDialog({
                 />
               </div>
             </div>
-            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              Asignado y ejecutado se calculan solos desde las tareas (asignado × % avance).
-            </p>
             <div className="grid gap-1.5">
-              <Label htmlFor="p-pres-notas">Notas de presupuesto</Label>
+              <Label htmlFor="p-pres-notas">Nota de presupuesto</Label>
               <Input
                 id="p-pres-notas"
-                placeholder="Ej. PO, contrato, cuenta SAP…"
+                placeholder="PO, contrato, cuenta SAP…"
                 value={form.presupuesto_notas}
                 onChange={(e) => setForm((s) => ({ ...s, presupuesto_notas: e.target.value }))}
               />
             </div>
-          </div>
+          </FormSection>
+          )}
 
-          <ProyectoParticipantesEditor
-            ownerId={form.usuario_id || null}
-            draft={participantesDraft}
-            onChange={setParticipantesDraft}
-            usuarios={usuarios}
-            puedeGestionar={puedeGestionarParticipantes}
-          />
+          {!wizard && (
+          <FormSection
+            title="Más personas"
+            hint="Invitados y un responsable en texto, si hace falta"
+            open={openEquipo}
+            onToggle={() => setOpenEquipo((v) => !v)}
+          >
+            <div className="grid gap-1.5">
+              <Label htmlFor="p-resp">Responsable (texto)</Label>
+              <Input
+                id="p-resp"
+                value={form.responsable}
+                onChange={(e) => setForm((s) => ({ ...s, responsable: e.target.value }))}
+                placeholder="Solo si no es el propietario"
+              />
+            </div>
+            <ProyectoParticipantesEditor
+              ownerId={form.usuario_id || null}
+              draft={participantesDraft}
+              onChange={setParticipantesDraft}
+              usuarios={usuarios}
+              puedeGestionar={puedeGestionarParticipantes}
+            />
+          </FormSection>
+          )}
 
-          <div className="grid gap-2">
-            <Label htmlFor="p-notas">Notas</Label>
+          {(!wizard || paso === 3) && (
+          <FormSection
+            title="Notas"
+            hint="Recordatorios internos"
+            open={wizard || openNotas}
+            onToggle={() => { if (!wizard) setOpenNotas((v) => !v) }}
+          >
             <Textarea
-              id="p-notas" rows={3}
+              id="p-notas"
+              rows={3}
               value={form.notas}
               onChange={(e) => setForm((s) => ({ ...s, notas: e.target.value }))}
+              placeholder="Algo que el equipo deba tener presente"
             />
-          </div>
+          </FormSection>
+          )}
 
           <div
             className={
@@ -762,28 +890,52 @@ export function ProyectoFormDialog({
           >
             {variant === 'dialog' ? (
               <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancelar
-                </Button>
+                {wizard && paso > 0 ? (
+                  <Button type="button" variant="outline" onClick={() => irAPaso(paso - 1)}>
+                    Atrás
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Cancelar
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   disabled={saving}
                   className="bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
                 >
-                  {saving ? 'Guardando…' : 'Guardar'}
+                  {saving
+                    ? 'Guardando…'
+                    : wizard && paso < PASOS_NUEVO.length - 1
+                      ? 'Siguiente'
+                      : isEdit
+                        ? 'Guardar cambios'
+                        : 'Crear proyecto'}
                 </Button>
               </DialogFooter>
             ) : (
               <>
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancelar
-                </Button>
+                {wizard && paso > 0 ? (
+                  <Button type="button" variant="outline" onClick={() => irAPaso(paso - 1)}>
+                    Atrás
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Cancelar
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   disabled={saving}
                   className="bg-[var(--lime)] text-[var(--navy)] hover:bg-[var(--lime)]/90"
                 >
-                  {saving ? 'Guardando…' : 'Guardar'}
+                  {saving
+                    ? 'Guardando…'
+                    : wizard && paso < PASOS_NUEVO.length - 1
+                      ? 'Siguiente'
+                      : isEdit
+                        ? 'Guardar cambios'
+                        : 'Crear proyecto'}
                 </Button>
               </>
             )}
@@ -794,7 +946,7 @@ export function ProyectoFormDialog({
 
   if (variant === 'page') {
     return (
-      <div className="mx-auto w-full max-w-5xl pb-10">
+      <div className="w-full pb-10">
         {formInner}
       </div>
     )

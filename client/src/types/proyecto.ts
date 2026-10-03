@@ -94,6 +94,31 @@ export type Proyecto = {
   createdAt?: string
   updatedAt?: string
   riesgo?: RiesgoProyecto
+  hitos?: ProyectoHito[]
+  incidencias?: ProyectoIncidencia[]
+  documentos?: ProyectoDocumento[]
+}
+
+export type ProyectoHito = {
+  _id?: string
+  nombre: string
+  fecha?: string | null
+  hecho?: boolean
+}
+
+export type ProyectoIncidencia = {
+  _id?: string
+  titulo: string
+  detalle?: string
+  estado?: 'Abierta' | 'En curso' | 'Cerrada'
+  fecha?: string | null
+}
+
+export type ProyectoDocumento = {
+  _id?: string
+  nombre: string
+  enlace?: string
+  notas?: string
 }
 
 /** % de consumo del presupuesto (ejecutado / planificado). */
@@ -159,6 +184,28 @@ export function proyectoPuedeGestionarParticipantes(p: Proyecto): boolean {
 
 export function rolParticipanteLabel(rol: ProyectoParticipanteRol): string {
   return rol === 'editor' ? 'Editor' : 'Solo lectura'
+}
+
+function idDeRef(raw: unknown): string | null {
+  if (!raw) return null
+  if (typeof raw === 'string') return raw
+  if (typeof raw === 'object' && '_id' in raw && (raw as { _id?: unknown })._id) {
+    return String((raw as { _id: unknown })._id)
+  }
+  return null
+}
+
+/** Empleados del propietario y de los participantes. Solo ellos se asignan en las tareas. */
+export function empleadoIdsDelEquipo(p: Proyecto): string[] {
+  const ids = new Set<string>()
+  const takeUser = (u: Proyecto['usuario_id']) => {
+    if (!u || typeof u === 'string') return
+    const id = idDeRef(u.empleado_id)
+    if (id) ids.add(id)
+  }
+  takeUser(p.usuario_id)
+  for (const part of p.participantes ?? []) takeUser(part.usuario_id)
+  return [...ids]
 }
 
 export function proyectoOwnerName(p: Proyecto): string {

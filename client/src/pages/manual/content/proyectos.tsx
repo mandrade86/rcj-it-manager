@@ -29,7 +29,7 @@ export const proyectosSections: ManualSection[] = [
     content: (
       <ol>
         <li>En el menú, pulse <strong>Proyectos</strong>.</li>
-        <li>Use los filtros arriba (fase, categoría/eje, estado, prioridad) para encontrar el suyo.</li>
+        <li>Use los filtros arriba (fase, estado, prioridad) para encontrar el suyo.</li>
         <li>
           La columna <strong>Avance</strong> muestra una barra de progreso; cuanto más llena, más avanzado está.
         </li>
@@ -46,10 +46,10 @@ export const proyectosSections: ManualSection[] = [
     content: (
       <ol>
         <li>En Proyectos, pulse <strong>Nuevo proyecto</strong> (o similar).</li>
-        <li>Complete al menos: <strong>nombre</strong>, <strong>departamento</strong>, <strong>categoría (eje)</strong> y fechas.</li>
+        <li>Complete al menos: <strong>nombre</strong>, <strong>departamento</strong> y fechas.</li>
         <li>
           Si el proyecto debe medirse con un indicador, elija el <strong>KPI</strong> en el mismo formulario
-          (solo aparecen los de su departamento y categoría).
+          (solo aparecen los de su departamento).
         </li>
         <li>Guarde. El proyecto aparecerá en la lista y en el Dashboard.</li>
       </ol>
@@ -90,7 +90,7 @@ export const proyectosSections: ManualSection[] = [
       <>
         <p>
           En la pestaña <strong>Roadmap</strong> hay dos partes: un <strong>timeline por fases</strong> (vista
-          ejecutiva) y un <strong>Gantt jerárquico</strong> (detalle por departamento, meta o categoría).
+          ejecutiva) y un <strong>Gantt jerárquico</strong> (detalle por departamento, fase o meta).
         </p>
         <ul className="mt-2 list-disc pl-5">
           <li>

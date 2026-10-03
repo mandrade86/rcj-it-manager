@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Building2, Edit2, Factory, Plus, Target, Trash2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -19,11 +18,9 @@ import { useAuthStore } from '@/store/authStore'
 import { getMetasDepartamento } from '@/lib/metasDepartamento'
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
 import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
-import { fetchEjesProyecto } from '@/lib/api/ejesProyecto'
 import { fetchEmpresas } from '@/lib/api/empresas'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { EmpresaDoc } from '@/types/empresa'
-import type { EjeProyectoDoc } from '@/types/ejeProyecto'
 
 const COLORS_PRESET = [
   '#002060', '#70AD47', '#C00000', '#4527A0', '#0F6E56',
@@ -111,9 +108,9 @@ export function DepartamentosPage() {
   const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DepartamentoDoc | null>(null)
-  const [ejesCatalogo, setEjesCatalogo] = useState<EjeProyectoDoc[]>([])
   const [metasDept, setMetasDept] = useState<DepartamentoDoc | null>(null)
   const [metasOpen, setMetasOpen] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const puedeEditarMetas = useAuthStore(
     (s) => s.hasPermiso('*') || s.hasPermiso('kpis:editar') || s.hasPermiso('maestros:editar'),
@@ -126,23 +123,11 @@ export function DepartamentosPage() {
 
   const visibleIds = useMemo(() => filteredByEmpresa.map((d) => d._id), [filteredByEmpresa])
 
-  const maestroNombres = useMemo(
-    () => new Set(ejesCatalogo.map((e) => e.nombre)),
-    [ejesCatalogo],
-  )
-  const ejesMaestroSorted = useMemo(
-    () =>
-      [...ejesCatalogo].sort(
-        (a, b) => (a.orden ?? 0) - (b.orden ?? 0) || a.nombre.localeCompare(b.nombre),
-      ),
-    [ejesCatalogo],
-  )
-
   const reload = useCallback(async () => {
     setLoading(true); setErr(null)
     try {
       const [deps, emps] = await Promise.all([
-        fetchDepartamentos(),
+        fetchDepartamentos({ todos: true }),
         fetchEmpresas({ activo: true }).catch(() => [] as EmpresaDoc[]),
       ])
       setList(deps)
@@ -172,11 +157,19 @@ export function DepartamentosPage() {
     onAfterDelete: reload,
   })
 
-  useEffect(() => {
-    void fetchEjesProyecto({ activo: true })
-      .then(setEjesCatalogo)
-      .catch(() => setEjesCatalogo([]))
-  }, [])
+  async function toggleActivo(d: DepartamentoDoc) {
+    const next = d.activo === false
+    setList((prev) => prev.map((x) => (x._id === d._id ? { ...x, activo: next } : x)))
+    setTogglingId(d._id)
+    try {
+      await updateDepartamento(d._id, { activo: next })
+    } catch (ex) {
+      setList((prev) => prev.map((x) => (x._id === d._id ? { ...x, activo: d.activo } : x)))
+      window.alert(ex instanceof Error ? ex.message : 'No se pudo cambiar el estado')
+    } finally {
+      setTogglingId(null)
+    }
+  }
 
   function openNew() { setEditing(null); setForm(emptyForm()); setOpen(true) }
   function openEdit(d: DepartamentoDoc) { setEditing(d); setForm(fromDoc(d)); setOpen(true) }
@@ -331,24 +324,6 @@ export function DepartamentosPage() {
               ),
             },
             {
-              id: 'ejes',
-              label: 'Ejes',
-              render: (d) => {
-                const ejes = d.ejes_proyecto ?? []
-                if (ejes.length === 0) return <span className="text-xs" style={{ color: BOARD.muted }}>Sin ejes</span>
-                return (
-                  <div className="flex max-w-sm flex-wrap gap-1">
-                    {ejes.slice(0, 4).map((eje) => (
-                      <BoardPill key={eje} label={eje} bg={BOARD.gray} text={BOARD.text} />
-                    ))}
-                    {ejes.length > 4 && (
-                      <BoardPill label={`+${ejes.length - 4}`} bg={BOARD.blue} />
-                    )}
-                  </div>
-                )
-              },
-            },
-            {
               id: 'gastos',
               label: 'Gastos',
               render: (d) =>
@@ -374,14 +349,25 @@ export function DepartamentosPage() {
             },
             {
               id: 'estado',
-              label: 'Estado',
-              render: (d) => (
-                <BoardPill
-                  label={d.activo ? 'Activo' : 'Inactivo'}
-                  bg={d.activo ? BOARD.green : BOARD.gray}
-                  text={d.activo ? '#fff' : BOARD.text}
-                />
-              ),
+              label: 'Visible',
+              render: (d) => {
+                const on = d.activo !== false
+                return (
+                  <button
+                    type="button"
+                    disabled={togglingId === d._id}
+                    title={on ? 'Clic para ocultar' : 'Clic para mostrar'}
+                    onClick={() => void toggleActivo(d)}
+                    className="disabled:opacity-50"
+                  >
+                    <BoardPill
+                      label={on ? 'Visible' : 'Oculto'}
+                      bg={on ? BOARD.green : BOARD.gray}
+                      text={on ? '#fff' : BOARD.text}
+                    />
+                  </button>
+                )
+              },
             },
             {
               id: 'acciones',
@@ -433,67 +419,6 @@ export function DepartamentosPage() {
             <div className="grid gap-2">
               <Label>Descripción</Label>
               <Textarea rows={2} value={form.descripcion} onChange={(e) => set('descripcion', e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Ejes de proyecto</Label>
-              {ejesMaestroSorted.length > 0 ? (
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border p-2">
-                  {ejesMaestroSorted
-                    .filter((m) => m.activo !== false)
-                    .map((m) => (
-                      <label key={m._id} className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-[var(--lime)]"
-                          checked={form.ejes_proyecto.includes(m.nombre)}
-                          onChange={(ev) => {
-                            const checked = ev.target.checked
-                            setForm((f) => {
-                              const extras = f.ejes_proyecto.filter((x) => !maestroNombres.has(x))
-                              const picked = f.ejes_proyecto.filter((x) => maestroNombres.has(x))
-                              const nextPicked = checked
-                                ? [...new Set([...picked, m.nombre])]
-                                : picked.filter((x) => x !== m.nombre)
-                              return { ...f, ejes_proyecto: [...nextPicked, ...extras] }
-                            })
-                          }}
-                        />
-                        <span
-                          className="size-2.5 shrink-0 rounded-full"
-                          style={{ background: m.color ?? '#1F4E79' }}
-                        />
-                        <span>{m.nombre}</span>
-                      </label>
-                    ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No hay ejes activos en catálogo.{' '}
-                  <Link to="/maestros/ejes-proyecto" className="text-[var(--navy)] underline">
-                    Maestro · Ejes de proyecto
-                  </Link>
-                </p>
-              )}
-              <Label className="text-muted-foreground">Otros ejes (opcional, uno por línea)</Label>
-              <Textarea
-                rows={4}
-                value={form.ejes_proyecto.filter((e) => !maestroNombres.has(e)).join('\n')}
-                onChange={(e) => {
-                  const lines = e.target.value.split('\n').map((v) => v.trim()).filter(Boolean)
-                  setForm((f) => {
-                    const fromCatalog = f.ejes_proyecto.filter((x) => maestroNombres.has(x))
-                    return { ...f, ejes_proyecto: [...new Set([...fromCatalog, ...lines])] }
-                  })
-                }}
-                placeholder="Ejes sólo de este departamento que no estén en el catálogo global"
-              />
-              <p className="text-xs text-muted-foreground">
-                El catálogo global se administra en{' '}
-                <Link to="/maestros/ejes-proyecto" className="text-[var(--navy)] underline">
-                  Maestro · Ejes de proyecto
-                </Link>
-                . Aquí eliges cuáles aplican a este departamento y puedes añadir líneas extra.
-              </p>
             </div>
 
             <div className="rounded-md border border-border bg-muted/40 p-3 space-y-3">

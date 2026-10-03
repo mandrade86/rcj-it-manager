@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 import multer from 'multer'
 
+import { Empleado } from '../db/models/Empleado.js'
 import { Usuario } from '../db/models/Usuario.js'
 import { requirePermiso } from '../middleware/requireAuth.js'
 import {
@@ -35,7 +36,7 @@ const uploadUsuariosExcel = multer({
 })
 
 const ALLOWED = [
-  'nombre', 'email', 'rol_id', 'empleado_id', 'empleados_ids', 'departamento_id', 'activo',
+  'nombre', 'email', 'rol_id', 'roles_ids', 'empleado_id', 'empleados_ids', 'departamento_id', 'activo',
 ] as const
 
 function toObjectIdOrNull(value: unknown): mongoose.Types.ObjectId | null | 'invalid' {
@@ -48,17 +49,26 @@ function pickBody(body: Record<string, unknown>): Record<string, unknown> | { er
   const out: Record<string, unknown> = {}
   for (const k of ALLOWED) {
     if (body[k] === undefined) continue
-    if (k === 'empleados_ids') {
+    if (k === 'empleados_ids' || k === 'roles_ids') {
       const raw = body[k]
       const ids = Array.isArray(raw)
         ? raw.filter((v) => typeof v === 'string' && v.length > 0)
         : []
       for (const id of ids) {
         if (!mongoose.isValidObjectId(id)) {
-          return { error: 'Uno de los empleados adicionales no es válido.', field: 'empleados_ids' }
+          return {
+            error: k === 'roles_ids'
+              ? 'Uno de los roles no es válido.'
+              : 'Uno de los empleados adicionales no es válido.',
+            field: k,
+          }
         }
       }
+      if (k === 'roles_ids' && ids.length === 0) {
+        return { error: 'Selecciona al menos un rol.', field: 'roles_ids' }
+      }
       out[k] = ids
+      if (k === 'roles_ids') out.rol_id = new mongoose.Types.ObjectId(ids[0])
     } else if (k === 'empleado_id' || k === 'departamento_id' || k === 'rol_id') {
       const parsed = toObjectIdOrNull(body[k])
       if (parsed === 'invalid') {
@@ -81,10 +91,11 @@ function pickBody(body: Record<string, unknown>): Record<string, unknown> | { er
 
 const POPULATE_FIELDS = [
   { path: 'rol_id', select: 'nombre permisos' },
+  { path: 'roles_ids', select: 'nombre permisos' },
   { path: 'empleado_id', select: 'codigo nombre puesto departamento' },
   { path: 'empleados_ids', select: 'codigo nombre puesto departamento' },
   { path: 'departamento_id', select: 'codigo nombre color' },
-] as const
+]
 
 usuariosRouter.get('/', async (_req, res, next) => {
   try {
@@ -99,7 +110,7 @@ usuariosRouter.get('/', async (_req, res, next) => {
   }
 })
 
-usuariosRouter.post('/eliminar-lote', async (req, res, next) => {
+usuariosRouter.post('/eliminar-lote', requirePermiso('usuarios:editar'), async (req, res, next) => {
   try {
     const parsed = parseEliminarLoteIds((req.body as { ids?: unknown }).ids)
     if ('error' in parsed) {
@@ -213,39 +224,71 @@ usuariosRouter.get('/:id', async (req, res, next) => {
   }
 })
 
-usuariosRouter.post('/', async (req, res, next) => {
+usuariosRouter.post('/', requirePermiso('usuarios:editar'), async (req, res, next) => {
   try {
     const body = req.body as Record<string, unknown>
-    const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : ''
     const password = body.password
-    const rol_id = body.rol_id
     const esUsuarioDominio = body.es_usuario_dominio === true
-
-    if (!nombre) {
-      res.status(400).json({ error: 'El nombre completo es obligatorio.', field: 'nombre' })
-      return
-    }
-    if (!rol_id || typeof rol_id !== 'string') {
+    const rol_id = body.rol_id
+    const rolesIds = Array.isArray(body.roles_ids)
+      ? body.roles_ids.filter((v): v is string => typeof v === 'string' && mongoose.isValidObjectId(v))
+      : []
+    const rolPrincipal = rolesIds[0] ?? (typeof rol_id === 'string' ? rol_id : '')
+    if (!rolPrincipal) {
       res.status(400).json({ error: 'Debes seleccionar un rol para el usuario.', field: 'rol_id' })
       return
     }
 
-    const email = body.email
-    if (!email || typeof email !== 'string' || !email.trim()) {
+    const empId = toObjectIdOrNull(body.empleado_id)
+    if (!empId || empId === 'invalid') {
       res.status(400).json({
-        error: 'El correo electrónico corporativo es obligatorio.',
-        field: 'email',
+        error: empId === 'invalid'
+          ? 'El empleado vinculado no es válido.'
+          : 'Elige el empleado del que se crea este usuario.',
+        field: 'empleado_id',
       })
       return
     }
-    const emailNorm = email.trim().toLowerCase()
+    const empleado = await Empleado.findById(empId)
+      .select('nombre email departamento_id activo')
+      .lean() as {
+      nombre?: string
+      email?: string
+      departamento_id?: unknown
+      activo?: boolean
+    } | null
+    if (!empleado || empleado.activo === false) {
+      res.status(400).json({
+        error: empleado ? 'Ese empleado está inactivo.' : 'No se encontró ese empleado.',
+        field: 'empleado_id',
+      })
+      return
+    }
+    const taken = await Usuario.findOne({ empleado_id: empId }).select('nombre').lean() as { nombre?: string } | null
+    if (taken) {
+      res.status(409).json({
+        error: `Ese empleado ya está vinculado al usuario «${taken.nombre ?? 'otro'}». Elige otro empleado o edita el usuario existente.`,
+        field: 'empleado_id',
+      })
+      return
+    }
+    const nombre = (empleado.nombre ?? '').trim()
+    const emailNorm = (empleado.email ?? '').trim().toLowerCase()
+    if (!nombre) {
+      res.status(400).json({ error: 'El empleado no tiene nombre en su ficha.', field: 'empleado_id' })
+      return
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
       res.status(400).json({
-        error: 'El formato del correo no es válido (ej. nombre.apellido@rcjcorp.com).',
-        field: 'email',
+        error: 'Ese empleado no tiene un correo válido. Complétalo en Empleados y vuelve a intentar.',
+        field: 'empleado_id',
       })
       return
     }
+    const deptRaw = empleado.departamento_id
+    const deptId = deptRaw && mongoose.isValidObjectId(String(deptRaw))
+      ? new mongoose.Types.ObjectId(String(deptRaw))
+      : null
 
     let loginDominio = ''
     if (esUsuarioDominio) {
@@ -277,28 +320,8 @@ usuariosRouter.post('/', async (req, res, next) => {
     const empleados_ids = Array.isArray(empleadosRaw)
       ? empleadosRaw.filter((v) => typeof v === 'string' && v.length > 0)
       : []
-    if (!mongoose.isValidObjectId(rol_id)) {
+    if (!mongoose.isValidObjectId(rolPrincipal)) {
       res.status(400).json({ error: 'El rol seleccionado no es válido.', field: 'rol_id' })
-      return
-    }
-    const empId = toObjectIdOrNull(body.empleado_id)
-    if (empId === 'invalid') {
-      res.status(400).json({ error: 'El empleado vinculado no es válido.', field: 'empleado_id' })
-      return
-    }
-    if (empId) {
-      const taken = await Usuario.findOne({ empleado_id: empId }).select('nombre').lean()
-      if (taken) {
-        res.status(409).json({
-          error: `Ese empleado ya está vinculado al usuario «${taken.nombre}». Elige otro empleado o edita el usuario existente.`,
-          field: 'empleado_id',
-        })
-        return
-      }
-    }
-    const deptId = toObjectIdOrNull(body.departamento_id)
-    if (deptId === 'invalid') {
-      res.status(400).json({ error: 'El departamento seleccionado no es válido.', field: 'departamento_id' })
       return
     }
     const pwd = typeof password === 'string' ? password.trim() : ''
@@ -324,7 +347,8 @@ usuariosRouter.post('/', async (req, res, next) => {
       login_dominio: esUsuarioDominio ? loginDominio : '',
       es_usuario_dominio: esUsuarioDominio,
       password: hash,
-      rol_id,
+      rol_id: rolPrincipal,
+      roles_ids: rolesIds.length > 0 ? rolesIds : [rolPrincipal],
       empleado_id: empId,
       empleados_ids,
       departamento_id: deptId,
@@ -346,7 +370,7 @@ usuariosRouter.post('/', async (req, res, next) => {
   }
 })
 
-usuariosRouter.put('/:id', async (req, res, next) => {
+usuariosRouter.put('/:id', requirePermiso('usuarios:editar'), async (req, res, next) => {
   try {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }
@@ -368,7 +392,7 @@ usuariosRouter.put('/:id', async (req, res, next) => {
   }
 })
 
-usuariosRouter.post('/:id/reset-password', async (req, res, next) => {
+usuariosRouter.post('/:id/reset-password', requirePermiso('usuarios:editar'), async (req, res, next) => {
   try {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }
@@ -384,7 +408,7 @@ usuariosRouter.post('/:id/reset-password', async (req, res, next) => {
   }
 })
 
-usuariosRouter.delete('/:id', async (req, res, next) => {
+usuariosRouter.delete('/:id', requirePermiso('usuarios:editar'), async (req, res, next) => {
   try {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }

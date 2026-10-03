@@ -4,9 +4,10 @@ import { authenticateUserViaEhr, isAdLoginEnabled } from './ehrAuth.js'
 
 const USUARIO_POPULATE = [
   { path: 'rol_id', select: 'nombre permisos' },
+  { path: 'roles_ids', select: 'nombre permisos' },
   { path: 'empleado_id', select: 'codigo nombre' },
   { path: 'departamento_id', select: 'codigo nombre lleva_gastos' },
-] as const
+]
 
 export type LoginIdentifier = {
   raw: string

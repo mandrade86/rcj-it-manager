@@ -28,6 +28,12 @@ export const PERMISOS_FUERA_BI_COSTEO = [
 /** Permisos requeridos por ruta (cualquiera del arreglo basta). */
 export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/': 'dashboard:ver',
+  '/mi-dia': 'dashboard:ver',
+  '/mis-tareas': 'dashboard:ver',
+  '/dashboard': 'dashboard:ver',
+  '/notificaciones': 'dashboard:ver',
+  '/admin/configuracion': ['usuarios:editar', 'roles:editar'],
+  '/admin/auditoria': 'roles:ver',
   '/resumen-departamento': 'dashboard:ver',
   '/proyectos': 'proyectos:ver',
   '/proyectos/nuevo': 'proyectos:editar',

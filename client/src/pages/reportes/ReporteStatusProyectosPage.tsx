@@ -3,12 +3,12 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  Building2,
   CheckCircle2,
   ChevronRight,
   FolderKanban,
-  Layers,
-  Sparkles,
+  LayoutGrid,
+  Table2,
+  Timer,
   TrendingUp,
   X,
 } from 'lucide-react'
@@ -50,6 +50,30 @@ import { ProyectoStatusSheet } from './ProyectoStatusSheet'
 
 type Props = {
   embedded?: boolean
+}
+
+function startOfDay(d = new Date()): Date {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+
+function proyectoCerrado(p: ReporteStatusProyectoItem): boolean {
+  return p.estado === 'Completado' || p.estado === 'Cancelado'
+}
+
+function proyectoAtrasado(p: ReporteStatusProyectoItem, hoy = startOfDay()): boolean {
+  if (proyectoCerrado(p) || !p.fecha_fin) return false
+  const fin = new Date(p.fecha_fin)
+  if (Number.isNaN(fin.getTime())) return false
+  return fin.getTime() < hoy.getTime()
+}
+
+function rankRiesgo(nivel: string): number {
+  if (nivel === 'Alto') return 0
+  if (nivel === 'Medio') return 1
+  if (nivel === 'Sin fecha') return 2
+  return 3
 }
 
 function KpiCard({
@@ -212,16 +236,13 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
   const [filtroDepto, setFiltroDepto] = useState<string | null>(null)
   const [filtroProyecto, setFiltroProyecto] = useState('')
   const [proyectoSheet, setProyectoSheet] = useState<ReporteStatusProyectoItem | null>(null)
+  const [vista, setVista] = useState<'tabla' | 'tarjetas'>('tabla')
 
   const cargar = useCallback(async () => {
     setLoading(true)
     setErr(null)
     try {
-      const r = await fetchReporteStatusProyectos({
-        alcance: filtroDepto ? 'departamento' : 'todos',
-        departamento_id: filtroDepto ?? undefined,
-        proyecto_id: filtroProyecto || undefined,
-      })
+      const r = await fetchReporteStatusProyectos({ alcance: 'todos' })
       setData(r)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al cargar reporte')
@@ -229,7 +250,7 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [filtroDepto, filtroProyecto])
+  }, [])
 
   useEffect(() => {
     void cargar()
@@ -259,12 +280,6 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
     return list
   }, [todosProyectos, filtroDepto, filtroProyecto])
 
-  const deptosEnVista = useMemo(() => {
-    if (!data) return []
-    if (filtroDepto) return data.departamentos.filter((d) => d.departamento_id === filtroDepto)
-    return data.departamentos
-  }, [data, filtroDepto])
-
   const opcionesProyecto = useMemo(() => {
     const base = filtroDepto
       ? todosProyectos.filter((p) => p.departamento_id === filtroDepto)
@@ -290,6 +305,60 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
     )
   }, [proyectosVisibles])
 
+  const kpisVista = useMemo(() => {
+    const hoy = startOfDay()
+    let activos = 0
+    let completados = 0
+    let bloqueados = 0
+    let atrasados = 0
+    let riesgoAlto = 0
+    for (const p of proyectosVisibles) {
+      if (p.estado === 'Completado') completados++
+      else if (p.estado === 'Bloqueado') bloqueados++
+      else activos++
+      if (proyectoAtrasado(p, hoy)) atrasados++
+      if (p.riesgo_auto.nivel === 'Alto') riesgoAlto++
+    }
+    return {
+      total: proyectosVisibles.length,
+      activos,
+      completados,
+      bloqueados,
+      atrasados,
+      riesgoAlto,
+      avance: avanceVista,
+    }
+  }, [proyectosVisibles, avanceVista])
+
+  const tablaProyectos = useMemo(() => {
+    return [...proyectosVisibles].sort((a, b) => {
+      const ra = rankRiesgo(a.riesgo_auto.nivel)
+      const rb = rankRiesgo(b.riesgo_auto.nivel)
+      if (ra !== rb) return ra - rb
+      const aa = proyectoAtrasado(a) ? 0 : 1
+      const ab = proyectoAtrasado(b) ? 0 : 1
+      if (aa !== ab) return aa - ab
+      return a.nombre.localeCompare(b.nombre, 'es')
+    })
+  }, [proyectosVisibles])
+
+  const insights = useMemo(() => {
+    const k = kpisVista
+    const out: string[] = [
+      `${k.total} proyecto${k.total === 1 ? '' : 's'} · avance medio ${k.avance}%.`,
+    ]
+    if (k.atrasados || k.riesgoAlto || k.bloqueados) {
+      const bits: string[] = []
+      if (k.atrasados) bits.push(`${k.atrasados} atrasado${k.atrasados === 1 ? '' : 's'}`)
+      if (k.riesgoAlto) bits.push(`${k.riesgoAlto} en riesgo alto`)
+      if (k.bloqueados) bits.push(`${k.bloqueados} bloqueado${k.bloqueados === 1 ? '' : 's'}`)
+      out.push(`Atención: ${bits.join(' · ')}.`)
+    } else {
+      out.push('Sin atrasos, bloqueos ni riesgo alto en este alcance.')
+    }
+    return out
+  }, [kpisVista])
+
   function limpiarFiltros() {
     setFiltroDepto(null)
     setFiltroProyecto('')
@@ -304,11 +373,11 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
       const d = data?.departamentos_disponibles.find((x) => x._id === filtroDepto)
       return d ? `Departamento: ${d.nombre}` : 'Departamento seleccionado'
     }
-    return 'Todos los departamentos'
+    return 'Todos los proyectos'
   }, [filtroProyecto, filtroDepto, todosProyectos, data?.departamentos_disponibles])
 
   return (
-    <div className={cn('reporte-status-page space-y-6', !embedded && 'mx-auto max-w-7xl')}>
+    <div className={cn('reporte-status-page w-full space-y-6')}>
       {/* Hero ejecutivo */}
       <div
         className={cn(
@@ -325,8 +394,7 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
             {!embedded && (
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-[var(--lime)]">
-                <Sparkles className="size-3.5" />
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--lime)]">
                 Reportería ejecutiva
               </p>
             )}
@@ -336,11 +404,10 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
                 embedded ? 'text-xl' : 'text-2xl sm:text-3xl',
               )}
             >
-              Project Status Dashboard
+              Resumen general de proyectos
             </h1>
             <p className="mt-2 max-w-xl text-sm text-blue-100/90">
-              Portafolio de proyectos por departamento — filtra, explora y documenta riesgos con
-              evidencias para presentar a gerencia.
+              Todo el portafolio en una tabla. PDF listo para gerencia.
             </p>
             {data && (
               <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-blue-100">
@@ -351,7 +418,7 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
           </div>
           {data ? (
             <ReportePdfButtons
-              filename={`project-status-${data.generado_en.slice(0, 10)}.pdf`}
+              filename={`resumen-proyectos-${data.generado_en.slice(0, 10)}.pdf`}
               renderPrintSheet={(onMounted) => (
                 <ReporteStatusPrintSheet
                   data={data}
@@ -466,11 +533,25 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
               RCJ Corporación — IT Manager
             </p>
             <h2 className="mt-1 text-xl font-semibold text-[var(--navy)]">
-              Project Status Dashboard
+              Resumen general de proyectos
             </h2>
             <p className="text-sm text-muted-foreground">
               Generado: {formatDateDMY(data.generado_en)}
             </p>
+          </div>
+
+          <div className="rounded-xl border border-[var(--navy)]/15 bg-[var(--blue-lt)]/60 px-4 py-3 print:hidden">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--navy)]">
+              Lectura ejecutiva
+            </p>
+            <ul className="space-y-1 text-sm text-[var(--navy)]">
+              {insights.map((t) => (
+                <li key={t} className="flex gap-2">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--lime)]" />
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* KPIs + gauge + gráfica */}
@@ -478,41 +559,42 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
             <div className="grid gap-3 sm:grid-cols-2 lg:col-span-8 lg:grid-cols-3">
               <KpiCard
                 label="Proyectos"
-                value={data.resumen.total_proyectos}
+                value={kpisVista.total}
                 icon={FolderKanban}
                 accent="#002060"
               />
               <KpiCard
-                label="Departamentos"
-                value={data.resumen.total_departamentos}
-                icon={Building2}
-                accent="#1F4E79"
-              />
-              <KpiCard
                 label="Activos"
-                value={data.resumen.activos}
+                value={kpisVista.activos}
                 icon={Activity}
                 accent="#70AD47"
               />
               <KpiCard
                 label="Completados"
-                value={data.resumen.completados}
+                value={kpisVista.completados}
                 icon={CheckCircle2}
                 accent="#0F6E56"
               />
               <KpiCard
                 label="Avance prom."
-                value={`${data.resumen.avance_promedio}%`}
+                value={`${kpisVista.avance}%`}
                 icon={TrendingUp}
                 accent="#4527A0"
               />
               <KpiCard
-                label="Riesgos doc."
-                value={data.resumen.riesgos_registrados}
-                sub={data.resumen.riesgos_alto > 0 ? `${data.resumen.riesgos_alto} nivel alto` : undefined}
+                label="Atrasados"
+                value={kpisVista.atrasados}
+                icon={Timer}
+                accent="#C00000"
+                alert={kpisVista.atrasados > 0}
+              />
+              <KpiCard
+                label="Riesgo alto"
+                value={kpisVista.riesgoAlto}
+                sub={kpisVista.bloqueados > 0 ? `${kpisVista.bloqueados} bloqueado${kpisVista.bloqueados === 1 ? '' : 's'}` : undefined}
                 icon={AlertTriangle}
                 accent="#C00000"
-                alert={data.resumen.riesgos_alto > 0}
+                alert={kpisVista.riesgoAlto > 0}
               />
             </div>
 
@@ -566,75 +648,41 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
             </div>
           </div>
 
-          {/* Departamentos */}
-          {!filtroProyecto && deptosEnVista.length > 0 && (
-            <div>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--navy)] print:hidden">
-                <Layers className="size-4 text-[var(--lime)]" />
-                Por departamento
+          {/* Tabla resumen de todos los proyectos */}
+          <div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
+              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--navy)]">
+                <Table2 className="size-4 text-[var(--lime)]" />
+                Todos los proyectos
+                <Badge variant="outline" className="ml-1 text-[10px] font-normal">
+                  {proyectosVisibles.length}
+                </Badge>
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
-                {deptosEnVista.map((dept) => {
-                  const selected = filtroDepto === dept.departamento_id
-                  const riesgosDept = dept.proyectos.reduce((s, p) => s + p.riesgos_registrados, 0)
-                  return (
-                    <button
-                      key={dept.departamento_id ?? 'sin-depto'}
-                      type="button"
-                      onClick={() => setFiltroDepto(dept.departamento_id)}
-                      className={cn(
-                        'group relative overflow-hidden rounded-xl border p-4 text-left shadow-md transition-all hover:-translate-y-0.5 hover:shadow-xl',
-                        selected
-                          ? 'border-[var(--lime)] bg-[var(--lime-lt)]/50 ring-2 ring-[var(--lime)]/40'
-                          : 'border-border bg-white hover:border-[var(--navy)]/20',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex size-11 items-center justify-center rounded-xl bg-[var(--navy)]/10 text-[var(--navy)]">
-                          <Building2 className="size-5" />
-                        </div>
-                        <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                      </div>
-                      <p className="mt-3 font-semibold text-[var(--navy)]">{dept.departamento_nombre}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {dept.resumen.total_proyectos} proyectos · {dept.resumen.activos} activos
-                      </p>
-                      <div className="mt-3">
-                        <div className="mb-1 flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">Avance</span>
-                          <span className="font-semibold text-[var(--navy)]">
-                            {dept.resumen.avance_promedio}%
-                          </span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-[var(--navy)] to-[var(--lime)]"
-                            style={{ width: `${dept.resumen.avance_promedio}%` }}
-                          />
-                        </div>
-                      </div>
-                      {riesgosDept > 0 && (
-                        <p className="mt-2 flex items-center gap-1 text-[10px] font-medium text-red-600">
-                          <AlertTriangle className="size-3" />
-                          {riesgosDept} riesgo{riesgosDept === 1 ? '' : 's'} documentado{riesgosDept === 1 ? '' : 's'}
-                        </p>
-                      )}
-                    </button>
-                  )
-                })}
+              <div className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs">
+                <button
+                  type="button"
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-medium',
+                    vista === 'tabla' ? 'bg-white text-[var(--navy)] shadow-sm' : 'text-muted-foreground',
+                  )}
+                  onClick={() => setVista('tabla')}
+                >
+                  <Table2 className="size-3.5" />
+                  Tabla
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-medium',
+                    vista === 'tarjetas' ? 'bg-white text-[var(--navy)] shadow-sm' : 'text-muted-foreground',
+                  )}
+                  onClick={() => setVista('tarjetas')}
+                >
+                  <LayoutGrid className="size-3.5" />
+                  Tarjetas
+                </button>
               </div>
             </div>
-          )}
-
-          {/* Proyectos */}
-          <div>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--navy)]">
-              <FolderKanban className="size-4 text-[var(--lime)]" />
-              Proyectos
-              <Badge variant="outline" className="ml-1 text-[10px] font-normal">
-                {proyectosVisibles.length}
-              </Badge>
-            </h2>
 
             {proyectosVisibles.length === 0 ? (
               <Card className="border-dashed shadow-sm">
@@ -645,6 +693,89 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
                   </p>
                 </CardContent>
               </Card>
+            ) : vista === 'tabla' ? (
+              <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+                <table className="w-full min-w-[860px] text-left text-sm">
+                  <thead className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Proyecto</th>
+                      <th className="px-3 py-2 font-medium">Depto</th>
+                      <th className="px-3 py-2 font-medium">Estado</th>
+                      <th className="px-3 py-2 font-medium">Avance</th>
+                      <th className="px-3 py-2 font-medium">Vence</th>
+                      <th className="px-3 py-2 font-medium">Riesgo</th>
+                      <th className="px-3 py-2 font-medium">Tareas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {tablaProyectos.map((p) => {
+                      const deptNombre =
+                        data.departamentos.find((d) => d.departamento_id === p.departamento_id)
+                          ?.departamento_nombre ?? '—'
+                      const late = proyectoAtrasado(p)
+                      return (
+                        <tr
+                          key={p.proyecto_id}
+                          className="cursor-pointer hover:bg-[var(--blue-lt)]/50"
+                          onClick={() => setProyectoSheet(p)}
+                        >
+                          <td className="max-w-[280px] px-3 py-2">
+                            <p className="truncate font-medium text-[var(--navy)]">{p.nombre}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              {p.propietario || p.responsable || 'Sin dueño'}
+                              {p.fase != null ? ` · F${p.fase}` : ''}
+                            </p>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                            {deptNombre}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge
+                              variant="outline"
+                              className={cn('text-[10px]', estadoColor(p.estado as ProyectoEstado))}
+                            >
+                              {p.estado}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full rounded-full bg-[var(--navy)]"
+                                  style={{ width: `${Math.min(100, p.porcentaje_avance)}%` }}
+                                />
+                              </div>
+                              <span className="tabular-nums text-xs">{p.porcentaje_avance}%</span>
+                            </div>
+                          </td>
+                          <td
+                            className={cn(
+                              'whitespace-nowrap px-3 py-2 text-xs tabular-nums',
+                              late && 'font-semibold text-[#C00000]',
+                            )}
+                          >
+                            {formatDateDMY(p.fecha_fin)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                              style={{
+                                color: p.riesgo_auto.color,
+                                backgroundColor: `${p.riesgo_auto.color}18`,
+                              }}
+                            >
+                              {p.riesgo_auto.nivel}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                            {p.tareas_completadas}/{p.tareas_total}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {proyectosVisibles.map((p) => {

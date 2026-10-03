@@ -27,7 +27,7 @@ const ComentarioTareaSchema = new Schema(
 
 const TareaSchema = new Schema(
   {
-    proyecto_id: { type: String, ref: 'Proyecto', required: true },
+    proyecto_id: { type: String, ref: 'Proyecto', default: null, index: true },
     nombre: { type: String, required: true },
     descripcion: { type: String },
     /** Nombre del responsable (texto). Se mantiene por compatibilidad. */
@@ -36,11 +36,8 @@ const TareaSchema = new Schema(
     responsable_id: { type: Schema.Types.ObjectId, ref: 'Empleado', default: null },
     fecha_inicio: { type: Date },
     fecha_fin: { type: Date },
-    estado: {
-      type: String,
-      enum: ['Pendiente', 'En progreso', 'Completado', 'Bloqueado'],
-      default: 'Pendiente',
-    },
+    /** Clave del catálogo de estados (los cuatro de sistema o uno agregado en Configuración). */
+    estado: { type: String, default: 'Pendiente' },
     prioridad: {
       type: String,
       enum: ['Alta', 'Media', 'Baja'],
@@ -66,6 +63,8 @@ const TareaSchema = new Schema(
     comentarios: { type: [ComentarioTareaSchema], default: [] },
     /** Etiquetas libres para clasificar y filtrar tareas. */
     tags: { type: [String], default: [] },
+    /** Quién creó la tarea (útil en tareas personales / asignadas sin proyecto). */
+    creado_por_usuario_id: { type: Schema.Types.ObjectId, ref: 'Usuario', default: null, index: true },
   },
   { timestamps: true },
 )

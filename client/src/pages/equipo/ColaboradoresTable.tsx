@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { formatLps } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
 import type { Colaborador } from '@/types/colaborador'
 
 export function ColaboradoresTable({
@@ -24,6 +25,8 @@ export function ColaboradoresTable({
   onEdit: (c: Colaborador) => void
   onDelete: (c: Colaborador) => void
 }) {
+  const verSalario = useAuthStore((s) => s.hasPermiso('*') || s.hasPermiso('empleados:ver-salario'))
+  const colSpan = verSalario ? 7 : 6
   return (
     <div className="rounded-lg border border-border bg-card shadow-sm">
       <Table>
@@ -34,14 +37,14 @@ export function ColaboradoresTable({
             <TableHead>Frente</TableHead>
             <TableHead>Nivel</TableHead>
             <TableHead>Estado</TableHead>
-            <TableHead className="text-right">Salario</TableHead>
+            {verSalario && <TableHead className="text-right">Salario</TableHead>}
             <TableHead className="w-[100px] text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={colSpan} className="h-24 text-center text-muted-foreground">
                 No hay colaboradores con los filtros seleccionados.
               </TableCell>
             </TableRow>
@@ -74,9 +77,11 @@ export function ColaboradoresTable({
                     {c.estado}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatLps(c.salario_mensual ?? null)}
-                </TableCell>
+                {verSalario && (
+                  <TableCell className="text-right tabular-nums">
+                    {formatLps(c.salario_mensual ?? null)}
+                  </TableCell>
+                )}
                 <TableCell className="text-right">
                   <Button
                     type="button"

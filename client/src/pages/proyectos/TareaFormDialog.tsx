@@ -15,8 +15,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchEmpleados } from '@/lib/api/empleados'
 import { collectTagsFromTareas } from '@/lib/tareaTags'
+import { ESTADOS_BASE, fetchTareaEstados, type TareaEstadoDef } from '@/lib/tareaBoardPrefs'
 import type { EmpleadoDoc } from '@/types/empleado'
-import type { Tarea, TareaEstado, TareaPrioridad } from '@/types/tarea'
+import type { Tarea, TareaPrioridad } from '@/types/tarea'
 
 const selectClass =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
@@ -28,7 +29,7 @@ type FormState = {
   responsable_id: string
   fecha_inicio: string
   fecha_fin: string
-  estado: TareaEstado
+  estado: string
   prioridad: TareaPrioridad | ''
   monto_asignado: string
   monto_ejecutado: string
@@ -82,6 +83,8 @@ type Props = {
   proyectoEje: string
   editing: Tarea | null
   tareasProyecto: Tarea[]
+  /** Empleados del equipo del proyecto. La asignación solo ofrece esta lista. */
+  equipoEmpleadoIds: string[]
   onSave: (payload: Record<string, unknown>) => Promise<void>
 }
 
@@ -92,6 +95,7 @@ export function TareaFormDialog({
   proyectoEje,
   editing,
   tareasProyecto,
+  equipoEmpleadoIds,
   onSave,
 }: Props) {
   const [form, setForm] = useState<FormState>(() =>
@@ -99,7 +103,13 @@ export function TareaFormDialog({
   )
   const [saving, setSaving] = useState(false)
   const [empleados, setEmpleados] = useState<EmpleadoDoc[]>([])
+  const [estados, setEstados] = useState<TareaEstadoDef[]>(ESTADOS_BASE)
   const isEdit = Boolean(editing)
+
+  useEffect(() => {
+    if (!open) return
+    void fetchTareaEstados().then(setEstados).catch(() => setEstados(ESTADOS_BASE))
+  }, [open])
 
   const candidatasDependencia = useMemo(
     () => tareasProyecto
@@ -138,7 +148,12 @@ export function TareaFormDialog({
   /** Si el empleado actual (por nombre) no está en la lista activa, lo agregamos
    * como opción para no perderlo al buscar. */
   const empleadosConLegacy = useMemo(() => {
-    const list = [...empleados]
+    const ids = new Set(equipoEmpleadoIds)
+    const list = empleados.filter((e) => ids.has(String(e._id)))
+    if (form.responsable_id && !list.some((e) => String(e._id) === form.responsable_id)) {
+      const actual = empleados.find((e) => String(e._id) === form.responsable_id)
+      if (actual) list.unshift(actual)
+    }
     if (form.responsable && !list.some((e) =>
       String(e._id) === form.responsable_id || e.nombre === form.responsable,
     )) {
@@ -150,7 +165,7 @@ export function TareaFormDialog({
       } as EmpleadoDoc)
     }
     return list
-  }, [empleados, form.responsable, form.responsable_id])
+  }, [empleados, equipoEmpleadoIds, form.responsable, form.responsable_id])
 
   function handleResponsableChange(next: { responsable: string; responsable_id: string }) {
     setForm((s) => ({
@@ -162,6 +177,17 @@ export function TareaFormDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.nombre.trim()) return
+    if (!isEdit) {
+      if (!form.responsable_id && !form.responsable.trim()) {
+        window.alert('Indica el asignado.')
+        return
+      }
+      if (!form.estado || !form.prioridad || !form.fecha_fin.trim()) {
+        window.alert('Indica estado, prioridad y fecha.')
+        return
+      }
+    }
     setSaving(true)
     try {
       const o: Record<string, unknown> = {
@@ -237,12 +263,14 @@ export function TareaFormDialog({
             <Label htmlFor="t-resp">Responsable</Label>
             <EmpleadoSearchSelect
               id="t-resp"
+              soloCatalogo
               empleados={empleadosConLegacy.filter((e) => !String(e._id).startsWith('__legacy__:'))}
               value={{ responsable: form.responsable, responsable_id: form.responsable_id }}
               onChange={handleResponsableChange}
+              placeholder="Buscar en el equipo…"
             />
             <p className="text-xs text-muted-foreground">
-              Escribe para buscar en el directorio de empleados o deja un nombre manual.
+              Solo aparecen las personas del equipo del proyecto.
             </p>
           </div>
           <TareaTagsInput
@@ -279,13 +307,15 @@ export function TareaFormDialog({
                 className={selectClass}
                 value={form.estado}
                 onChange={(e) =>
-                  setForm((s) => ({ ...s, estado: e.target.value as TareaEstado }))
+                  setForm((s) => ({ ...s, estado: e.target.value }))
                 }
               >
-                <option value="Pendiente">Pendiente</option>
-                <option value="En progreso">En progreso</option>
-                <option value="Completado">Completado</option>
-                <option value="Bloqueado">Bloqueado</option>
+                {!estados.some((x) => x.clave === form.estado) && (
+                  <option value={form.estado}>{form.estado}</option>
+                )}
+                {estados.map((e) => (
+                  <option key={e.clave} value={e.clave}>{e.etiqueta}</option>
+                ))}
               </select>
             </div>
             <div className="grid gap-2">

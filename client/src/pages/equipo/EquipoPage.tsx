@@ -212,6 +212,11 @@ export function EquipoPage() {
     })
   }, [empleados, filterDept, filterEmpresa, filterEstado, busqueda, deptToEmpresaId])
 
+  const empleadosOrganigrama = useMemo(
+    () => filtrados.filter((e) => e.activo !== false),
+    [filtrados],
+  )
+
   const selected = useMemo(
     () => filtrados.find((e) => e._id === selectedId) ?? null,
     [filtrados, selectedId],
@@ -500,12 +505,18 @@ export function EquipoPage() {
         />
       )}
 
-      {!loading && filtrados.length > 0 && vista === 'orgchart' && (
+      {!loading && vista === 'orgchart' && empleadosOrganigrama.length === 0 && filtrados.length > 0 && (
+        <p className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+          El organigrama solo muestra empleados activos. Cambia el filtro de estado o revisa el tablero.
+        </p>
+      )}
+
+      {!loading && empleadosOrganigrama.length > 0 && vista === 'orgchart' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           <Card>
             <CardContent className="p-0">
               <OrgChart
-                empleados={filtrados}
+                empleados={empleadosOrganigrama}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 forcedRootIds={data?.rootIds}

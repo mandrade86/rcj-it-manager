@@ -44,6 +44,7 @@ type FormState = {
   es_usuario_dominio: boolean
   password: string
   rol_id: string
+  roles_ids: string[]
   empleado_id: string
   departamento_id: string
   empleados_ids: string[]
@@ -53,8 +54,17 @@ type FormState = {
 function emptyForm(): FormState {
   return {
     nombre: '', email: '', login_dominio: '', es_usuario_dominio: false, password: '', rol_id: '',
-    empleado_id: '', departamento_id: '', empleados_ids: [], activo: true,
+    roles_ids: [], empleado_id: '', departamento_id: '', empleados_ids: [], activo: true,
   }
+}
+
+function rolesNombres(u: UsuarioDoc): string[] {
+  const list = (u.roles_ids ?? [])
+    .map((r) => (typeof r === 'string' ? '' : r.nombre))
+    .filter(Boolean)
+  if (list.length) return list
+  const rol = rolFromUsuario(u)
+  return rol ? [rol.nombre] : []
 }
 
 function fromDoc(u: UsuarioDoc): FormState {
@@ -68,6 +78,14 @@ function fromDoc(u: UsuarioDoc): FormState {
     es_usuario_dominio: esDominio,
     password: '',
     rol_id: rol?._id ?? (typeof u.rol_id === 'string' ? u.rol_id : ''),
+    roles_ids: (() => {
+      const ids = (u.roles_ids ?? [])
+        .map((r) => (typeof r === 'string' ? r : r._id))
+        .filter(Boolean)
+      const primary = rol?._id ?? (typeof u.rol_id === 'string' ? u.rol_id : '')
+      if (primary && !ids.includes(primary)) ids.unshift(primary)
+      return ids.length ? ids : primary ? [primary] : []
+    })(),
     empleado_id: empleadoIdFromUsuario(u) ?? '',
     departamento_id: dept?._id ?? (typeof u.departamento_id === 'string' ? u.departamento_id : ''),
     empleados_ids: empleadoIdsFromUsuario(u),
@@ -88,14 +106,22 @@ function validateUsuarioForm(
   empleadosTaken?: Map<string, string>,
 ): FormErrors {
   const errors: FormErrors = {}
-  if (!form.nombre.trim()) errors.nombre = 'Indica el nombre completo del usuario.'
-  if (!form.rol_id) errors.rol_id = 'Selecciona un rol para el usuario.'
+  if (editing && !form.nombre.trim()) errors.nombre = 'Indica el nombre completo del usuario.'
+  if (!editing && form.empleado_id && !form.nombre.trim()) {
+    errors.empleado_id = 'El empleado no tiene nombre en su ficha.'
+  }
+  if (!form.roles_ids.length && !form.rol_id) errors.rol_id = 'Elige al menos un rol.'
 
   if (!editing) {
-    const email = form.email.trim().toLowerCase()
-    if (!email) errors.email = 'Indica el correo electrónico corporativo.'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = 'Formato inválido (ej. nombre.apellido@rcjcorp.com).'
+    if (!form.empleado_id) {
+      errors.empleado_id = 'Elige el empleado del que se crea este usuario.'
+    } else {
+      const email = form.email.trim().toLowerCase()
+      if (!email) {
+        errors.empleado_id = 'Este empleado no tiene correo. Complétalo en Empleados y vuelve a elegirlo.'
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.empleado_id = 'El correo de este empleado no es válido. Corrígelo en Empleados.'
+      }
     }
     if (form.es_usuario_dominio) {
       const login = normalizeDomainInput(form.login_dominio).toLowerCase()
@@ -412,13 +438,26 @@ export function UsuariosPage() {
   useEffect(() => {
     if (editing || !form.empleado_id) return
     const emp = empleados.find((e) => e._id === form.empleado_id)
-    const mail = emp?.email?.trim().toLowerCase()
-    if (!mail) return
+    if (!emp) return
+    const mail = emp.email?.trim().toLowerCase() ?? ''
     const userDom = mail.split('@')[0] ?? ''
+    const dept = typeof emp.departamento_id === 'string'
+      ? emp.departamento_id
+      : emp.departamento_id?._id ?? ''
     setForm((f) => {
-      const next = { ...f, email: mail }
-      if (f.es_usuario_dominio && userDom) next.login_dominio = userDom
-      if (f.email === mail && (!f.es_usuario_dominio || f.login_dominio === userDom)) return f
+      const next = {
+        ...f,
+        nombre: emp.nombre,
+        email: mail,
+        departamento_id: dept,
+        login_dominio: f.es_usuario_dominio ? userDom : f.login_dominio,
+      }
+      if (
+        f.nombre === next.nombre
+        && f.email === next.email
+        && f.departamento_id === next.departamento_id
+        && f.login_dominio === next.login_dominio
+      ) return f
       return next
     })
   }, [form.empleado_id, empleados, editing, form.es_usuario_dominio])
@@ -435,7 +474,8 @@ export function UsuariosPage() {
     try {
       const payload = {
         nombre: form.nombre.trim(),
-        rol_id: form.rol_id,
+        rol_id: form.roles_ids[0] || form.rol_id,
+        roles_ids: form.roles_ids.length ? form.roles_ids : [form.rol_id].filter(Boolean),
         empleado_id: form.empleado_id || null,
         departamento_id: form.departamento_id || null,
         empleados_ids: form.empleados_ids,
@@ -495,6 +535,15 @@ export function UsuariosPage() {
     } catch (ex) { window.alert(ex instanceof Error ? ex.message : 'Error') }
   }
 
+  const empleadoAlta = !editing && form.empleado_id
+    ? empleados.find((e) => e._id === form.empleado_id) ?? null
+    : null
+  const deptAlta = empleadoAlta
+    ? (typeof empleadoAlta.departamento_id === 'object' && empleadoAlta.departamento_id
+      ? empleadoAlta.departamento_id.nombre
+      : depts.find((d) => d._id === empleadoAlta.departamento_id)?.nombre ?? '')
+    : ''
+
   const empleadosTakenByOther = useMemo(() => {
     const map = new Map<string, string>()
     for (const u of list) {
@@ -521,8 +570,8 @@ export function UsuariosPage() {
         <div>
           <h2 className="text-base font-semibold">Usuarios del Sistema</h2>
           <p className="text-sm text-muted-foreground">
-            Cada usuario se <strong>amarra a un número de empleado</strong> (su identidad). El sistema descubre
-            automáticamente sus reportes directos y la estructura bajo su cargo.
+            Cada usuario se crea a partir de un empleado. El nombre, el correo y el departamento
+            salen de esa ficha.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -562,10 +611,9 @@ export function UsuariosPage() {
           countLabel="usuario"
           emptyMessage="Sin usuarios registrados."
           searchTexts={(u) => {
-            const rol = rolFromUsuario(u)
             const dept = deptFromUsuario(u)
             const emp = empleadoFromUsuario(u)
-            return [u.nombre, u.email, u.login_dominio, rol?.nombre, dept?.nombre, emp?.codigo, emp?.nombre]
+            return [u.nombre, u.email, u.login_dominio, ...rolesNombres(u), dept?.nombre, emp?.codigo, emp?.nombre]
           }}
           toolbarLeft={
             puedeEditar ? (
@@ -639,13 +687,16 @@ export function UsuariosPage() {
             },
             {
               id: 'rol',
-              label: 'Rol',
+              label: 'Roles',
               render: (u) => {
-                const rol = rolFromUsuario(u)
-                return rol ? (
-                  <BoardPill label={rol.nombre} bg={BOARD.indigo} />
-                ) : (
-                  <span style={{ color: BOARD.muted }}>—</span>
+                const nombres = rolesNombres(u)
+                if (!nombres.length) return <span style={{ color: BOARD.muted }}>—</span>
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    {nombres.map((nombre, i) => (
+                      <BoardPill key={nombre} label={i === 0 ? nombre : nombre} bg={i === 0 ? BOARD.indigo : BOARD.muted} />
+                    ))}
+                  </div>
                 )
               },
             },
@@ -737,7 +788,7 @@ export function UsuariosPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar usuario' : 'Nuevo usuario'}</DialogTitle>
+            <DialogTitle>{editing ? 'Editar usuario' : 'Nuevo usuario desde un empleado'}</DialogTitle>
           </DialogHeader>
           <form
             onSubmit={(e) => void handleSave(e)}
@@ -754,13 +805,57 @@ export function UsuariosPage() {
               </div>
             )}
             {!editing && (
-              <div className="rounded-md border border-[var(--lime)]/50 bg-[var(--lime-lt)] p-4 text-xs text-muted-foreground">
-                El <strong>correo</strong> y la <strong>contraseña</strong> (mín. 8 caracteres) son
-                obligatorios para el acceso al portal IT Manager.
+              <div className="grid gap-2 rounded-md border border-[var(--navy)]/20 bg-[var(--blue-lt)]/20 p-4">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck className="size-4 text-[var(--navy)]" />
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-[var(--navy)]">
+                    Empleado <span className="text-destructive">*</span>
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  El usuario nace de esta ficha. Nombre, correo y departamento se copian del empleado.
+                  La contraseña (mínimo 8 caracteres) es la del acceso a IT Manager.
+                </p>
+                <EmpleadoSingleSelect
+                  empleados={empleados}
+                  value={form.empleado_id}
+                  onChange={(v) => {
+                    if (!v) {
+                      setForm((f) => ({
+                        ...f,
+                        empleado_id: '',
+                        nombre: '',
+                        email: '',
+                        departamento_id: '',
+                        login_dominio: f.es_usuario_dominio ? '' : f.login_dominio,
+                      }))
+                      return
+                    }
+                    setF('empleado_id', v)
+                  }}
+                  takenByOther={empleadosTakenByOther}
+                />
+                {empleadoAlta && (
+                  <div className="rounded-md border bg-white px-3 py-2 text-sm">
+                    <p className="font-medium text-[var(--navy)]">{empleadoAlta.nombre}</p>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-mono">{empleadoAlta.codigo}</span>
+                      {empleadoAlta.puesto ? ` · ${empleadoAlta.puesto}` : ''}
+                      {deptAlta ? ` · ${deptAlta}` : ''}
+                    </p>
+                    <p className="mt-1 text-xs">
+                      {empleadoAlta.email?.trim()
+                        ? <>Correo de acceso: <span className="font-medium">{empleadoAlta.email.trim().toLowerCase()}</span></>
+                        : <span className="text-destructive">Sin correo en la ficha del empleado.</span>}
+                    </p>
+                  </div>
+                )}
+                <FieldError message={formErrors.empleado_id} />
               </div>
             )}
 
             <div className="grid gap-4 sm:grid-cols-2">
+              {editing && (
               <div className="grid gap-2 sm:col-span-2">
                 <Label>Nombre completo <span className="text-destructive">*</span></Label>
                 <Input
@@ -771,24 +866,22 @@ export function UsuariosPage() {
                 />
                 <FieldError message={formErrors.nombre} />
               </div>
+              )}
+              {editing && (
               <div className="grid gap-2 sm:col-span-2">
                 <Label>Correo electrónico <span className="text-destructive">*</span></Label>
                 <Input
                   type="email"
                   value={form.email}
                   onChange={(e) => setF('email', e.target.value)}
-                  disabled={Boolean(editing)}
+                  disabled
                   placeholder="nombre.apellido@grupoc.com"
                   className={cn(formErrors.email && 'border-destructive')}
                   aria-invalid={Boolean(formErrors.email)}
                 />
                 <FieldError message={formErrors.email} />
-                {!editing && (
-                  <p className="text-xs text-muted-foreground">
-                    Correo con el que el usuario iniciará sesión en IT Manager.
-                  </p>
-                )}
               </div>
+              )}
               {form.es_usuario_dominio && (
                 <div className="grid gap-2 sm:col-span-2">
                   <Label>Usuario de dominio <span className="text-destructive">*</span></Label>
@@ -828,19 +921,37 @@ export function UsuariosPage() {
                   <FieldError message={formErrors.password} />
                 </div>
               )}
-              <div className="grid gap-2">
-                <Label>Rol <span className="text-destructive">*</span></Label>
-                <select
-                  className={cn(selectClass, formErrors.rol_id && 'border-destructive')}
-                  value={form.rol_id}
-                  onChange={(e) => setF('rol_id', e.target.value)}
-                  aria-invalid={Boolean(formErrors.rol_id)}
-                >
-                  <option value="">— Selecciona un rol —</option>
-                  {roles.filter((r) => r.activo).map((r) => <option key={r._id} value={r._id}>{r.nombre}</option>)}
-                </select>
+              <div className={cn('grid gap-2', !editing && 'sm:col-span-2')}>
+                <Label>Roles <span className="text-destructive">*</span></Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Puedes marcar varios. El primero queda como rol principal y los permisos se suman.
+                </p>
+                <div className={cn('grid gap-1 rounded-md border p-2', formErrors.rol_id && 'border-destructive')}>
+                  {roles.filter((r) => r.activo).map((r) => {
+                    const on = form.roles_ids.includes(r._id)
+                    return (
+                      <label key={r._id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() => {
+                            const roles_ids = on
+                              ? form.roles_ids.filter((id) => id !== r._id)
+                              : [...form.roles_ids, r._id]
+                            setForm((f) => ({ ...f, roles_ids, rol_id: roles_ids[0] ?? '' }))
+                          }}
+                        />
+                        {r.nombre}
+                        {form.roles_ids[0] === r._id && (
+                          <span className="text-[10px] text-muted-foreground">principal</span>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
                 <FieldError message={formErrors.rol_id} />
               </div>
+              {editing && (
               <div className="grid gap-2">
                 <Label>Departamento</Label>
                 <select className={selectClass} value={form.departamento_id} onChange={(e) => setF('departamento_id', e.target.value)}>
@@ -850,12 +961,14 @@ export function UsuariosPage() {
                   ))}
                 </select>
               </div>
+              )}
               <div className="flex items-center gap-2 sm:col-span-2">
                 <input type="checkbox" id="us-activo" className="size-4 accent-[var(--lime)]" checked={form.activo} onChange={(e) => setF('activo', e.target.checked)} />
                 <Label htmlFor="us-activo">Usuario activo</Label>
               </div>
             </div>
 
+            {editing && (
             <div className="grid gap-2 rounded-md border border-[var(--navy)]/20 bg-[var(--blue-lt)]/20 p-4">
               <div className="flex items-center gap-2">
                 <BadgeCheck className="size-4 text-[var(--navy)]" />
@@ -876,6 +989,7 @@ export function UsuariosPage() {
               />
               <FieldError message={formErrors.empleado_id} />
             </div>
+            )}
 
             <div className="grid gap-2 border-t pt-4">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

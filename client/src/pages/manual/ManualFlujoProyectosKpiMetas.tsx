@@ -11,13 +11,13 @@ const CADENA_DATOS = `flowchart TB
   end
 
   subgraph KPIs["Indicadores KPI"]
-    K1["KPI: Uptime\nPertenece a Continuidad\nCategoría: Infraestructura"]
-    K2["KPI: Cobertura EDR\nPertenece a Continuidad\nCategoría: Seguridad"]
+    K1["KPI: Uptime\nPertenece a Continuidad"]
+    K2["KPI: Cobertura EDR\nPertenece a Continuidad"]
   end
 
   subgraph PROY["Proyectos"]
-    P1["Proyecto A\nCategoría: Infraestructura\nVinculado al KPI Uptime"]
-    P2["Proyecto B\nCategoría: Seguridad\nVinculado al KPI EDR"]
+    P1["Proyecto A\nVinculado al KPI Uptime"]
+    P2["Proyecto B\nVinculado al KPI EDR"]
   end
 
   subgraph TAR["Tareas"]
@@ -35,8 +35,8 @@ const CADENA_DATOS = `flowchart TB
   T2 -.->|avanza % del proyecto| P2`
 
 const PASOS_USUARIO = `flowchart LR
-  A["1. Definir metas\nEstructura → Objetivos"] --> B["2. Crear KPIs\nDepartamento + meta + categoría"]
-  B --> C["3. Crear proyectos\nMismo departamento y categoría"]
+  A["1. Definir metas\nEstructura → Objetivos"] --> B["2. Crear KPIs\nDepartamento + meta"]
+  B --> C["3. Crear proyectos\nMismo departamento"]
   C --> D{"4. Vincular"}
   D --> E["Desde KPI:\nmarcar proyectos"]
   D --> F["Desde Proyecto:\nelegir KPI"]
@@ -48,9 +48,7 @@ const PASOS_USUARIO = `flowchart LR
 const REGLAS_VINCULO = `flowchart TD
   START([Quiero vincular proyecto y KPI]) --> D1{¿Mismo departamento?}
   D1 -->|No| E1["No permitido:\nindicador de otro departamento"]
-  D1 -->|Sí| D2{¿Misma categoría / eje?}
-  D2 -->|No| W1["No aparece en la lista:\najuste categoría del proyecto o del KPI"]
-  D2 -->|Sí| OK["Vínculo permitido\nProyecto ligado al indicador"]
+  D1 -->|Sí| OK["Vínculo permitido\nProyecto ligado al indicador"]
   OK --> SYNC["Al guardar\nse actualiza en ambos lados"]`
 
 const CALCULO_CUMPLIMIENTO = `flowchart TB
@@ -109,14 +107,6 @@ export function ManualFlujoProyectosKpiMetas() {
               <td className="p-2 font-medium">Tarea</td>
               <td className="p-2">Actividad dentro del proyecto; su avance alimenta el % del proyecto.</td>
               <td className="p-2">Detalle del proyecto → Tareas</td>
-            </tr>
-            <tr>
-              <td className="p-2 font-medium">Categoría / eje</td>
-              <td className="p-2">
-                Tipo común (Infraestructura, Seguridad, etc.). Debe coincidir en proyecto y KPI para
-                vincularlos.
-              </td>
-              <td className="p-2">Proyecto y KPI; catálogo en Estructura → Ejes de proyecto</td>
             </tr>
           </tbody>
         </table>

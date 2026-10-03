@@ -17,6 +17,8 @@ type Props = {
   onChange: (value: Value) => void
   placeholder?: string
   className?: string
+  /** Si es true, solo se puede elegir alguien de la lista. */
+  soloCatalogo?: boolean
 }
 
 function norm(s: string): string {
@@ -33,6 +35,7 @@ export function EmpleadoSearchSelect({
   onChange,
   placeholder = 'Buscar por nombre…',
   className,
+  soloCatalogo = false,
 }: Props) {
   const [query, setQuery] = useState(value.responsable)
   const [open, setOpen] = useState(false)
@@ -109,9 +112,7 @@ export function EmpleadoSearchSelect({
             setHighlight(0)
             if (!v.trim()) {
               onChange({ responsable: '', responsable_id: '' })
-            } else if (value.responsable_id) {
-              onChange({ responsable: v, responsable_id: '' })
-            } else {
+            } else if (!soloCatalogo) {
               onChange({ responsable: v, responsable_id: '' })
             }
           }}
@@ -142,7 +143,9 @@ export function EmpleadoSearchSelect({
         >
           {opciones.length === 0 ? (
             <li className="px-3 py-2 text-sm text-muted-foreground">
-              Sin coincidencias. Puedes dejar el nombre escrito manualmente.
+              {soloCatalogo
+                ? 'Nadie del equipo coincide.'
+                : 'Sin coincidencias. Puedes dejar el nombre escrito manualmente.'}
             </li>
           ) : (
             opciones.map((emp, i) => (

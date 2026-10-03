@@ -1,35 +1,39 @@
-import { useMemo, useState } from 'react'
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  FileText,
-  Paperclip,
-  Plus,
-  UserRound,
-} from 'lucide-react'
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { Columns3, GripVertical, Plus, UserRound } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
   BOARD,
-  BoardAvatar,
   BoardDistBar,
+  BoardAddLink,
   BoardGroup,
-  BoardPill,
-  BoardQuickAdd,
   BoardShell,
   BoardTable,
   BoardTh,
   BoardToolbar,
   formatBoardDateShort,
 } from '@/components/board/BoardPrimitives'
+import { fetchEmpleados } from '@/lib/api/empleados'
 import { createTarea, updateTarea } from '@/lib/api/tareas'
-import { formatDateDMY, formatMoney } from '@/lib/format'
+import {
+  COLUMNAS_TAREA,
+  ESTADOS_BASE,
+  fetchTareaEstados,
+  loadColLayout,
+  saveColLayout,
+  type ColId,
+  type ColLayout,
+  type TareaEstadoDef,
+} from '@/lib/tareaBoardPrefs'
+import { formatDateDMY } from '@/lib/format'
 import { evaluarSaludTarea, mapaTareas } from '@/lib/tareaDependencias'
 import { cn } from '@/lib/utils'
+import type { EmpleadoDoc } from '@/types/empleado'
+import { useAuthStore } from '@/store/authStore'
+import { TareaBoardCelda } from '@/pages/proyectos/TareaBoardCeldas'
 import type { Proyecto } from '@/types/proyecto'
+import { empleadoIdsDelEquipo } from '@/types/proyecto'
 import type { Tarea, TareaEstado, TareaPrioridad } from '@/types/tarea'
-import { tareaMontoEjecutadoEstimado } from '@/types/tarea'
 
 type Props = {
   tareas: Tarea[]
@@ -40,6 +44,7 @@ type Props = {
   /** Abre el formulario completo (opcional). El alta rápida es en línea. */
   onAddAdvanced?: () => void
   onChanged: () => void | Promise<void>
+  columnasNonce?: number
 }
 
 type BoardGrupoId = 'por_hacer' | 'en_curso' | 'detenido' | 'listo'
@@ -55,13 +60,6 @@ const GRUPOS: Array<{
   { id: 'detenido', label: 'Detenido', color: BOARD.red, estados: ['Bloqueado'] },
   { id: 'listo', label: 'Listo', color: BOARD.green, estados: ['Completado'] },
 ]
-
-const ESTADO_UI: Record<TareaEstado, { label: string; bg: string; text: string }> = {
-  Pendiente: { label: 'Pendiente', bg: BOARD.gray, text: BOARD.text },
-  'En progreso': { label: 'En curso', bg: BOARD.orange, text: '#ffffff' },
-  Completado: { label: 'Listo', bg: BOARD.green, text: '#ffffff' },
-  Bloqueado: { label: 'Detenido', bg: BOARD.red, text: '#ffffff' },
-}
 
 const PRIORIDAD_UI: Record<TareaPrioridad, { bg: string; text: string }> = {
   Baja: { bg: BOARD.blue, text: '#ffffff' },
@@ -97,13 +95,52 @@ export function TareasTablaBoard({
   onSelect,
   onAddAdvanced,
   onChanged,
+  columnasNonce = 0,
 }: Props) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroPersona, setFiltroPersona] = useState('todas')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [addingGrupo, setAddingGrupo] = useState<BoardGrupoId | null>(null)
   const [draftNombre, setDraftNombre] = useState('')
+  const [draftEstado, setDraftEstado] = useState('Pendiente')
+  const [draftResponsableId, setDraftResponsableId] = useState('')
+  const [draftPrioridad, setDraftPrioridad] = useState<TareaPrioridad | ''>('Media')
+  const [draftFecha, setDraftFecha] = useState('')
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [empleados, setEmpleados] = useState<EmpleadoDoc[]>([])
   const [creating, setCreating] = useState(false)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropGrupo, setDropGrupo] = useState<BoardGrupoId | null>(null)
+  const userId = useAuthStore((s) => s.user?._id ?? 'local')
+  const [catalog, setCatalog] = useState<TareaEstadoDef[]>(ESTADOS_BASE)
+  const [layout, setLayout] = useState<ColLayout>(() => loadColLayout(userId))
+  const [colsOpen, setColsOpen] = useState(false)
+
+  useEffect(() => {
+    void fetchTareaEstados().then(setCatalog).catch(() => setCatalog(ESTADOS_BASE))
+    setLayout(loadColLayout(userId))
+  }, [userId, columnasNonce])
+
+  function persistLayout(next: ColLayout) {
+    setLayout(next)
+    saveColLayout(userId, next)
+  }
+
+  function esListo(clave: string) {
+    return catalog.find((e) => e.clave === clave)?.grupo === 'listo'
+  }
+
+  function uiDe(clave: string) {
+    const c = catalog.find((e) => e.clave === clave)
+    if (!c) return { label: clave, bg: BOARD.gray, text: BOARD.text }
+    return {
+      label: c.etiqueta,
+      bg: c.color,
+      text: c.grupo === 'por_hacer' ? BOARD.text : '#fff',
+    }
+  }
+
+  const visibles = layout.order.filter((id) => !layout.hidden.includes(id))
 
   const mapa = useMemo(() => mapaTareas(tareas), [tareas])
 
@@ -138,11 +175,12 @@ export function TareasTablaBoard({
       detenido: [],
       listo: [],
     }
-    for (const g of GRUPOS) {
-      out[g.id] = filtradas.filter((t) => g.estados.includes(t.estado))
+    for (const t of filtradas) {
+      const g = catalog.find((e) => e.clave === t.estado)?.grupo ?? 'por_hacer'
+      out[g].push(t)
     }
     return out
-  }, [filtradas])
+  }, [filtradas, catalog])
 
   const hayFiltros = Boolean(busqueda.trim()) || filtroPersona !== 'todas'
 
@@ -158,40 +196,103 @@ export function TareasTablaBoard({
     }
   }
 
+  async function dropEnGrupo(grupoId: BoardGrupoId, tareaId: string) {
+    const t = tareas.find((x) => x._id === tareaId)
+    const estado = catalog.find((e) => e.grupo === grupoId)?.clave ?? estadoDefaultGrupo(grupoId)
+    if (!t || t.estado === estado || !puedeEditar) {
+      setDraggingId(null)
+      setDropGrupo(null)
+      return
+    }
+    const destinoListo = catalog.find((e) => e.clave === estado)?.grupo === 'listo'
+    const origenListo = esListo(t.estado)
+    await patchTarea(tareaId, {
+      estado,
+      porcentaje: destinoListo ? 100 : origenListo ? Math.min(t.porcentaje, 90) : t.porcentaje,
+    })
+    setDraggingId(null)
+    setDropGrupo(null)
+  }
+
+  useEffect(() => {
+    if (!puedeEditar) return
+    void fetchEmpleados({ activo: true }).then(setEmpleados).catch(() => setEmpleados([]))
+  }, [puedeEditar])
+
+  const empleadosEquipo = useMemo(() => {
+    const ids = new Set(empleadoIdsDelEquipo(proyecto))
+    return empleados.filter((e) => ids.has(String(e._id)))
+  }, [empleados, proyecto])
+
   function startQuickAdd(grupoId: BoardGrupoId) {
     setAddingGrupo(grupoId)
     setDraftNombre('')
+    setDraftEstado(catalog.find((e) => e.grupo === grupoId)?.clave ?? estadoDefaultGrupo(grupoId))
+    setDraftResponsableId('')
+    setDraftPrioridad('Media')
+    setDraftFecha('')
+    setDraftError(null)
   }
 
   function cancelQuickAdd() {
     if (creating) return
     setAddingGrupo(null)
     setDraftNombre('')
+    setDraftError(null)
   }
 
   async function submitQuickAdd() {
     if (!addingGrupo || !puedeEditar) return
     const nombre = draftNombre.trim()
-    if (!nombre) return
-    const estado = estadoDefaultGrupo(addingGrupo)
+    const responsable = empleados.find((e) => e._id === draftResponsableId)
+    if (!nombre || !responsable || !draftEstado || !draftPrioridad || !draftFecha) {
+      setDraftError('Indica nombre, asignado, estado, prioridad y fecha.')
+      return
+    }
+    setDraftError(null)
     setCreating(true)
     try {
       await createTarea({
         proyecto_id: proyecto._id,
         nombre,
-        estado,
-        porcentaje: estado === 'Completado' ? 100 : 0,
+        estado: draftEstado,
+        prioridad: draftPrioridad,
+        fecha_fin: new Date(`${draftFecha}T12:00:00`),
+        responsable: responsable.nombre,
+        responsable_id: responsable._id,
+        porcentaje: esListo(draftEstado) ? 100 : 0,
         eje: proyecto.eje,
       })
       setDraftNombre('')
+      setDraftFecha('')
       await onChanged()
-      // Mantener el input abierto para seguir agregando (flujo Monday)
       setAddingGrupo(addingGrupo)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'No se pudo crear la tarea')
     } finally {
       setCreating(false)
     }
+  }
+
+  function startResize(id: ColId, event: ReactMouseEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startW = layout.widths[id] ?? 100
+    function move(ev: MouseEvent) {
+      const w = Math.max(70, Math.min(420, startW + ev.clientX - startX))
+      setLayout((prev) => ({ ...prev, widths: { ...prev.widths, [id]: w } }))
+    }
+    function up() {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      setLayout((prev) => {
+        saveColLayout(userId, prev)
+        return prev
+      })
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
   }
 
   return (
@@ -238,7 +339,17 @@ export function TareasTablaBoard({
           <div className="flex items-center gap-2">
             <span className="text-xs" style={{ color: BOARD.muted }}>
               {filtradas.length} tarea{filtradas.length === 1 ? '' : 's'}
+              {puedeEditar ? ' · arrastra entre grupos' : ''}
             </span>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs hover:underline"
+              style={{ color: BOARD.muted }}
+              onClick={() => setColsOpen((v) => !v)}
+            >
+              <Columns3 className="size-3.5" />
+              Columnas
+            </button>
             {puedeEditar && onAddAdvanced && (
               <button
                 type="button"
@@ -253,6 +364,75 @@ export function TareasTablaBoard({
         }
       />
 
+      {colsOpen && (
+        <div
+          className="mb-2 grid gap-1 rounded-md border bg-white p-2 text-xs"
+          style={{ borderColor: BOARD.border }}
+        >
+          {layout.order.map((id, index) => {
+            const meta = COLUMNAS_TAREA.find((c) => c.id === id)
+            if (!meta) return null
+            const hidden = layout.hidden.includes(id)
+            return (
+              <div key={id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!hidden}
+                  disabled={id === 'tarea'}
+                  aria-label={`Mostrar ${meta.label}`}
+                  onChange={() => {
+                    const hiddenNext = hidden
+                      ? layout.hidden.filter((x) => x !== id)
+                      : [...layout.hidden, id]
+                    persistLayout({ ...layout, hidden: hiddenNext })
+                  }}
+                />
+                <span className="w-24">{meta.label}</span>
+                <button
+                  type="button"
+                  className="rounded border px-1.5 disabled:opacity-30"
+                  disabled={index === 0}
+                  onClick={() => {
+                    const order = [...layout.order]
+                    const [item] = order.splice(index, 1)
+                    order.splice(index - 1, 0, item)
+                    persistLayout({ ...layout, order })
+                  }}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="rounded border px-1.5 disabled:opacity-30"
+                  disabled={index === layout.order.length - 1}
+                  onClick={() => {
+                    const order = [...layout.order]
+                    const [item] = order.splice(index, 1)
+                    order.splice(index + 1, 0, item)
+                    persistLayout({ ...layout, order })
+                  }}
+                >
+                  ↓
+                </button>
+                <input
+                  type="range"
+                  min={70}
+                  max={360}
+                  aria-label={`Ancho de ${meta.label}`}
+                  value={layout.widths[id] ?? meta.width}
+                  onChange={(e) =>
+                    persistLayout({
+                      ...layout,
+                      widths: { ...layout.widths, [id]: Number(e.target.value) },
+                    })
+                  }
+                />
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {filtradas.length === 0 && hayFiltros ? (
         <p className="px-2 py-12 text-center text-sm" style={{ color: BOARD.muted }}>
           No hay tareas con estos filtros.
@@ -260,15 +440,22 @@ export function TareasTablaBoard({
       ) : (
         GRUPOS.map((grupo) => {
           const rows = porGrupo[grupo.id]
-          if (rows.length === 0 && grupo.id === 'detenido' && addingGrupo !== 'detenido') {
+          if (
+            rows.length === 0
+            && grupo.id === 'detenido'
+            && addingGrupo !== 'detenido'
+            && !draggingId
+          ) {
             return null
           }
 
-          const estadoCounts = (Object.keys(ESTADO_UI) as TareaEstado[]).map((e) => ({
-            key: ESTADO_UI[e].label,
-            count: rows.filter((t) => t.estado === e).length,
-            color: ESTADO_UI[e].bg,
-          }))
+          const estadoCounts = catalog
+            .filter((e) => e.grupo === grupo.id)
+            .map((e) => ({
+              key: e.etiqueta,
+              count: rows.filter((t) => t.estado === e.clave).length,
+              color: e.color,
+            }))
           const prioCounts = (['Alta', 'Media', 'Baja'] as TareaPrioridad[]).map((p) => ({
             key: p,
             count: rows.filter((t) => t.prioridad === p).length,
@@ -281,8 +468,23 @@ export function TareasTablaBoard({
               : Math.round(rows.reduce((s, t) => s + (t.porcentaje ?? 0), 0) / rows.length)
 
           return (
-            <BoardGroup
+            <div
               key={grupo.id}
+              className={cn(dropGrupo === grupo.id && 'rounded-md ring-2 ring-[var(--lime)] ring-offset-1')}
+              onDragOver={(e) => {
+                if (!puedeEditar || !draggingId) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setDropGrupo(grupo.id)
+              }}
+              onDragLeave={() => setDropGrupo((g) => (g === grupo.id ? null : g))}
+              onDrop={(e) => {
+                e.preventDefault()
+                const id = e.dataTransfer.getData('text/tarea-id') || e.dataTransfer.getData('text/plain')
+                if (id) void dropEnGrupo(grupo.id, id)
+              }}
+            >
+            <BoardGroup
               label={grupo.label}
               color={grupo.color}
               count={rows.length}
@@ -324,21 +526,53 @@ export function TareasTablaBoard({
                 <thead>
                   <tr className="border-b" style={{ borderColor: BOARD.borderSoft }}>
                     <BoardTh className="w-8" />
-                    <BoardTh className="min-w-[220px]">Tarea</BoardTh>
-                    <BoardTh className="min-w-[130px]">Persona</BoardTh>
-                    <BoardTh className="min-w-[110px]">Estado</BoardTh>
-                    <BoardTh className="min-w-[100px]">Fecha</BoardTh>
-                    <BoardTh className="min-w-[90px]">Prioridad</BoardTh>
-                    <BoardTh className="min-w-[70px]">Avance</BoardTh>
-                    <BoardTh className="min-w-[100px]">Monto</BoardTh>
-                    <BoardTh className="min-w-[70px]">Archivos</BoardTh>
-                    <BoardTh className="min-w-[130px]">Cronograma</BoardTh>
-                    <BoardTh className="min-w-[100px]">Actualizado</BoardTh>
+                    {visibles.map((id) => {
+                      const meta = COLUMNAS_TAREA.find((c) => c.id === id)
+                      const w = layout.widths[id] ?? meta?.width ?? 100
+                      return (
+                        <th
+                          key={id}
+                          draggable
+                          className="px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wide"
+                          style={{ color: BOARD.muted, backgroundColor: BOARD.bg, width: w, minWidth: w }}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('text/col-id', id)
+                            e.dataTransfer.effectAllowed = 'move'
+                          }}
+                          onDragOver={(e) => {
+                            if ([...e.dataTransfer.types].includes('text/col-id')) e.preventDefault()
+                          }}
+                          onDrop={(e) => {
+                            const from = e.dataTransfer.getData('text/col-id') as ColId
+                            if (!from || from === id) return
+                            e.preventDefault()
+                            e.stopPropagation()
+                            const order = [...layout.order]
+                            const a = order.indexOf(from)
+                            const b = order.indexOf(id)
+                            if (a < 0 || b < 0) return
+                            order.splice(a, 1)
+                            order.splice(b, 0, from)
+                            persistLayout({ ...layout, order })
+                          }}
+                        >
+                          <span className="inline-flex w-full items-center justify-between gap-1">
+                            {meta?.label}
+                            <span
+                              className="inline-block h-4 w-1 cursor-col-resize rounded-sm bg-current opacity-30"
+                              onMouseDown={(e) => startResize(id, e)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </span>
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((t) => {
-                    const est = ESTADO_UI[t.estado]
+                    const est = uiDe(t.estado)
+                    const listo = esListo(t.estado)
                     const salud = evaluarSaludTarea(t, mapa)
                     const finLabel = formatBoardDateShort(t.fecha_fin)
                     const iniLabel = formatBoardDateShort(t.fecha_inicio)
@@ -353,237 +587,180 @@ export function TareasTablaBoard({
                         className={cn(
                           'border-b transition-colors hover:bg-[var(--blue-lt)]/70',
                           selected && 'bg-[var(--lime-lt)]/80',
-                          busyId === t._id && 'opacity-60',
+                          (busyId === t._id || draggingId === t._id) && 'opacity-60',
                         )}
                         style={{ borderColor: BOARD.borderSoft }}
                       >
                         <td className="px-2 py-1.5 align-middle">
-                          <span
-                            className="inline-block h-8 w-1 rounded-sm"
-                            style={{ backgroundColor: grupo.color }}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          <button
-                            type="button"
-                            className="max-w-[300px] truncate text-left text-[13px] font-medium hover:underline"
-                            style={{ color: BOARD.text }}
-                            onClick={() => onSelect(t)}
-                            title={t.nombre}
-                          >
-                            {t.nombre}
-                          </button>
-                          {t.descripcion?.trim() ? (
-                            <p
-                              className="mt-0.5 line-clamp-1 max-w-[300px] text-[11px]"
-                              style={{ color: BOARD.muted }}
-                            >
-                              {t.descripcion}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          <div className="flex items-center gap-1.5">
-                            <BoardAvatar name={t.responsable} />
+                          <span className="inline-flex items-center gap-1">
+                            {puedeEditar ? (
+                              <span
+                                draggable={busyId !== t._id}
+                                className="cursor-grab active:cursor-grabbing"
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('text/tarea-id', t._id)
+                                  e.dataTransfer.setData('text/plain', t._id)
+                                  e.dataTransfer.effectAllowed = 'move'
+                                  setDraggingId(t._id)
+                                }}
+                                onDragEnd={() => {
+                                  setDraggingId(null)
+                                  setDropGrupo(null)
+                                }}
+                                title="Arrastrar a otro grupo"
+                              >
+                                <GripVertical className="size-3.5 text-muted-foreground" aria-hidden />
+                              </span>
+                            ) : null}
                             <span
-                              className="max-w-[90px] truncate text-xs"
-                              style={{ color: BOARD.text }}
-                            >
-                              {t.responsable || '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          {puedeEditar ? (
-                            <select
-                              className="cursor-pointer rounded-sm border-0 px-2 py-1 text-[11px] font-semibold outline-none"
-                              style={{ backgroundColor: est.bg, color: est.text }}
-                              value={t.estado}
-                              disabled={busyId === t._id}
-                              onChange={(e) =>
-                                void patchTarea(t._id, {
-                                  estado: e.target.value,
-                                  porcentaje:
-                                    e.target.value === 'Completado'
-                                      ? 100
-                                      : t.estado === 'Completado'
-                                        ? Math.min(t.porcentaje, 90)
-                                        : t.porcentaje,
-                                })
-                              }
-                            >
-                              {(Object.keys(ESTADO_UI) as TareaEstado[]).map((e) => (
-                                <option key={e} value={e}>
-                                  {ESTADO_UI[e].label}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <BoardPill label={est.label} bg={est.bg} text={est.text} />
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          <span
-                            className="inline-flex items-center gap-1 text-xs"
-                            style={{ color: BOARD.text }}
-                          >
-                            {salud === 'atrasada' ? (
-                              <AlertCircle className="size-3.5" style={{ color: BOARD.red }} />
-                            ) : t.estado === 'Completado' ? (
-                              <CheckCircle2 className="size-3.5" style={{ color: BOARD.green }} />
-                            ) : (
-                              <Clock className="size-3.5" style={{ color: BOARD.gray }} />
-                            )}
-                            {finLabel || '—'}
+                              className="inline-block h-8 w-1 rounded-sm"
+                              style={{ backgroundColor: grupo.color }}
+                            />
                           </span>
                         </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          {puedeEditar ? (
-                            <select
-                              className="cursor-pointer rounded-sm border px-2 py-1 text-[11px] font-semibold outline-none"
-                              style={
-                                t.prioridad
-                                  ? {
-                                      backgroundColor: PRIORIDAD_UI[t.prioridad].bg,
-                                      color: PRIORIDAD_UI[t.prioridad].text,
-                                      borderColor: 'transparent',
-                                    }
-                                  : { borderColor: '#c5c7d0', backgroundColor: '#fff' }
-                              }
-                              value={t.prioridad ?? ''}
-                              disabled={busyId === t._id}
-                              onChange={(e) =>
-                                void patchTarea(t._id, {
-                                  prioridad: e.target.value || null,
-                                })
-                              }
-                            >
-                              <option value="">—</option>
-                              <option value="Baja">Baja</option>
-                              <option value="Media">Media</option>
-                              <option value="Alta">Alta</option>
-                            </select>
-                          ) : t.prioridad ? (
-                            <BoardPill
-                              label={t.prioridad}
-                              bg={PRIORIDAD_UI[t.prioridad].bg}
-                              text={PRIORIDAD_UI[t.prioridad].text}
-                            />
-                          ) : (
-                            <span style={{ color: BOARD.gray }}>—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          <div className="flex items-center gap-1.5">
-                            <div
-                              className="h-1.5 w-12 overflow-hidden rounded-full"
-                              style={{ backgroundColor: BOARD.borderSoft }}
-                            >
-                              <div
-                                className="h-full rounded-full"
-                                style={{
-                                  width: `${Math.min(100, Math.max(0, t.porcentaje ?? 0))}%`,
-                                  backgroundColor: BOARD.accent,
-                                }}
-                              />
-                            </div>
-                            <span
-                              className="text-[11px] tabular-nums"
-                              style={{ color: BOARD.muted }}
-                            >
-                              {t.porcentaje ?? 0}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          {t.monto_asignado != null && Number.isFinite(t.monto_asignado) ? (
-                            <div className="space-y-0.5">
-                              <p
-                                className="text-[12px] font-semibold tabular-nums"
-                                style={{ color: BOARD.text }}
-                              >
-                                {formatMoney(
-                                  t.monto_asignado,
-                                  proyecto.moneda_presupuesto ?? 'HNL',
-                                )}
-                              </p>
-                              <p
-                                className="text-[10px] tabular-nums"
-                                style={{ color: BOARD.muted }}
-                              >
-                                ej.{' '}
-                                {formatMoney(
-                                  tareaMontoEjecutadoEstimado(t),
-                                  proyecto.moneda_presupuesto ?? 'HNL',
-                                )}
-                              </p>
-                            </div>
-                          ) : (
-                            <span style={{ color: BOARD.muted }}>—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          {(t.adjuntos?.length ?? 0) > 0 ? (
-                            <span
-                              className="inline-flex items-center gap-1 text-xs"
-                              style={{ color: BOARD.primary }}
-                            >
-                              <Paperclip className="size-3.5" />
-                              {t.adjuntos!.length}
-                            </span>
-                          ) : (
-                            <FileText className="size-3.5" style={{ color: BOARD.gray }} />
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 align-middle">
-                          <span
-                            className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium"
+                        {visibles.map((col) => (
+                          <td
+                            key={col}
+                            className="px-2 py-1.5 align-middle"
                             style={{
-                              backgroundColor:
-                                salud === 'atrasada'
-                                  ? BOARD.red
-                                  : t.estado === 'Completado'
-                                    ? BOARD.green
-                                    : BOARD.gray,
-                              color:
-                                salud === 'atrasada' || t.estado === 'Completado'
-                                  ? '#fff'
-                                  : BOARD.text,
+                              width: layout.widths[col],
+                              minWidth: layout.widths[col],
                             }}
                           >
-                            {crono}
-                          </span>
-                        </td>
-                        <td
-                          className="px-2 py-1.5 align-middle text-xs"
-                          style={{ color: BOARD.muted }}
-                        >
-                          {relativeUpdate(t.updatedAt)}
-                        </td>
+                            <TareaBoardCelda
+                              col={col}
+                              t={t}
+                              proyecto={proyecto}
+                              puedeEditar={puedeEditar}
+                              busy={busyId === t._id}
+                              est={est}
+                              listo={listo}
+                              salud={salud}
+                              finLabel={finLabel || ''}
+                              crono={crono}
+                              actualizado={relativeUpdate(t.updatedAt)}
+                              catalog={catalog}
+                              onSelect={onSelect}
+                              onPatch={(id, patch) => void patchTarea(id, patch)}
+                            />
+                          </td>
+                        ))}
                       </tr>
                     )
                   })}
                   {puedeEditar && (
                     <tr className="border-b" style={{ borderColor: BOARD.borderSoft }}>
-                      <td colSpan={11} className="px-3 py-1.5">
-                        <BoardQuickAdd
-                          active={addingGrupo === grupo.id}
-                          value={draftNombre}
-                          onChange={setDraftNombre}
-                          onActivate={() => startQuickAdd(grupo.id)}
-                          onCancel={cancelQuickAdd}
-                          onSubmit={submitQuickAdd}
-                          busy={creating}
-                          color={grupo.color}
-                          label="Agregar tarea"
-                          placeholder={`Nueva tarea en ${grupo.label}…`}
-                        />
+                      <td colSpan={visibles.length + 1} className="px-3 py-1.5">
+                        {addingGrupo === grupo.id ? (
+                          <form
+                            className="flex flex-wrap items-center gap-2 py-0.5"
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              void submitQuickAdd()
+                            }}
+                          >
+                            <span
+                              className="inline-block h-7 w-1 shrink-0 rounded-sm"
+                              style={{ backgroundColor: grupo.color }}
+                            />
+                            <input
+                              autoFocus
+                              required
+                              value={draftNombre}
+                              disabled={creating}
+                              placeholder="Nombre de la tarea"
+                              className="h-8 min-w-[180px] flex-1 rounded-md border bg-white px-2 text-[13px] outline-none focus-visible:border-[var(--navy)]"
+                              style={{ borderColor: BOARD.border, color: BOARD.text }}
+                              onChange={(e) => setDraftNombre(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  e.preventDefault()
+                                  cancelQuickAdd()
+                                }
+                              }}
+                            />
+                            <select
+                              aria-label="Asignado"
+                              required
+                              value={draftResponsableId}
+                              disabled={creating}
+                              className="h-8 max-w-[180px] rounded-md border bg-white px-2 text-xs"
+                              style={{ borderColor: BOARD.border, color: BOARD.text }}
+                              onChange={(e) => setDraftResponsableId(e.target.value)}
+                            >
+                              <option value="">Asignado</option>
+                              {empleadosEquipo.length === 0 ? (
+                                <option value="" disabled>Sin personas en el equipo</option>
+                              ) : empleadosEquipo.map((emp) => (
+                                <option key={emp._id} value={emp._id}>{emp.nombre}</option>
+                              ))}
+                            </select>
+                            <select
+                              aria-label="Estado"
+                              value={draftEstado}
+                              disabled={creating}
+                              className="h-8 rounded-md border bg-white px-2 text-xs"
+                              style={{ borderColor: BOARD.border, color: BOARD.text }}
+                              onChange={(e) => setDraftEstado(e.target.value)}
+                            >
+                              {catalog.map((estado) => (
+                                <option key={estado.clave} value={estado.clave}>{estado.etiqueta}</option>
+                              ))}
+                            </select>
+                            <input
+                              aria-label="Fecha"
+                              type="date"
+                              required
+                              value={draftFecha}
+                              disabled={creating}
+                              className="h-8 rounded-md border bg-white px-2 text-xs"
+                              style={{ borderColor: BOARD.border, color: BOARD.text }}
+                              onChange={(e) => setDraftFecha(e.target.value)}
+                            />
+                            <select
+                              aria-label="Prioridad"
+                              required
+                              value={draftPrioridad}
+                              disabled={creating}
+                              className="h-8 rounded-md border bg-white px-2 text-xs"
+                              style={{ borderColor: BOARD.border, color: BOARD.text }}
+                              onChange={(e) => setDraftPrioridad(e.target.value as TareaPrioridad | '')}
+                            >
+                              <option value="">Prioridad</option>
+                              <option value="Alta">Alta</option>
+                              <option value="Media">Media</option>
+                              <option value="Baja">Baja</option>
+                            </select>
+                            <button
+                              type="submit"
+                              disabled={creating}
+                              className="h-8 shrink-0 rounded-md px-3 text-xs font-semibold text-white disabled:opacity-40"
+                              style={{ backgroundColor: BOARD.primary }}
+                            >
+                              {creating ? '…' : 'Agregar'}
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 px-2 text-xs"
+                              style={{ color: BOARD.muted }}
+                              onClick={cancelQuickAdd}
+                            >
+                              Cancelar
+                            </button>
+                            {draftError && (
+                              <p className="basis-full text-[11px] text-destructive">{draftError}</p>
+                            )}
+                          </form>
+                        ) : (
+                          <BoardAddLink onClick={() => startQuickAdd(grupo.id)} label="Agregar tarea" />
+                        )}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </BoardTable>
             </BoardGroup>
+            </div>
           )
         })
       )}

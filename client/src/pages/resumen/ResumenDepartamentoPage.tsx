@@ -338,7 +338,6 @@ export function ResumenDepartamentoPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Proyecto</TableHead>
-                    <TableHead>Eje</TableHead>
                     <TableHead>Fase</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Prioridad</TableHead>
@@ -360,7 +359,6 @@ export function ResumenDepartamentoPage() {
                           <p className="text-xs text-muted-foreground">{p.responsable}</p>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs">{p.eje || '—'}</TableCell>
                       <TableCell>{p.fase ?? '—'}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={estadoBadge(p.estado)}>
@@ -397,7 +395,6 @@ export function ResumenDepartamentoPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>KPI</TableHead>
-                            <TableHead>Eje</TableHead>
                             <TableHead>Meta</TableHead>
                             <TableHead className="text-right">Avance</TableHead>
                           </TableRow>
@@ -406,7 +403,6 @@ export function ResumenDepartamentoPage() {
                           {m.kpis.map((k) => (
                             <TableRow key={k._id}>
                               <TableCell className="font-medium">{k.nombre}</TableCell>
-                              <TableCell className="text-xs">{k.eje}</TableCell>
                               <TableCell className="text-xs">{k.meta ?? '—'}</TableCell>
                               <TableCell className="text-right">
                                 {k.tiene_registro ? (

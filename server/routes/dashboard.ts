@@ -1,15 +1,27 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
 
+import { Evaluacion } from '../db/models/Evaluacion.js'
+import { Empleado } from '../db/models/Empleado.js'
 import { Departamento } from '../db/models/Departamento.js'
 import { KPI } from '../db/models/KPI.js'
 import { Proyecto } from '../db/models/Proyecto.js'
 import { Tarea } from '../db/models/Tarea.js'
+import { Capacitacion } from '../db/models/Capacitacion.js'
+import { Rol } from '../db/models/Rol.js'
+import { Usuario } from '../db/models/Usuario.js'
+import { Auditoria } from '../db/models/Auditoria.js'
 import {
   buildKpiFilter,
   countCapacitacionesEnProgreso,
   resolveDashboardScope,
 } from '../utils/dashboardScope.js'
+import {
+  buildPortfolioSnapshot,
+  type EmpleadoCargaInfo,
+  type PortfolioProyecto,
+  type PortfolioTarea,
+} from '../utils/dashboardPortfolio.js'
 import { PROYECTO_ESTADOS_ACTIVOS } from '../utils/proyectoScope.js'
 import { kpiPromedioGlobal, type KpiLean } from '../utils/kpiPct.js'
 import type { MetaDeptoDoc } from '../utils/metasDepartamento.js'
@@ -19,17 +31,6 @@ import {
 } from '../utils/resumenDepartamento.js'
 
 export const dashboardRouter = Router()
-
-const filtroActivos = { estado: { $in: [...PROYECTO_ESTADOS_ACTIVOS] } }
-
-function mergeFilters(
-  base: Record<string, unknown>,
-  extra: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!Object.keys(base).length) return extra
-  if (!Object.keys(extra).length) return base
-  return { $and: [base, extra] }
-}
 
 /** GET /api/dashboard/resumen-departamento?departamento_id= — metas + plan de trabajo visual */
 dashboardRouter.get('/resumen-departamento', async (req, res, next) => {
@@ -60,6 +61,125 @@ dashboardRouter.get('/resumen-departamento', async (req, res, next) => {
   }
 })
 
+/** GET /api/dashboard/mi-dia — tareas asignadas al usuario actual, agrupadas. */
+dashboardRouter.get('/mi-dia', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+
+    const or: Record<string, unknown>[] = []
+    if (u.empleado_id && mongoose.isValidObjectId(u.empleado_id)) {
+      or.push({ responsable_id: new mongoose.Types.ObjectId(u.empleado_id) })
+    }
+    const nombre = (u.empleado_nombre || u.nombre || '').trim()
+    if (nombre) {
+      const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      or.push({ responsable: new RegExp(`^${esc}$`, 'i') })
+    }
+
+    const startDay = new Date()
+    startDay.setHours(0, 0, 0, 0)
+    const endDay = new Date(startDay)
+    endDay.setHours(23, 59, 59, 999)
+    const doneSince = new Date(startDay)
+    doneSince.setDate(doneSince.getDate() - 14)
+
+    const rows = or.length === 0
+      ? []
+      : await Tarea.find({ $or: or })
+      .select('nombre proyecto_id responsable responsable_id fecha_fin estado prioridad porcentaje updatedAt')
+      .sort({ fecha_fin: 1, nombre: 1 })
+      .lean()
+
+    const proyectoIds = [...new Set(rows.map((t) => t.proyecto_id).filter(Boolean).map(String))]
+    const proyectos = await Proyecto.find({ _id: { $in: proyectoIds } })
+      .select('_id nombre')
+      .lean()
+    const nombreProyecto = new Map(proyectos.map((p) => [String(p._id), p.nombre ?? String(p._id)]))
+
+    type Item = {
+      _id: string
+      nombre: string
+      proyecto_id: string
+      proyecto_nombre: string
+      responsable: string
+      responsable_id: string
+      fecha_fin: Date | null
+      estado: string
+      prioridad: string | null
+      porcentaje: number
+    }
+
+    const toItem = (t: (typeof rows)[number]): Item => {
+      const pid = t.proyecto_id ? String(t.proyecto_id) : ''
+      return {
+        _id: String(t._id),
+        nombre: t.nombre,
+        proyecto_id: pid,
+        proyecto_nombre: pid ? (nombreProyecto.get(pid) ?? pid) : 'Personal',
+        responsable: t.responsable ?? '',
+        responsable_id: t.responsable_id ? String(t.responsable_id) : '',
+        fecha_fin: t.fecha_fin ?? null,
+        estado: t.estado,
+        prioridad: t.prioridad ?? null,
+        porcentaje: t.porcentaje ?? 0,
+      }
+    }
+
+    const vencidas: Item[] = []
+    const hoy: Item[] = []
+    const proximas: Item[] = []
+    const completadas: Item[] = []
+
+    for (const t of rows) {
+      const item = toItem(t)
+      if (t.estado === 'Completado') {
+        const upd = t.updatedAt ? new Date(t.updatedAt) : null
+        if (!upd || upd >= doneSince) completadas.push(item)
+        continue
+      }
+      const fin = t.fecha_fin ? new Date(t.fecha_fin) : null
+      if (fin && fin < startDay) vencidas.push(item)
+      else if (fin && fin >= startDay && fin <= endDay) hoy.push(item)
+      else proximas.push(item)
+    }
+
+    const puedeVerEval = (u.permisos ?? []).includes('*')
+      || (u.permisos ?? []).includes('equipo:ver')
+      || (u.permisos ?? []).includes('equipo:editar')
+    const aprobaciones = puedeVerEval
+      ? (await Evaluacion.find({
+          $or: [
+            { 'firmas.colaborador': { $ne: true } },
+            { 'firmas.coordinador': { $ne: true } },
+            { 'firmas.jefe': { $ne: true } },
+            { 'firmas.rrhh': { $ne: true } },
+          ],
+        })
+          .sort({ updatedAt: -1 })
+          .limit(8)
+          .select('fecha decision firmas')
+          .lean()).map((ev) => {
+          const firmas = (ev.firmas ?? {}) as Record<string, boolean>
+          const faltan = ['colaborador', 'coordinador', 'jefe', 'rrhh'].filter((k) => firmas[k] !== true)
+          return {
+            _id: String(ev._id),
+            titulo: ev.decision ? `Evaluación · ${ev.decision}` : 'Evaluación pendiente de firma',
+            detalle: faltan.length ? `Falta firma: ${faltan.join(', ')}` : 'Pendiente',
+            href: '/equipo',
+          }
+        })
+      : []
+
+    res.json({ vencidas, hoy, proximas, completadas, aprobaciones })
+  } catch (err) {
+    next(err)
+  }
+})
+
 dashboardRouter.get('/resumen', async (req, res, next) => {
   try {
     const u = req.user
@@ -70,7 +190,6 @@ dashboardRouter.get('/resumen', async (req, res, next) => {
 
     const scope = await resolveDashboardScope(u._id, u.permisos ?? [])
     const proyectoBase = scope.proyectoFilter
-    const filtroActivosProyectos = mergeFilters(proyectoBase, filtroActivos)
     const kpiFilter = buildKpiFilter(scope)
 
     const startDay = new Date()
@@ -79,25 +198,17 @@ dashboardRouter.get('/resumen', async (req, res, next) => {
     end14.setDate(end14.getDate() + 14)
     end14.setHours(23, 59, 59, 999)
 
-    const proyectoIds = await Proyecto.find(proyectoBase).distinct('_id')
-
     const [
-      proyectosTotal,
-      proyectosActivos,
-      tareasVencidas,
+      proyectosLean,
       capsEnProgreso,
       kpisLean,
       faseRows,
     ] = await Promise.all([
-      Proyecto.countDocuments(proyectoBase),
-      Proyecto.countDocuments(filtroActivosProyectos),
-      proyectoIds.length === 0
-        ? Promise.resolve(0)
-        : Tarea.countDocuments({
-            proyecto_id: { $in: proyectoIds },
-            fecha_fin: { $lt: startDay },
-            estado: { $nin: ['Completado'] },
-          }),
+      Proyecto.find(proyectoBase)
+        .select(
+          '_id nombre eje fase estado prioridad porcentaje_avance responsable fecha_inicio fecha_fin presupuesto_planificado presupuesto_asignado presupuesto_ejecutado moneda_presupuesto riesgos_registro createdAt',
+        )
+        .lean(),
       countCapacitacionesEnProgreso(scope),
       KPI.find(kpiFilter)
         .populate({ path: 'proyecto_ids', select: '_id nombre eje estado porcentaje_avance' })
@@ -107,6 +218,80 @@ dashboardRouter.get('/resumen', async (req, res, next) => {
         { $group: { _id: '$fase', avg: { $avg: '$porcentaje_avance' } } },
       ]),
     ])
+
+    const proyectoIds = proyectosLean.map((p) => p._id)
+    const proyectosTotal = proyectosLean.length
+    const proyectosActivos = proyectosLean.filter((p) =>
+      PROYECTO_ESTADOS_ACTIVOS.includes(
+        p.estado as (typeof PROYECTO_ESTADOS_ACTIVOS)[number],
+      ),
+    ).length
+
+    const tareasLean =
+      proyectoIds.length === 0
+        ? []
+        : await Tarea.find({ proyecto_id: { $in: proyectoIds } })
+            .select(
+              'nombre proyecto_id estado prioridad porcentaje fecha_fin responsable responsable_id createdAt updatedAt',
+            )
+            .lean()
+
+    const responsableIds = [
+      ...new Set(
+        tareasLean
+          .map((t) => (t.responsable_id ? String(t.responsable_id) : ''))
+          .filter((id) => mongoose.isValidObjectId(id)),
+      ),
+    ]
+    const responsableNombres = [
+      ...new Set(
+        tareasLean
+          .filter((t) => !t.responsable_id && (t.responsable || '').trim())
+          .map((t) => (t.responsable as string).trim()),
+      ),
+    ]
+    const empleadosCarga: EmpleadoCargaInfo[] =
+      responsableIds.length === 0 && responsableNombres.length === 0
+        ? []
+        : (
+            await Empleado.find({
+              $or: [
+                ...(responsableIds.length ? [{ _id: { $in: responsableIds } }] : []),
+                ...(responsableNombres.length
+                  ? [{ nombre: { $in: responsableNombres }, activo: { $ne: false } }]
+                  : []),
+              ],
+            })
+              .select('nombre departamento departamento_id')
+              .populate('departamento_id', 'nombre')
+              .lean()
+          ).map((e) => {
+            const dept = e.departamento_id
+            const deptNombre =
+              dept && typeof dept === 'object' && 'nombre' in dept
+                ? String((dept as { nombre?: string }).nombre || '')
+                : e.departamento || ''
+            const deptId =
+              dept && typeof dept === 'object' && '_id' in dept
+                ? String((dept as { _id: unknown })._id)
+                : dept
+                  ? String(dept)
+                  : null
+            return {
+              _id: String(e._id),
+              nombre: e.nombre,
+              departamento: deptNombre || e.departamento || 'Sin equipo',
+              departamento_id: deptId,
+            }
+          })
+
+    const portfolio = buildPortfolioSnapshot(
+      proyectosLean as unknown as PortfolioProyecto[],
+      tareasLean as unknown as PortfolioTarea[],
+      startDay,
+      empleadosCarga,
+    )
+    const tareasVencidas = portfolio.tareas.vencidas
 
     const fromColl = Proyecto.collection.name
     const tareasProximas =
@@ -215,7 +400,164 @@ dashboardRouter.get('/resumen', async (req, res, next) => {
       })),
       kpis: kpisLean,
       metas_estrategicas: [...metasMap.values()],
+      portfolio,
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+function tiene(permisos: string[], clave: string): boolean {
+  return permisos.includes('*') || permisos.includes(clave)
+}
+
+dashboardRouter.get('/paneles', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+    const permisos = u.permisos ?? []
+    const rrhh = tiene(permisos, 'equipo:ver') || tiene(permisos, 'empleados:ver') || tiene(permisos, 'capacitaciones:ver')
+    const admin = tiene(permisos, 'usuarios:ver') || tiene(permisos, 'roles:ver')
+    const out: Record<string, unknown> = {}
+    if (rrhh) {
+      const [activos, inactivos, caps, firmas] = await Promise.all([
+        Empleado.countDocuments({ activo: { $ne: false } }),
+        Empleado.countDocuments({ activo: false }),
+        Capacitacion.countDocuments({ estado: 'En progreso' }),
+        Evaluacion.countDocuments({
+          $or: [
+            { 'firmas.colaborador': { $ne: true } },
+            { 'firmas.coordinador': { $ne: true } },
+            { 'firmas.jefe': { $ne: true } },
+            { 'firmas.rrhh': { $ne: true } },
+          ],
+        }),
+      ])
+      out.rrhh = {
+        empleados_activos: activos,
+        empleados_inactivos: inactivos,
+        capacitaciones_en_progreso: caps,
+        evaluaciones_sin_firma: firmas,
+      }
+    }
+    if (admin) {
+      const [activos, inactivos, roles, accesos, auditoria] = await Promise.all([
+        Usuario.countDocuments({ activo: { $ne: false } }),
+        Usuario.countDocuments({ activo: false }),
+        Rol.countDocuments({ activo: { $ne: false } }),
+        Usuario.find({ activo: { $ne: false } })
+          .select('nombre ultimo_acceso')
+          .sort({ ultimo_acceso: -1 })
+          .limit(6)
+          .lean(),
+        Auditoria.find().sort({ createdAt: -1 }).limit(6).lean(),
+      ])
+      out.admin = {
+        usuarios_activos: activos,
+        usuarios_inactivos: inactivos,
+        roles,
+        accesos: accesos.map((a) => ({
+          nombre: a.nombre,
+          ultimo_acceso: a.ultimo_acceso ?? null,
+        })),
+        auditoria: auditoria.map((r) => ({
+          _id: String(r._id),
+          usuario_nombre: r.usuario_nombre || '—',
+          accion: r.accion,
+          entidad: r.entidad,
+          detalle: r.detalle,
+          ip: r.ip || '—',
+          createdAt: r.createdAt,
+        })),
+      }
+    }
+    res.json(out)
+  } catch (err) {
+    next(err)
+  }
+})
+
+dashboardRouter.get('/notificaciones', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
+    const items: Array<{
+      id: string
+      tipo: string
+      titulo: string
+      detalle: string
+      fecha: string | null
+      href: string
+    }> = []
+
+    const or: Record<string, unknown>[] = []
+    if (u.empleado_id && mongoose.isValidObjectId(u.empleado_id)) {
+      or.push({ responsable_id: new mongoose.Types.ObjectId(u.empleado_id) })
+    }
+    const nombre = (u.empleado_nombre || u.nombre || '').trim()
+    if (nombre) {
+      const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      or.push({ responsable: new RegExp(`^${esc}$`, 'i') })
+    }
+    if (or.length) {
+      const startDay = new Date()
+      startDay.setHours(0, 0, 0, 0)
+      const end7 = new Date(startDay)
+      end7.setDate(end7.getDate() + 7)
+      const tareas = await Tarea.find({
+        $or: or,
+        estado: { $ne: 'Completado' },
+      })
+        .select('nombre proyecto_id fecha_fin estado')
+        .sort({ fecha_fin: 1 })
+        .limit(30)
+        .lean()
+      const pids = [...new Set(tareas.map((t) => String(t.proyecto_id ?? '')).filter(Boolean))]
+      const proyectos = await Proyecto.find({ _id: { $in: pids } }).select('_id nombre').lean()
+      const mapa = new Map(proyectos.map((p) => [String(p._id), p.nombre]))
+      for (const t of tareas) {
+        const fin = t.fecha_fin ? new Date(t.fecha_fin) : null
+        if (fin && fin > end7) continue
+        const pid = String(t.proyecto_id ?? '')
+        const vencida = Boolean(fin && fin < startDay)
+        items.push({
+          id: `tarea-${t._id}`,
+          tipo: vencida ? 'vencida' : 'tarea',
+          titulo: t.nombre,
+          detalle: `${vencida ? 'Vencida' : 'Por vencer'} · ${mapa.get(pid) ?? 'Tarea'}`,
+          fecha: fin ? fin.toISOString() : null,
+          href: pid ? `/proyectos/${encodeURIComponent(pid)}` : '/mis-tareas',
+        })
+      }
+    }
+
+    const permisos = u.permisos ?? []
+    if (tiene(permisos, 'equipo:ver') || tiene(permisos, 'equipo:editar')) {
+      const evals = await Evaluacion.find({
+        $or: [
+          { 'firmas.colaborador': { $ne: true } },
+          { 'firmas.coordinador': { $ne: true } },
+          { 'firmas.jefe': { $ne: true } },
+          { 'firmas.rrhh': { $ne: true } },
+        ],
+      })
+        .sort({ updatedAt: -1 })
+        .limit(8)
+        .select('decision updatedAt')
+        .lean()
+      for (const ev of evals) {
+        items.push({
+          id: `eval-${ev._id}`,
+          tipo: 'aprobacion',
+          titulo: ev.decision ? `Evaluación · ${ev.decision}` : 'Evaluación pendiente de firma',
+          detalle: 'Falta al menos una firma',
+          fecha: ev.updatedAt ? new Date(ev.updatedAt).toISOString() : null,
+          href: '/equipo',
+        })
+      }
+    }
+
+    res.json({ items })
   } catch (err) {
     next(err)
   }

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 
 import { Usuario } from '../db/models/Usuario.js'
+import { unirPermisosDeRoles } from '../utils/authSession.js'
 
 export const JWT_SECRET = process.env.JWT_SECRET ?? 'rcj_it_2026_local_secret'
 
@@ -45,20 +46,21 @@ export async function requireAuth(
   try {
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
     const user = await Usuario.findById(payload._id)
-      .select('activo rol_id departamento_id empleado_id email nombre')
-      .populate<{ rol_id: { nombre?: string; permisos?: string[] } | null }>(
-        'rol_id',
-        'nombre permisos',
-      )
-      .populate<{ departamento_id: { codigo?: string; nombre?: string; lleva_gastos?: boolean } | null }>(
-        'departamento_id',
-        'codigo nombre lleva_gastos',
-      )
-      .populate<{ empleado_id: { _id: unknown; codigo?: string; nombre?: string } | null }>(
-        'empleado_id',
-        'codigo nombre',
-      )
-      .lean()
+      .select('activo rol_id roles_ids departamento_id empleado_id email nombre')
+      .populate('rol_id', 'nombre permisos')
+      .populate('roles_ids', 'nombre permisos')
+      .populate('departamento_id', 'codigo nombre lleva_gastos')
+      .populate('empleado_id', 'codigo nombre')
+      .lean() as {
+      _id: unknown
+      activo?: boolean
+      email?: string
+      nombre?: string
+      rol_id?: { nombre?: string; permisos?: string[] } | null
+      roles_ids?: Array<{ nombre?: string; permisos?: string[] }> | null
+      departamento_id?: { _id?: unknown; codigo?: string; nombre?: string; lleva_gastos?: boolean } | null
+      empleado_id?: { _id?: unknown; codigo?: string; nombre?: string } | null
+    } | null
 
     if (!user || user.activo === false) {
       res.status(401).json({ error: 'Usuario inactivo o no encontrado.' })
@@ -66,6 +68,8 @@ export async function requireAuth(
     }
 
     const rol = user.rol_id as { nombre?: string; permisos?: string[] } | null
+    const extras = (user.roles_ids ?? []) as Array<{ nombre?: string; permisos?: string[] }>
+    const nombres = [rol?.nombre, ...extras.map((r) => r.nombre)].filter(Boolean)
     const dept = user.departamento_id as {
       _id?: unknown
       codigo?: string
@@ -78,8 +82,8 @@ export async function requireAuth(
       _id: String(user._id),
       email: user.email ?? payload.email,
       nombre: user.nombre ?? payload.nombre,
-      rol: rol?.nombre ?? payload.rol,
-      permisos: rol?.permisos ?? [],
+      rol: nombres.join(' · ') || rol?.nombre || payload.rol,
+      permisos: unirPermisosDeRoles([rol, ...extras]),
       empleado_id: emp?._id != null ? String(emp._id) : payload.empleado_id ?? null,
       empleado_codigo: emp?.codigo ?? payload.empleado_codigo ?? null,
       empleado_nombre: emp?.nombre ?? payload.empleado_nombre ?? null,

@@ -240,7 +240,7 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
   }
 
   return (
-    <div className={cn('reporte-semanal-page space-y-6', !embedded && 'mx-auto max-w-7xl')}>
+    <div className={cn('reporte-semanal-page w-full space-y-6')}>
       {/* Hero */}
       <div
         className={cn(
@@ -580,7 +580,6 @@ export function ReporteSemanalTareasPage({ embedded = false }: { embedded?: bool
                         <span className="text-xs font-normal text-muted-foreground">({proy.proyecto_id})</span>
                       </CardTitle>
                       <div className="flex flex-wrap items-center gap-2">
-                        {proy.eje && <Badge variant="outline" className="text-xs">{proy.eje}</Badge>}
                         <div className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs shadow-sm">
                           <span className="text-muted-foreground">Avance</span>
                           <span className="font-bold text-[var(--navy)]">{proy.avance_proyecto}%</span>

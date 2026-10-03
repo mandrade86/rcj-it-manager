@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchDepartamentos } from '@/lib/api/departamentos'
 import { fetchPerfilesPuesto } from '@/lib/api/perfilesPuesto'
+import { useAuthStore } from '@/store/authStore'
 import type { DepartamentoDoc } from '@/types/departamento'
 import type { PerfilPuestoDoc } from '@/types/perfilPuesto'
 import type { Colaborador, ColaboradorEstado } from '@/types/colaborador'
@@ -72,7 +73,7 @@ function fromColaborador(c: Colaborador): FormState {
   }
 }
 
-function toPayload(f: FormState): Record<string, unknown> {
+function toPayload(f: FormState, verSalario: boolean): Record<string, unknown> {
   const o: Record<string, unknown> = {
     codigo: f.codigo.trim(),
     nombre: f.nombre.trim(),
@@ -85,8 +86,10 @@ function toPayload(f: FormState): Record<string, unknown> {
   }
   o.nivel = f.nivel === '' ? null : f.nivel
   const sal = f.salario_mensual.trim()
-  if (sal === '') o.salario_mensual = undefined
-  else o.salario_mensual = Number(sal)
+  if (verSalario) {
+    if (sal === '') o.salario_mensual = undefined
+    else o.salario_mensual = Number(sal)
+  }
   if (f.fecha_ingreso.trim()) {
     o.fecha_ingreso = new Date(`${f.fecha_ingreso.trim()}T12:00:00`)
   } else {
@@ -105,6 +108,7 @@ type Props = {
 }
 
 export function ColaboradorFormDialog({ open, onOpenChange, editing, onSave }: Props) {
+  const verSalario = useAuthStore((s) => s.hasPermiso('*') || s.hasPermiso('empleados:ver-salario'))
   const [form, setForm] = useState<FormState>(() =>
     editing ? fromColaborador(editing) : emptyForm(),
   )
@@ -132,7 +136,7 @@ export function ColaboradorFormDialog({ open, onOpenChange, editing, onSave }: P
     e.preventDefault()
     setSaving(true)
     try {
-      await onSave(toPayload(form))
+      await onSave(toPayload(form, verSalario))
       onOpenChange(false)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'No se pudo guardar')
@@ -251,6 +255,7 @@ export function ColaboradorFormDialog({ open, onOpenChange, editing, onSave }: P
               <option value="Futuro">Futuro</option>
             </select>
           </div>
+          {verSalario && (
           <div className="grid gap-2">
             <Label htmlFor="salario">Salario mensual (Lps)</Label>
             <Input
@@ -262,6 +267,7 @@ export function ColaboradorFormDialog({ open, onOpenChange, editing, onSave }: P
               onChange={(e) => set('salario_mensual', e.target.value)}
             />
           </div>
+          )}
           <div className="grid gap-2">
             <Label htmlFor="fecha_ingreso">Fecha de ingreso</Label>
             <Input

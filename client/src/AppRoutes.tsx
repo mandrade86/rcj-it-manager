@@ -22,7 +22,6 @@ import { ProyectosPage } from '@/pages/proyectos/ProyectosPage'
 import { ReportesPage } from '@/pages/reportes/ReportesPage'
 import { DepartamentosPage } from '@/pages/maestros/DepartamentosPage'
 import { MetasPage } from '@/pages/maestros/MetasPage'
-import { EjesProyectoPage } from '@/pages/maestros/EjesProyectoPage'
 import { EmpresasPage } from '@/pages/maestros/EmpresasPage'
 import { EmpleadosPage } from '@/pages/maestros/EmpleadosPage'
 import { PlantillasCarreraPage } from '@/pages/maestros/PlantillasCarreraPage'
@@ -37,6 +36,11 @@ import { GastosDashboardPage } from '@/pages/gastos-it/GastosDashboardPage'
 import { GastosPresupuestoPage } from '@/pages/gastos-it/GastosPresupuestoPage'
 import { ManualGuidePage } from '@/pages/manual/ManualGuidePage'
 import { ManualHubPage } from '@/pages/manual/ManualHubPage'
+import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { MiDiaPage } from '@/pages/inicio/MiDiaPage'
+import { ConfiguracionPage } from '@/pages/admin/ConfiguracionPage'
+import { AuditoriaPage } from '@/pages/admin/AuditoriaPage'
+import { NotificacionesPage } from '@/pages/inicio/NotificacionesPage'
 
 export function AppRoutes() {
   return (
@@ -56,7 +60,21 @@ export function AppRoutes() {
           </Route>
 
           <Route element={<ProtectedRoute permiso="dashboard:ver" />}>
+            <Route path="mi-dia" element={<MiDiaPage />} />
+            <Route path="mis-tareas" element={<MiDiaPage soloPendientes />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="notificaciones" element={<NotificacionesPage />} />
             <Route path="resumen-departamento" element={<ResumenDepartamentoPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="usuarios:editar" />}>
+            <Route
+              path="admin/configuracion"
+              element={<ConfiguracionPage />}
+            />
+          </Route>
+          <Route element={<ProtectedRoute permiso="roles:ver" />}>
+            <Route path="admin/auditoria" element={<AuditoriaPage />} />
           </Route>
 
           <Route element={<ProtectedRoute permiso="proyectos:ver" />}>
@@ -109,7 +127,7 @@ export function AppRoutes() {
 
           <Route element={<ProtectedRoute permiso="maestros:ver" />}>
             <Route path="maestros/metas" element={<MetasPage />} />
-            <Route path="maestros/ejes-proyecto" element={<EjesProyectoPage />} />
+            <Route path="maestros/ejes-proyecto" element={<Navigate to="/maestros/departamentos" replace />} />
             <Route path="maestros/empresas" element={<EmpresasPage />} />
             <Route path="maestros/planes-carrera" element={<PlantillasCarreraPage />} />
             <Route path="maestros/perfiles-puesto" element={<PerfilesPuestoPage />} />

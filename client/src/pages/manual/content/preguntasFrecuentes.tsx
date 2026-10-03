@@ -28,7 +28,6 @@ export const preguntasFrecuentesSections: ManualSection[] = [
     content: (
       <ul>
         <li>El proyecto debe tener <strong>departamento</strong> asignado.</li>
-        <li>La <strong>categoría (eje)</strong> del proyecto debe ser la misma que la del KPI.</li>
         <li>El KPI debe existir antes en la pantalla <strong>KPIs</strong>.</li>
       </ul>
     ),

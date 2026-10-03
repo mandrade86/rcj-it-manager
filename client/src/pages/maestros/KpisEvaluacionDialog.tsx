@@ -225,7 +225,6 @@ export function KpisEvaluacionDialog({ perfil, onClose, onSaved }: Props) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[80px]">Eje</TableHead>
                     <TableHead>KPI</TableHead>
                     <TableHead className="w-[120px]">Meta</TableHead>
                     <TableHead className="w-[110px] text-center">Peso (%)</TableHead>
@@ -236,7 +235,7 @@ export function KpisEvaluacionDialog({ perfil, onClose, onSaved }: Props) {
                 <TableBody>
                   {items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
                         No hay KPIs configurados. {esAdmin ? 'Agrega abajo.' : ''}
                       </TableCell>
                     </TableRow>
@@ -245,9 +244,6 @@ export function KpisEvaluacionDialog({ perfil, onClose, onSaved }: Props) {
                     const kpi = allKpis.find((k) => k._id === it.kpi_id)
                     return (
                       <TableRow key={idx} className="align-top">
-                        <TableCell className="text-xs uppercase text-muted-foreground">
-                          {kpi?.eje ?? '—'}
-                        </TableCell>
                         <TableCell>
                           <p className="text-sm font-medium leading-snug">
                             {kpi?.nombre ?? '(KPI eliminado)'}
@@ -346,7 +342,7 @@ export function KpisEvaluacionDialog({ perfil, onClose, onSaved }: Props) {
                       <optgroup label="KPIs del departamento">
                         {kpisDepto.map((k) => (
                           <option key={k._id} value={k._id}>
-                            {k.eje} — {k.nombre}
+                            {k.nombre}
                           </option>
                         ))}
                       </optgroup>
@@ -355,7 +351,7 @@ export function KpisEvaluacionDialog({ perfil, onClose, onSaved }: Props) {
                       <optgroup label="Otros departamentos">
                         {kpisOtros.map((k) => (
                           <option key={k._id} value={k._id}>
-                            {k.eje} — {k.nombre}
+                            {k.nombre}
                           </option>
                         ))}
                       </optgroup>

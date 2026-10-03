@@ -1,8 +1,14 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
 
+import { requirePermiso } from '../middleware/requireAuth.js'
 import { Rol } from '../db/models/Rol.js'
 import { Usuario } from '../db/models/Usuario.js'
+import {
+  MATRIZ_MODULOS,
+  PERMISOS_CATALOGO,
+  PERMISOS_DISPONIBLES,
+} from '../utils/permisosCatalog.js'
 import {
   buildEliminarLoteResponse,
   parseEliminarLoteIds,
@@ -10,38 +16,14 @@ import {
 
 export const rolesRouter = Router()
 
-export const PERMISOS_DISPONIBLES = [
-  { clave: '*', descripcion: 'Administrador — acceso completo' },
-  { clave: 'dashboard:ver', descripcion: 'Dashboard — ver' },
-  { clave: 'proyectos:ver', descripcion: 'Proyectos — ver los propios y de su departamento' },
-  { clave: 'proyectos:ver-todos', descripcion: 'Proyectos — ver los de todos los departamentos' },
-  { clave: 'proyectos:editar', descripcion: 'Proyectos — crear, editar y eliminar' },
-  { clave: 'equipo:ver', descripcion: 'Equipo — ver colaboradores' },
-  { clave: 'equipo:editar', descripcion: 'Equipo — editar colaboradores' },
-  { clave: 'capacitaciones:ver', descripcion: 'Capacitaciones — ver' },
-  { clave: 'capacitaciones:ver-todos', descripcion: 'Capacitaciones — ver todas (no solo las del equipo)' },
-  { clave: 'capacitaciones:editar', descripcion: 'Capacitaciones — editar' },
-  { clave: 'gastos:ver', descripcion: 'Gastos — ver' },
-  { clave: 'kpis:ver', descripcion: 'KPIs — ver' },
-  { clave: 'kpis:editar', descripcion: 'KPIs — registrar valores' },
-  { clave: 'maestros:ver', descripcion: 'Maestros — ver catálogos' },
-  { clave: 'maestros:editar', descripcion: 'Maestros — editar catálogos' },
-  { clave: 'empleados:ver', descripcion: 'Empleados / Organigrama — ver' },
-  { clave: 'empleados:editar', descripcion: 'Empleados — editar' },
-  { clave: 'usuarios:ver', descripcion: 'Usuarios — ver' },
-  { clave: 'usuarios:editar', descripcion: 'Usuarios — crear/editar' },
-  { clave: 'roles:ver', descripcion: 'Roles — ver' },
-  { clave: 'roles:editar', descripcion: 'Roles — crear/editar' },
-  { clave: 'it:arquitectura:ver', descripcion: 'Arquitectura IT — ver' },
-  { clave: 'it:arquitectura:editar', descripcion: 'Arquitectura IT — editar' },
-  { clave: 'bi:costeo:ver', descripcion: 'BI Costeo muestras — ver dashboard' },
-  { clave: 'bi:costeo:config', descripcion: 'BI Costeo muestras — configurar conexión SAP' },
-  { clave: 'it:gastos:ver', descripcion: 'Gastos IT — dashboard desde SAP HANA (VW_COSTOS_IT)' },
-  { clave: 'it:gastos:config', descripcion: 'Gastos IT — configurar mapeo de columnas' },
-]
+export { PERMISOS_DISPONIBLES }
 
 rolesRouter.get('/permisos-disponibles', (_req, res) => {
-  res.json(PERMISOS_DISPONIBLES)
+  res.json(PERMISOS_CATALOGO)
+})
+
+rolesRouter.get('/matriz', (_req, res) => {
+  res.json({ modulos: MATRIZ_MODULOS })
 })
 
 const POPULATE_FIELDS = [
@@ -76,7 +58,7 @@ rolesRouter.get('/', async (_req, res, next) => {
   }
 })
 
-rolesRouter.post('/eliminar-lote', async (req, res, next) => {
+rolesRouter.post('/eliminar-lote', requirePermiso('roles:editar'), async (req, res, next) => {
   try {
     const parsed = parseEliminarLoteIds((req.body as { ids?: unknown }).ids)
     if ('error' in parsed) {
@@ -121,7 +103,7 @@ rolesRouter.get('/:id', async (req, res, next) => {
   }
 })
 
-rolesRouter.post('/', async (req, res, next) => {
+rolesRouter.post('/', requirePermiso('roles:editar'), async (req, res, next) => {
   try {
     const {
       nombre, descripcion, departamento_id, perfil_puesto_id, permisos, activo,
@@ -145,7 +127,7 @@ rolesRouter.post('/', async (req, res, next) => {
   }
 })
 
-rolesRouter.put('/:id', async (req, res, next) => {
+rolesRouter.put('/:id', requirePermiso('roles:editar'), async (req, res, next) => {
   try {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }
@@ -166,7 +148,7 @@ rolesRouter.put('/:id', async (req, res, next) => {
   }
 })
 
-rolesRouter.delete('/:id', async (req, res, next) => {
+rolesRouter.delete('/:id', requirePermiso('roles:editar'), async (req, res, next) => {
   try {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }

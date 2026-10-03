@@ -24,9 +24,19 @@ function normalizarEjes(raw: unknown): string[] {
   return out
 }
 
-departamentosRouter.get('/', async (_req, res, next) => {
+departamentosRouter.get('/', async (req, res, next) => {
   try {
-    const rows = await Departamento.find()
+    const { activo, todos } = req.query
+    const filter: Record<string, unknown> = {}
+    if (todos === '1' || todos === 'true') {
+      // Maestro / configuración: todos los departamentos
+    } else if (activo !== undefined) {
+      filter.activo = activo === 'true'
+    } else {
+      // Por defecto solo visibles (activos) en selectores y reportes
+      filter.activo = { $ne: false }
+    }
+    const rows = await Departamento.find(filter)
       .populate('empresa_id', 'nombre codigo ehr_empresa_id')
       .sort({ ehr_empresa_id: 1, nombre: 1 })
       .lean()
@@ -161,6 +171,9 @@ departamentosRouter.put('/:id', async (req, res, next) => {
     }
     if (rest.lleva_gastos !== undefined) {
       rest.lleva_gastos = Boolean(rest.lleva_gastos)
+    }
+    if (rest.activo !== undefined) {
+      rest.activo = Boolean(rest.activo)
     }
     if (rest.archivo_gastos !== undefined) {
       rest.archivo_gastos = typeof rest.archivo_gastos === 'string'

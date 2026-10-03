@@ -129,10 +129,16 @@ function mapEmpleadoEhr(row: Record<string, unknown>) {
 
 empleadosRouter.get('/', async (req, res, next) => {
   try {
-    const { departamento, activo } = req.query
+    const { departamento, activo, todos } = req.query
     const filter: Record<string, unknown> = {}
     if (departamento) filter.departamento = departamento
-    if (activo !== undefined) filter.activo = activo === 'true'
+    const incluirTodos = todos === '1' || todos === 'true'
+    if (!incluirTodos) {
+      if (activo === 'false') filter.activo = false
+      else filter.activo = { $ne: false }
+    } else if (activo !== undefined) {
+      filter.activo = activo === 'true'
+    }
     const rows = await Empleado.find(filter)
       .populate(EMPLEADO_POPULATE)
       .sort({ nombre: 1 })
@@ -273,9 +279,10 @@ empleadosRouter.get('/mi-equipo', async (req, res, next) => {
     const { isAdmin, visibleIds, selfEmpleadoId, directIds, autoDirectIds, deptStartIds } =
       await resolveVisibleEmpleadoIds(userId)
 
+    const activos = { activo: { $ne: false } }
     const baseQuery = isAdmin
-      ? Empleado.find({})
-      : Empleado.find({ _id: { $in: visibleIds } })
+      ? Empleado.find(activos)
+      : Empleado.find({ _id: { $in: visibleIds }, ...activos })
 
     const empleados = await baseQuery
       .populate(EMPLEADO_POPULATE)

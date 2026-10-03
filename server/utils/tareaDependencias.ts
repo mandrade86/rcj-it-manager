@@ -102,7 +102,7 @@ export async function limpiarDependenciasRotas(
   proyectoId: string,
   eliminadosIds: string[],
 ): Promise<void> {
-  if (eliminadosIds.length === 0) return
+  if (!proyectoId || eliminadosIds.length === 0) return
   const oids = eliminadosIds.map((id) => new mongoose.Types.ObjectId(id))
   await Tarea.updateMany(
     { proyecto_id: proyectoId, depende_de_ids: { $in: oids } },

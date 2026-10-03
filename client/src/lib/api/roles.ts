@@ -11,10 +11,16 @@ export async function fetchRoles(): Promise<RolDoc[]> {
   return res.json() as Promise<RolDoc[]>
 }
 
-export async function fetchPermisosDisponibles(): Promise<{ clave: string; descripcion: string }[]> {
+export type PermisoCatalogo = {
+  clave: string
+  descripcion: string
+  grupo?: string
+}
+
+export async function fetchPermisosDisponibles(): Promise<PermisoCatalogo[]> {
   const res = await fetch('/api/roles/permisos-disponibles')
   if (!res.ok) throw new Error(await parseError(res))
-  return res.json() as Promise<{ clave: string; descripcion: string }[]>
+  return res.json() as Promise<PermisoCatalogo[]>
 }
 
 export async function createRol(body: Record<string, unknown>): Promise<RolDoc> {

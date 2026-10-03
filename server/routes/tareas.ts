@@ -9,12 +9,13 @@ import { Empleado } from '../db/models/Empleado.js'
 import { Proyecto } from '../db/models/Proyecto.js'
 import { Tarea } from '../db/models/Tarea.js'
 import { recalcularAvanceProyecto } from '../utils/proyectoAvance.js'
+import { estadoTareaPermitido } from '../utils/tareaEstados.js'
 import {
   esColumnaKanban,
   estadoDesdeColumnaKanban,
   porcentajeParaColumnaKanban,
 } from '../utils/tareaKanban.js'
-import { usuarioPuedeMoverTarea, usuarioPuedeEditarTareasProyecto } from '../utils/tareaPermisos.js'
+import { usuarioPuedeMoverTarea, usuarioPuedeEditarTarea, usuarioPuedeEditarTareasProyecto } from '../utils/tareaPermisos.js'
 import {
   limpiarDependenciasRotas,
   validarDependenciasTarea,
@@ -180,6 +181,88 @@ tareasRouter.get('/', async (req, res, next) => {
   }
 })
 
+function filtroTareasUsuario(u: { _id: string; empleado_id?: string | null; empleado_nombre?: string | null; nombre?: string }) {
+  const or: Record<string, unknown>[] = []
+  if (u.empleado_id && mongoose.isValidObjectId(u.empleado_id)) {
+    or.push({ responsable_id: new mongoose.Types.ObjectId(u.empleado_id) })
+  }
+  const nombre = (u.empleado_nombre || u.nombre || '').trim()
+  if (nombre) {
+    const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    or.push({ responsable: new RegExp(`^${esc}$`, 'i') })
+  }
+  return or
+}
+
+type TareaMiaLean = {
+  _id: unknown
+  nombre: string
+  proyecto_id?: string | null
+  responsable?: string | null
+  responsable_id?: unknown
+  fecha_fin?: Date | null
+  estado: string
+  prioridad?: string | null
+  porcentaje?: number
+  descripcion?: string | null
+  creado_por_usuario_id?: unknown
+}
+
+async function enriquecerTareasConProyecto(rows: TareaMiaLean[]) {
+  const proyectoIds = [...new Set(rows.map((t) => t.proyecto_id).filter(Boolean).map(String))]
+  const proyectos = proyectoIds.length
+    ? await Proyecto.find({ _id: { $in: proyectoIds } }).select('_id nombre').lean()
+    : []
+  const nombreProyecto = new Map(proyectos.map((p) => [String(p._id), p.nombre ?? String(p._id)]))
+  return rows.map((t) => {
+    const pid = t.proyecto_id ? String(t.proyecto_id) : ''
+    return {
+      _id: String(t._id),
+      nombre: t.nombre,
+      descripcion: t.descripcion ?? '',
+      proyecto_id: pid,
+      proyecto_nombre: pid ? (nombreProyecto.get(pid) ?? pid) : 'Personal',
+      responsable: t.responsable ?? '',
+      responsable_id: t.responsable_id ? String(t.responsable_id) : '',
+      fecha_fin: t.fecha_fin ?? null,
+      estado: t.estado,
+      prioridad: t.prioridad ?? null,
+      porcentaje: t.porcentaje ?? 0,
+      creado_por_usuario_id: t.creado_por_usuario_id ? String(t.creado_por_usuario_id) : '',
+    }
+  })
+}
+
+/** GET /api/tareas/mias — asignadas a mí y las que yo asigné (con o sin proyecto). */
+tareasRouter.get('/mias', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+    const or = filtroTareasUsuario(u)
+    const [asignadasRaw, creadasRaw] = await Promise.all([
+      or.length === 0
+        ? Promise.resolve([] as TareaMiaLean[])
+        : Tarea.find({ $or: or })
+            .select('nombre descripcion proyecto_id responsable responsable_id fecha_fin estado prioridad porcentaje creado_por_usuario_id')
+            .sort({ fecha_fin: 1, nombre: 1 })
+            .lean() as unknown as Promise<TareaMiaLean[]>,
+      Tarea.find({ creado_por_usuario_id: u._id })
+        .select('nombre descripcion proyecto_id responsable responsable_id fecha_fin estado prioridad porcentaje creado_por_usuario_id')
+        .sort({ fecha_fin: 1, nombre: 1 })
+        .lean() as unknown as Promise<TareaMiaLean[]>,
+    ])
+    const asignadas = await enriquecerTareasConProyecto(asignadasRaw)
+    const asignadasIds = new Set(asignadas.map((t) => t._id))
+    const creadas = (await enriquecerTareasConProyecto(creadasRaw)).filter((t) => !asignadasIds.has(t._id))
+    res.json({ asignadas, creadas })
+  } catch (err) {
+    next(err)
+  }
+})
+
 /** Reporte semanal de tareas para gerencia. */
 tareasRouter.get('/reporte-semanal', async (req, res, next) => {
   try {
@@ -214,16 +297,30 @@ tareasRouter.get('/reporte-semanal', async (req, res, next) => {
 
 tareasRouter.post('/', async (req, res, next) => {
   try {
-    if (!req.body?.proyecto_id || typeof req.body.proyecto_id !== 'string') {
-      res.status(400).json({ error: 'proyecto_id es obligatorio' })
+    const nombre = String(req.body?.nombre ?? '').trim()
+    if (!nombre) {
+      res.status(400).json({ error: 'El nombre de la tarea es obligatorio' })
       return
     }
-    if (!(await usuarioPuedeEditarTareasProyecto(req, req.body.proyecto_id))) {
-      res.status(403).json({ error: 'Solo lectura en este proyecto' })
-      return
+    const proyectoId =
+      typeof req.body?.proyecto_id === 'string' ? req.body.proyecto_id.trim() : ''
+    if (proyectoId) {
+      if (!(await usuarioPuedeEditarTareasProyecto(req, proyectoId))) {
+        res.status(403).json({ error: 'Solo lectura en este proyecto' })
+        return
+      }
     }
     const body = { ...req.body } as Record<string, unknown>
-    // KPI/fuente_medicion ya no aplican a nivel de tarea
+    body.nombre = nombre
+    body.proyecto_id = proyectoId || null
+    body.creado_por_usuario_id = req.user?._id ?? null
+    if (typeof body.estado === 'string' && body.estado.trim()) {
+      if (!(await estadoTareaPermitido(body.estado.trim()))) {
+        res.status(400).json({ error: 'Ese estado no está en el catálogo.' })
+        return
+      }
+      body.estado = body.estado.trim()
+    }
     delete body.kpi
     delete body.fuente_medicion
 
@@ -231,17 +328,19 @@ tareasRouter.post('/', async (req, res, next) => {
       const rid = await resolverResponsableId(body.responsable)
       if (rid) body.responsable_id = rid
     }
-    if ('depende_de_ids' in body) {
-      const v = await validarDependenciasTarea(
-        req.body.proyecto_id,
-        null,
-        body.depende_de_ids,
-      )
+    if (!body.responsable_id && req.user?.empleado_id) {
+      body.responsable_id = req.user.empleado_id
+      if (!body.responsable) body.responsable = req.user.empleado_nombre || req.user.nombre
+    }
+    if (proyectoId && 'depende_de_ids' in body) {
+      const v = await validarDependenciasTarea(proyectoId, null, body.depende_de_ids)
       if (v.error) {
         res.status(400).json({ error: v.error })
         return
       }
       body.depende_de_ids = v.ids
+    } else {
+      delete body.depende_de_ids
     }
     if ('tags' in body) {
       body.tags = normalizeTareaTags(body.tags)
@@ -249,7 +348,7 @@ tareasRouter.post('/', async (req, res, next) => {
     sanitizeMontoField(body, 'monto_asignado')
     sanitizeMontoField(body, 'monto_ejecutado')
     const doc = await Tarea.create(body)
-    await recalcularAvanceProyecto(req.body.proyecto_id)
+    if (proyectoId) await recalcularAvanceProyecto(proyectoId)
     res.status(201).json(doc)
   } catch (err) {
     next(err)
@@ -719,15 +818,19 @@ tareasRouter.put('/:id', async (req, res, next) => {
       res.status(400).json({ error: 'Identificador inválido' })
       return
     }
-    const prev = await Tarea.findById(id).select('proyecto_id').lean() as {
-      proyecto_id: string
+    const prev = await Tarea.findById(id)
+      .select('proyecto_id responsable_id creado_por_usuario_id')
+      .lean() as {
+      proyecto_id?: string | null
+      responsable_id?: mongoose.Types.ObjectId | null
+      creado_por_usuario_id?: mongoose.Types.ObjectId | null
     } | null
     if (!prev) {
       res.status(404).json({ error: 'Tarea no encontrada' })
       return
     }
-    if (!(await usuarioPuedeEditarTareasProyecto(req, prev.proyecto_id))) {
-      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+    if (!(await usuarioPuedeEditarTarea(req, prev))) {
+      res.status(403).json({ error: 'No puedes editar esta tarea' })
       return
     }
     const {
@@ -738,18 +841,30 @@ tareasRouter.put('/:id', async (req, res, next) => {
     } = req.body as Record<string, unknown>
     void __v; void createdAt; void updatedAt; void _id; void _kpi; void _fuenteMed; void _adjuntos
 
+    if (typeof rest.estado === 'string' && rest.estado.trim()) {
+      if (!(await estadoTareaPermitido(rest.estado.trim()))) {
+        res.status(400).json({ error: 'Ese estado no está en el catálogo.' })
+        return
+      }
+      rest.estado = rest.estado.trim()
+    }
+
     if (!rest.responsable_id && typeof rest.responsable === 'string') {
       const rid = await resolverResponsableId(rest.responsable)
       if (rid) rest.responsable_id = rid
     }
 
     if ('depende_de_ids' in rest) {
-      const v = await validarDependenciasTarea(prev.proyecto_id, id, rest.depende_de_ids)
-      if (v.error) {
-        res.status(400).json({ error: v.error })
-        return
+      if (!prev.proyecto_id) {
+        rest.depende_de_ids = []
+      } else {
+        const v = await validarDependenciasTarea(prev.proyecto_id, id, rest.depende_de_ids)
+        if (v.error) {
+          res.status(400).json({ error: v.error })
+          return
+        }
+        rest.depende_de_ids = v.ids
       }
-      rest.depende_de_ids = v.ids
     }
 
     if ('tags' in rest) {
@@ -757,13 +872,15 @@ tareasRouter.put('/:id', async (req, res, next) => {
     }
     sanitizeMontoField(rest, 'monto_asignado')
     sanitizeMontoField(rest, 'monto_ejecutado')
+    delete rest.proyecto_id
+    delete rest.creado_por_usuario_id
 
     const doc = await Tarea.findByIdAndUpdate(id, rest, {
       new: true,
       runValidators: true,
     }).lean()
-    const pid = (doc as { proyecto_id?: string })?.proyecto_id ?? prev.proyecto_id
-    await recalcularAvanceProyecto(pid)
+    const pid = (doc as { proyecto_id?: string | null })?.proyecto_id ?? prev.proyecto_id
+    if (pid) await recalcularAvanceProyecto(pid)
     res.json(doc)
   } catch (err) {
     next(err)
@@ -777,22 +894,28 @@ tareasRouter.delete('/:id', async (req, res, next) => {
       res.status(400).json({ error: 'Identificador inválido' })
       return
     }
-    const prev = await Tarea.findById(id).select('proyecto_id adjuntos').lean() as {
-      proyecto_id: string
+    const prev = await Tarea.findById(id)
+      .select('proyecto_id responsable_id creado_por_usuario_id adjuntos')
+      .lean() as {
+      proyecto_id?: string | null
+      responsable_id?: mongoose.Types.ObjectId | null
+      creado_por_usuario_id?: mongoose.Types.ObjectId | null
       adjuntos?: Array<{ archivo: string }>
     } | null
     if (!prev) {
       res.status(404).json({ error: 'Tarea no encontrada' })
       return
     }
-    if (!(await usuarioPuedeEditarTareasProyecto(req, prev.proyecto_id))) {
-      res.status(403).json({ error: 'Solo lectura en este proyecto' })
+    if (!(await usuarioPuedeEditarTarea(req, prev))) {
+      res.status(403).json({ error: 'No puedes eliminar esta tarea' })
       return
     }
     eliminarAdjuntosFisicos(prev.adjuntos)
     await Tarea.findByIdAndDelete(id)
-    await limpiarDependenciasRotas(prev.proyecto_id, [id])
-    await recalcularAvanceProyecto(prev.proyecto_id)
+    if (prev.proyecto_id) {
+      await limpiarDependenciasRotas(prev.proyecto_id, [id])
+      await recalcularAvanceProyecto(prev.proyecto_id)
+    }
     res.status(204).send()
   } catch (err) {
     next(err)

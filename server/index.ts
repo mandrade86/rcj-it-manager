@@ -26,7 +26,12 @@ import {
 import { isAdLoginEnabled } from './utils/ehrAuth.js'
 import { requireAuth } from './middleware/requireAuth.js'
 import { authRouter } from './routes/auth.js'
+import { auditoriaRouter } from './routes/auditoria.js'
+import { buscarRouter } from './routes/buscar.js'
+import { auditMutations } from './utils/auditoria.js'
 import { dashboardRouter } from './routes/dashboard.js'
+import { workspaceConfigRouter } from './routes/workspaceConfig.js'
+import { tareaEstadosRouter } from './routes/tareaEstados.js'
 import { ehrRouter } from './routes/ehr.js'
 import { empleadosRouter } from './routes/empleados.js'
 import { gastosRouter } from './routes/gastos.js'
@@ -110,6 +115,7 @@ app.use('/api/auth', authRouter)
 
 // All other /api routes require authentication
 app.use('/api', requireAuth)
+app.use('/api', auditMutations)
 
 app.use('/api/departamentos', departamentosRouter)
 app.use('/api/ejes-proyecto', ejesProyectoRouter)
@@ -122,6 +128,10 @@ app.use('/api/plantillas-carrera', plantillasCarreraRouter)
 app.use('/api/roles', rolesRouter)
 app.use('/api/usuarios', usuariosRouter)
 app.use('/api/dashboard', dashboardRouter)
+app.use('/api/auditoria', auditoriaRouter)
+app.use('/api/buscar', buscarRouter)
+app.use('/api/config/workspace', workspaceConfigRouter)
+app.use('/api/config/tarea-estados', tareaEstadosRouter)
 app.use('/api/gastos', gastosRouter)
 app.use('/api/costeo-muestras', costeoMuestrasRouter) // BI: consumo real OP + OP vs receta
 app.use('/api/costos-it', costosItRouter) // Control gastos departamento IT desde SAP HANA

@@ -5,10 +5,16 @@ async function parseError(res: Response): Promise<string> {
   catch { return res.statusText }
 }
 
-export async function fetchEmpleados(params?: { departamento?: string; activo?: boolean }): Promise<EmpleadoDoc[]> {
+export async function fetchEmpleados(params?: {
+  departamento?: string
+  activo?: boolean
+  /** Incluye inactivos (maestro de empleados). Por defecto solo activos. */
+  todos?: boolean
+}): Promise<EmpleadoDoc[]> {
   const q = new URLSearchParams()
   if (params?.departamento) q.set('departamento', params.departamento)
-  if (params?.activo !== undefined) q.set('activo', String(params.activo))
+  if (params?.todos) q.set('todos', '1')
+  else if (params?.activo !== undefined) q.set('activo', String(params.activo))
   const res = await fetch(`/api/empleados${q.toString() ? `?${q}` : ''}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<EmpleadoDoc[]>

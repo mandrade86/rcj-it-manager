@@ -116,7 +116,6 @@ export function ReporteSemanalPrintSheet({ data, tituloAlcance, mensajeEjecutivo
           </h2>
           <p className="reporte-print-sub">
             Avance proyecto: {proy.avance_proyecto}% · Avance tareas: {proy.avance_tareas_promedio}% · {proy.tareas.length} tareas
-            {proy.eje ? ` · ${proy.eje}` : ''}
           </p>
           <table className="reporte-print-table">
             <thead>

@@ -27,6 +27,7 @@ import { fetchPlantillasCarrera, asignarPlantillaAColaborador } from '@/lib/api/
 import type { PlantillaCarreraDoc } from '@/types/plantillaCarrera'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDateDMY, formatLps } from '@/lib/format'
+import { useAuthStore } from '@/store/authStore'
 import { ColaboradorFichaResumen } from '@/components/equipo/ColaboradorFichaResumen'
 import { PlanCarreraChecklist } from '@/pages/equipo/PlanCarreraChecklist'
 import type { Colaborador } from '@/types/colaborador'
@@ -372,6 +373,7 @@ function CertificadoCell({
 
 export function ColaboradorPerfilPage() {
   const { id } = useParams<{ id: string }>()
+  const verSalario = useAuthStore((s) => s.hasPermiso('*') || s.hasPermiso('empleados:ver-salario'))
   const [c, setC] = useState<Colaborador | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -665,10 +667,12 @@ export function ColaboradorPerfilPage() {
                 <p className="text-xs text-muted-foreground">Fecha de ingreso</p>
                 <p className="font-medium">{formatDateDMY(c.fecha_ingreso)}</p>
               </div>
+              {verSalario && (
               <div>
                 <p className="text-xs text-muted-foreground">Salario mensual</p>
                 <p className="font-medium">{formatLps(c.salario_mensual ?? null)}</p>
               </div>
+              )}
               {c.notas && (
                 <div className="sm:col-span-2">
                   <p className="text-xs text-muted-foreground">Notas</p>

@@ -18,6 +18,8 @@ const UsuarioSchema = new Schema(
     /** Secreto temporal mientras el usuario confirma el enrolamiento MFA. */
     mfa_pending_secret: { type: String, default: '' },
     rol_id: { type: Schema.Types.ObjectId, ref: 'Rol', required: true },
+    /** Roles extra. `rol_id` sigue siendo el principal. Los permisos se suman. */
+    roles_ids: [{ type: Schema.Types.ObjectId, ref: 'Rol' }],
     /**
      * Identidad del usuario en el maestro de empleados (su "número de empleado").
      * Punto de partida principal del alcance: sus subordinados se descubren

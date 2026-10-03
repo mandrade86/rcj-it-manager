@@ -92,7 +92,7 @@ export function MiEvaluacionPage() {
 
   if (err || !colab) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="w-full">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -120,7 +120,7 @@ export function MiEvaluacionPage() {
   const ultimaJefeKpi = evalsKpi.find((e) => e.tipo === 'jefe')
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">

@@ -9,10 +9,10 @@ export type RoadmapHierarchyMode =
   | 'depto-eje'
 
 export const ROADMAP_HIERARCHY_OPTIONS: { id: RoadmapHierarchyMode; label: string }[] = [
-  { id: 'depto-fase-eje', label: 'Departamento → Fase → Categoría' },
-  { id: 'depto-meta-eje', label: 'Departamento → Meta → Categoría' },
-  { id: 'fase-eje', label: 'Fase → Categoría' },
-  { id: 'depto-eje', label: 'Departamento → Categoría' },
+  { id: 'depto-fase-eje', label: 'Departamento → Fase' },
+  { id: 'depto-meta-eje', label: 'Departamento → Meta' },
+  { id: 'fase-eje', label: 'Fase' },
+  { id: 'depto-eje', label: 'Departamento' },
 ]
 
 export type RoadmapNodeKind = 'group' | 'project'
@@ -53,11 +53,6 @@ function deptLabel(p: Proyecto): string {
 function faseLabel(fase: number | null | undefined): string {
   if (fase === 1 || fase === 2 || fase === 3) return `Fase ${fase}`
   return 'Sin fase'
-}
-
-function ejeLabel(eje: string | null | undefined): string {
-  const t = eje?.trim()
-  return t || 'Sin categoría'
 }
 
 function aggregate(nodes: RoadmapTreeNode[]): {
@@ -175,7 +170,7 @@ function buildLeaves(proyectos: Proyecto[], level: number): RoadmapTreeNode[] {
 }
 
 function buildEjeThenProjects(items: Proyecto[], level: number): RoadmapTreeNode[] {
-  return groupBy(items, (p) => ejeLabel(p.eje), level, (list, lv) => buildLeaves(list, lv))
+  return buildLeaves(items, level)
 }
 
 function buildFaseEje(items: Proyecto[], level: number): RoadmapTreeNode[] {

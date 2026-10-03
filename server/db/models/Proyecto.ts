@@ -136,6 +136,31 @@ const ProyectoSchema = new Schema(
     participantes: { type: [ProyectoParticipanteSchema], default: [] },
     /** Riesgos documentados para reportes ejecutivos (comentarios + evidencias). */
     riesgos_registro: { type: [RiesgoProyectoRegistroSchema], default: [] },
+    hitos: {
+      type: [{
+        nombre: { type: String, required: true },
+        fecha: { type: Date, default: null },
+        hecho: { type: Boolean, default: false },
+      }],
+      default: [],
+    },
+    incidencias: {
+      type: [{
+        titulo: { type: String, required: true },
+        detalle: { type: String, default: '' },
+        estado: { type: String, enum: ['Abierta', 'En curso', 'Cerrada'], default: 'Abierta' },
+        fecha: { type: Date, default: null },
+      }],
+      default: [],
+    },
+    documentos: {
+      type: [{
+        nombre: { type: String, required: true },
+        enlace: { type: String, default: '' },
+        notas: { type: String, default: '' },
+      }],
+      default: [],
+    },
   },
   { timestamps: true },
 )

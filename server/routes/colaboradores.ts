@@ -80,6 +80,17 @@ colaboradoresRouter.get('/por-empleado/:empleadoId', async (req, res, next) => {
   }
 })
 
+function sinSalario<T>(doc: T, ver: boolean): T {
+  if (ver || doc == null || typeof doc !== 'object') return doc
+  const copy = { ...(doc as Record<string, unknown>) }
+  delete copy.salario_mensual
+  return copy as T
+}
+
+function puedeVerSalario(permisos: string[] | undefined): boolean {
+  return Boolean(permisos?.includes('*') || permisos?.includes('empleados:ver-salario'))
+}
+
 colaboradoresRouter.get('/', async (req, res, next) => {
   try {
     const { frente, estado } = req.query
@@ -87,7 +98,8 @@ colaboradoresRouter.get('/', async (req, res, next) => {
     if (typeof frente === 'string' && frente.length > 0) filter.frente = frente
     if (typeof estado === 'string' && estado.length > 0) filter.estado = estado
     const rows = await Colaborador.find(filter).sort({ codigo: 1 }).lean()
-    res.json(rows)
+    const ver = puedeVerSalario(req.user?.permisos)
+    res.json(rows.map((row) => sinSalario(row, ver)))
   } catch (err) {
     next(err)
   }
@@ -182,7 +194,7 @@ colaboradoresRouter.get('/:id', async (req, res, next) => {
       res.status(404).json({ error: 'Colaborador no encontrado' })
       return
     }
-    res.json(doc)
+    res.json(sinSalario(doc, puedeVerSalario(req.user?.permisos)))
   } catch (err) {
     next(err)
   }
@@ -208,6 +220,7 @@ colaboradoresRouter.put('/:id', async (req, res, next) => {
       string,
       unknown
     >
+    if (!puedeVerSalario(req.user?.permisos)) delete rest.salario_mensual
     const doc = await Colaborador.findByIdAndUpdate(id, rest, {
       new: true,
       runValidators: true,
@@ -219,7 +232,7 @@ colaboradoresRouter.put('/:id', async (req, res, next) => {
       res.status(404).json({ error: 'Colaborador no encontrado' })
       return
     }
-    res.json(doc)
+    res.json(sinSalario(doc, puedeVerSalario(req.user?.permisos)))
   } catch (err) {
     next(err)
   }

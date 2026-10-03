@@ -24,16 +24,6 @@ export const coordinacionSections: ManualSection[] = [
     ),
   },
   {
-    id: 'ejes',
-    title: 'Categorías de proyecto (ejes)',
-    content: (
-      <p>
-        En <strong>Estructura → Ejes de proyecto</strong> define las categorías (Infraestructura, Seguridad,
-        etc.). Los proyectos y los KPIs deben usar la misma categoría para poder vincularse.
-      </p>
-    ),
-  },
-  {
     id: 'departamentos',
     title: 'Departamentos y empresas',
     content: (

@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken'
 import { Usuario } from '../db/models/Usuario.js'
 import { Rol } from '../db/models/Rol.js'
 import { JWT_SECRET, requireAuth } from '../middleware/requireAuth.js'
-import { buildAuthPayload } from '../utils/authSession.js'
+import { buildAuthPayload, unirPermisosDeRoles } from '../utils/authSession.js'
 import {
   authenticateWithActiveDirectory,
   findUsuarioByLoginId,
@@ -14,6 +14,7 @@ import {
   isPlatformLoginEnabled,
 } from '../utils/directoryAuth.js'
 import { isAdLoginEnabled } from '../utils/ehrAuth.js'
+import { clientIp, registrarAuditoria } from '../utils/auditoria.js'
 
 export const authRouter = Router()
 
@@ -144,6 +145,14 @@ authRouter.post('/login', async (req, res, next) => {
     )
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES })
     await Usuario.findByIdAndUpdate(user._id, { ultimo_acceso: new Date() })
+    void registrarAuditoria({
+      usuario_id: String(user._id),
+      usuario_nombre: payload.nombre,
+      accion: 'login',
+      entidad: 'sesion',
+      detalle: adValidated ? 'Inicio con Active Directory' : 'Inicio con contraseña local',
+      ip: clientIp(req),
+    }).catch(() => undefined)
 
     res.json({
       token,
@@ -159,14 +168,23 @@ authRouter.get('/sesion', requireAuth, async (req, res, next) => {
   try {
     const user = await Usuario.findById(req.user!._id)
       .select(SENSITIVE_SELECT)
-      .populate<{ rol_id: { _id: string; nombre: string; permisos: string[] } }>('rol_id', 'nombre permisos')
-      .populate<{ empleado_id: { _id: string; codigo: string; nombre: string } | null }>('empleado_id', 'codigo nombre')
-      .populate<{
-        departamento_id: { _id: string; codigo: string; nombre: string; lleva_gastos?: boolean } | null
-      }>('departamento_id', 'codigo nombre lleva_gastos')
-      .lean()
+      .populate('rol_id', 'nombre permisos')
+      .populate('roles_ids', 'nombre permisos')
+      .populate('empleado_id', 'codigo nombre')
+      .populate('departamento_id', 'codigo nombre lleva_gastos')
+      .lean() as {
+      _id: unknown
+      email: string
+      nombre: string
+      rol_id?: { _id: string; nombre: string; permisos: string[] } | null
+      roles_ids?: Array<{ nombre?: string; permisos?: string[] }> | null
+      empleado_id?: { _id: string; codigo: string; nombre: string } | null
+      departamento_id?: { _id: string; codigo: string; nombre: string; lleva_gastos?: boolean } | null
+    } | null
     if (!user) { res.status(404).json({ error: 'Usuario no encontrado' }); return }
     const rol = user.rol_id as { _id: string; nombre: string; permisos: string[] }
+    const extras = (user.roles_ids ?? []) as Array<{ nombre?: string; permisos?: string[] }>
+    const nombres = [rol?.nombre, ...extras.map((r) => r.nombre)].filter(Boolean)
     const emp = user.empleado_id as { _id: string; codigo: string; nombre: string } | null
     const dept = user.departamento_id as
       | { _id: string; codigo: string; nombre: string; lleva_gastos?: boolean }
@@ -175,8 +193,8 @@ authRouter.get('/sesion', requireAuth, async (req, res, next) => {
       _id: String(user._id),
       email: user.email,
       nombre: user.nombre,
-      rol: rol?.nombre ?? '',
-      permisos: rol?.permisos ?? [],
+      rol: nombres.join(' · ') || rol?.nombre || '',
+      permisos: unirPermisosDeRoles([rol, ...extras]),
       empleado_id: emp ? String(emp._id) : null,
       empleado_codigo: emp?.codigo ?? null,
       empleado_nombre: emp?.nombre ?? null,
