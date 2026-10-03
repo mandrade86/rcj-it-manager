@@ -469,3 +469,22 @@ export type EnlaceFacturaPayload = {
   filas_leidas: number
   aviso?: string | null
 }
+
+export type MuestraPorMatrizRow = {
+  codigo: string
+  matriz: string
+  area: string
+  ordenes: number
+  cantidad: number
+  pct: number
+}
+
+export type MuestrasPorMatrizPayload = {
+  desde: string
+  hasta: string
+  total_muestras: number
+  total_ordenes: number
+  total_matrices: number
+  filas: MuestraPorMatrizRow[]
+  vista: string
+}

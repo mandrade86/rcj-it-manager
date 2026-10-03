@@ -330,6 +330,28 @@ async function queryHanaGeneric(
   }
 }
 
+/** Lectura puntual (SELECT) contra HANA, con parámetros. */
+export async function execSapBiRead(
+  cfg: SapBiCosteoConfig,
+  query: string,
+  params: unknown[] = [],
+): Promise<Record<string, unknown>[]> {
+  if (!cfg.password?.trim()) throw new Error('Contraseña SAP no configurada')
+  if (!/^select\b/i.test(query.trim())) {
+    throw new Error('Solo se permiten consultas de lectura')
+  }
+  if (cfg.driver !== 'hana') {
+    throw new Error('El reporte de muestras por matriz requiere la conexión SAP HANA.')
+  }
+  const conn = await hanaConnect(cfg)
+  try {
+    const rows = await hanaExec(conn, query, params)
+    return mapRows(rows, 'hana')
+  } finally {
+    await hanaDisconnect(conn)
+  }
+}
+
 export async function querySapBiGeneric(
   cfg: SapBiCosteoConfig,
   viewName: string,

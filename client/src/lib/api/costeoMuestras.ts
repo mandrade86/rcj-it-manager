@@ -12,6 +12,7 @@ import type {
   VentaCatalogoPayload,
   VentaMargenPayload,
   EnlaceFacturaPayload,
+  MuestrasPorMatrizPayload,
   OpVsRecetaPayload,
   ProduccionOrdenDetalle,
 } from '@/types/costeoMuestras'
@@ -241,4 +242,14 @@ export async function fetchEnlaceFactura(params: {
   const res = await fetch(`/api/costeo-muestras/enlace-factura?${q.toString()}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<EnlaceFacturaPayload>
+}
+
+export async function fetchMuestrasPorMatriz(params: {
+  desde: string
+  hasta: string
+}): Promise<MuestrasPorMatrizPayload> {
+  const q = new URLSearchParams({ desde: params.desde, hasta: params.hasta })
+  const res = await fetch(`/api/costeo-muestras/muestras-por-matriz?${q.toString()}`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<MuestrasPorMatrizPayload>
 }

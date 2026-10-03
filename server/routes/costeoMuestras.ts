@@ -26,6 +26,7 @@ import {
   type VentaAnalisisPayload,
 } from '../utils/costeoMuestrasBi.js'
 import { querySapBiGeneric } from '../utils/sapBiGenericQuery.js'
+import { assertIsoDate, queryMuestrasPorMatriz } from '../utils/muestrasPorMatriz.js'
 import {
   clearExplosionFieldsCache,
   clearProduccionFieldsCache,
@@ -1042,6 +1043,34 @@ costeoMuestrasRouter.get('/recetas', canView, async (req, res) => {
       }
     }
     res.status(502).json({ error: `Error al consultar costos por receta: ${msg}` })
+  }
+})
+
+costeoMuestrasRouter.get('/muestras-por-matriz', canView, async (req, res) => {
+  try {
+    const cfg = await loadSapBiCosteoConfig()
+    if (!isSapBiConfigured(cfg) || !cfg.password?.trim()) {
+      res.status(400).json({ error: 'Conexión SAP no configurada.' })
+      return
+    }
+    const desdeRaw = typeof req.query.desde === 'string' ? req.query.desde : ''
+    const hastaRaw = typeof req.query.hasta === 'string' ? req.query.hasta : ''
+    if (!desdeRaw || !hastaRaw) {
+      res.status(400).json({ error: 'Indique el rango de fechas (desde y hasta).' })
+      return
+    }
+    const desde = assertIsoDate(desdeRaw, 'Desde')
+    const hasta = assertIsoDate(hastaRaw, 'Hasta')
+    if (desde > hasta) {
+      res.status(400).json({ error: 'La fecha desde no puede ser posterior a hasta.' })
+      return
+    }
+    const payload = await queryMuestrasPorMatriz(cfg, desde, hasta)
+    res.json(payload)
+  } catch (err) {
+    const msg = (err as Error).message
+    const status = /YYYY-MM-DD|posterior/.test(msg) ? 400 : 502
+    res.status(status).json({ error: msg })
   }
 })
 

@@ -243,3 +243,32 @@ export function exportVentasAnalisisExcel(data: VentaAnalisisPayload): void {
 
   downloadWorkbook(wb, `BI-Ventas-Margen-${stamp()}.xlsx`)
 }
+
+export function exportMuestrasPorMatrizExcel(data: {
+  desde: string
+  hasta: string
+  filas: Array<{
+    matriz: string
+    codigo: string
+    area: string
+    ordenes: number
+    cantidad: number
+    pct: number
+  }>
+}): void {
+  const wb = XLSX.utils.book_new()
+  const rows = data.filas.map((r) => ({
+    Matriz: r.matriz,
+    Código: r.codigo,
+    Área: r.area,
+    Órdenes: r.ordenes,
+    'Muestras recibidas': r.cantidad,
+    '%': r.pct,
+  }))
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheetFromRows(rows.length ? rows : [{ Nota: 'Sin muestras en el rango' }], 'Muestras'),
+    'Muestras',
+  )
+  downloadWorkbook(wb, `BI-Muestras-por-matriz-${data.desde}_${data.hasta}.xlsx`)
+}

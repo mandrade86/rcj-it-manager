@@ -34,6 +34,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useCosteoMuestrasStore } from '@/store/costeoMuestrasStore'
 import type { SapBiColumnMapping, SapBiCosteoConfig } from '@/types/costeoMuestras'
 
+import { MuestrasRecibidasTab } from './costeo/MuestrasRecibidasTab'
 import { RecetasAnalisisTab } from './costeo/RecetasAnalisisTab'
 import { GeneralRecetasTab } from './costeo/GeneralRecetasTab'
 import { EnlaceFacturaTab } from './costeo/EnlaceFacturaTab'
@@ -87,7 +88,7 @@ function formatSyncLabel(iso: string | null | undefined): string {
 export function CosteoMuestrasPage() {
   const canConfig = useAuthStore((s) => s.hasPermiso('bi:costeo:config') || s.hasPermiso('*'))
 
-  const [activeTab, setActiveTab] = useState('general')
+  const [activeTab, setActiveTab] = useState('muestras')
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -308,12 +309,17 @@ export function CosteoMuestrasPage() {
         </div>
       ) : config?.configured ? (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-9 w-full max-w-3xl grid-cols-4">
+          <TabsList className="flex h-auto w-full max-w-4xl flex-wrap justify-start gap-1">
+            <TabsTrigger value="muestras" className="text-xs">Muestras recibidas</TabsTrigger>
             <TabsTrigger value="general" className="text-xs">General Recetas</TabsTrigger>
             <TabsTrigger value="recetas" className="text-xs">Costos por receta</TabsTrigger>
             <TabsTrigger value="ventas" className="text-xs">Venta-Producción</TabsTrigger>
             <TabsTrigger value="enlace" className="text-xs">OP vs receta</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="muestras" className="mt-3">
+            <MuestrasRecibidasTab onError={setError} />
+          </TabsContent>
 
           <TabsContent value="general" className="mt-3">
             <GeneralRecetasTab onError={setError} />
