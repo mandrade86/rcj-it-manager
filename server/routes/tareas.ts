@@ -490,7 +490,7 @@ tareasRouter.get('/plantilla-excel', async (req, res, next) => {
     let proyectoNombre = ''
     let proyectoEje = ''
 
-    if (proyectoId && mongoose.isValidObjectId(proyectoId)) {
+    if (proyectoId) {
       const proyecto = (await Proyecto.findById(proyectoId)
         .select('_id nombre eje')
         .lean()) as { _id: string; nombre?: string; eje?: string } | null
@@ -601,8 +601,8 @@ tareasRouter.get('/exportar-excel', async (req, res, next) => {
     const u = req.user
     if (!u) { res.status(401).json({ error: 'No autenticado' }); return }
 
-    const proyectoId = typeof req.query.proyecto_id === 'string' ? req.query.proyecto_id : ''
-    if (!proyectoId || !mongoose.isValidObjectId(proyectoId)) {
+    const proyectoId = typeof req.query.proyecto_id === 'string' ? req.query.proyecto_id.trim() : ''
+    if (!proyectoId) {
       res.status(400).json({ error: 'Parámetro proyecto_id requerido' })
       return
     }
