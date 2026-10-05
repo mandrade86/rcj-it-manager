@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, CalendarDays, CheckCircle2, Clock, GripVertical, Inbox, Plus } from 'lucide-react'
 
-import { BOARD, BoardPill } from '@/components/board/BoardPrimitives'
+import { BOARD, BoardPill, prioridadTone } from '@/components/board/BoardPrimitives'
 import { Button } from '@/components/ui/button'
 import { fetchMiDia, type MiDiaAprobacion, type MiDiaTarea } from '@/lib/api/dashboard'
 import { fetchEmpleados } from '@/lib/api/empleados'
@@ -37,10 +37,8 @@ function saludoHora(): string {
 }
 
 function prioridadUi(p: string | null): { bg: string; text: string } {
-  if (p === 'Alta') return { bg: BOARD.purple, text: '#fff' }
-  if (p === 'Media') return { bg: BOARD.indigo, text: '#fff' }
-  if (p === 'Baja') return { bg: BOARD.blue, text: '#fff' }
-  return { bg: BOARD.borderSoft, text: BOARD.muted }
+  if (!p) return { bg: BOARD.borderSoft, text: BOARD.muted }
+  return prioridadTone(p)
 }
 
 function ordenKey(userId: string, seccion: string) {

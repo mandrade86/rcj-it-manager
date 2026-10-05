@@ -1,18 +1,14 @@
 import { AlertCircle, CheckCircle2, Clock, FileText, Paperclip } from 'lucide-react'
 
-import { BOARD, BoardAvatar, BoardPill } from '@/components/board/BoardPrimitives'
+import { BOARD, BoardAvatar, BoardPill, PRIORIDAD_TONE } from '@/components/board/BoardPrimitives'
 import { formatMoney } from '@/lib/format'
 import type { ColId, TareaEstadoDef } from '@/lib/tareaBoardPrefs'
 import type { TareaSalud } from '@/lib/tareaDependencias'
 import type { Proyecto } from '@/types/proyecto'
-import type { Tarea, TareaPrioridad } from '@/types/tarea'
+import type { Tarea } from '@/types/tarea'
 import { tareaMontoEjecutadoEstimado } from '@/types/tarea'
 
-const PRIORIDAD_UI: Record<TareaPrioridad, { bg: string; text: string }> = {
-  Baja: { bg: BOARD.blue, text: '#ffffff' },
-  Media: { bg: BOARD.indigo, text: '#ffffff' },
-  Alta: { bg: BOARD.purple, text: '#ffffff' },
-}
+const PRIORIDAD_UI = PRIORIDAD_TONE
 
 export function TareaBoardCelda({
   col,
@@ -27,6 +23,7 @@ export function TareaBoardCelda({
   crono,
   actualizado,
   catalog,
+  equipo,
   onSelect,
   onPatch,
 }: {
@@ -42,6 +39,7 @@ export function TareaBoardCelda({
   crono: string
   actualizado: string
   catalog: TareaEstadoDef[]
+  equipo: Array<{ _id: string; nombre: string }>
   onSelect: (t: Tarea) => void
   onPatch: (id: string, patch: Record<string, unknown>) => void
 }) {
@@ -66,13 +64,41 @@ export function TareaBoardCelda({
     )
   }
   if (col === 'persona') {
+    if (!puedeEditar) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <BoardAvatar name={t.responsable} />
+          <span className="max-w-[90px] truncate text-xs" style={{ color: BOARD.text }}>
+            {t.responsable || 'Sin asignar'}
+          </span>
+        </div>
+      )
+    }
+    const opciones = [...equipo]
+    if (t.responsable_id && !opciones.some((e) => e._id === t.responsable_id)) {
+      opciones.unshift({ _id: t.responsable_id, nombre: t.responsable || 'Asignado' })
+    }
     return (
-      <div className="flex items-center gap-1.5">
-        <BoardAvatar name={t.responsable} />
-        <span className="max-w-[90px] truncate text-xs" style={{ color: BOARD.text }}>
-          {t.responsable || '—'}
-        </span>
-      </div>
+      <select
+        aria-label="Asignar persona"
+        className="h-7 max-w-[150px] cursor-pointer rounded-sm border bg-white px-1 text-[11px] outline-none"
+        style={{ borderColor: BOARD.border, color: BOARD.text }}
+        value={t.responsable_id ?? ''}
+        disabled={busy}
+        onChange={(e) => {
+          const id = e.target.value
+          const emp = opciones.find((x) => x._id === id)
+          onPatch(t._id, {
+            responsable_id: id || null,
+            responsable: emp?.nombre ?? '',
+          })
+        }}
+      >
+        <option value="">Sin asignar</option>
+        {opciones.map((emp) => (
+          <option key={emp._id} value={emp._id}>{emp.nombre}</option>
+        ))}
+      </select>
     )
   }
   if (col === 'estado') {

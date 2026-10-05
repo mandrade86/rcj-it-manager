@@ -11,6 +11,7 @@ import {
   BoardTable,
   BoardTh,
   BoardToolbar,
+  PRIORIDAD_TONE,
   formatBoardDateShort,
 } from '@/components/board/BoardPrimitives'
 import { fetchEmpleados } from '@/lib/api/empleados'
@@ -61,11 +62,7 @@ const GRUPOS: Array<{
   { id: 'listo', label: 'Listo', color: BOARD.green, estados: ['Completado'] },
 ]
 
-const PRIORIDAD_UI: Record<TareaPrioridad, { bg: string; text: string }> = {
-  Baja: { bg: BOARD.blue, text: '#ffffff' },
-  Media: { bg: BOARD.indigo, text: '#ffffff' },
-  Alta: { bg: BOARD.purple, text: '#ffffff' },
-}
+const PRIORIDAD_UI = PRIORIDAD_TONE
 
 function relativeUpdate(iso?: string | null): string {
   if (!iso) return '—'
@@ -80,6 +77,12 @@ function relativeUpdate(iso?: string | null): string {
   const days = Math.floor(hrs / 24)
   if (days < 14) return `hace ${days} d`
   return formatDateDMY(iso)
+}
+
+function hoyIso(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 function estadoDefaultGrupo(grupoId: BoardGrupoId): TareaEstado {
@@ -258,6 +261,7 @@ export function TareasTablaBoard({
         estado: draftEstado,
         prioridad: draftPrioridad,
         fecha_fin: new Date(`${draftFecha}T12:00:00`),
+        fecha_inicio: new Date(`${hoyIso()}T12:00:00`),
         responsable: responsable.nombre,
         responsable_id: responsable._id,
         porcentaje: esListo(draftEstado) ? 100 : 0,
@@ -640,6 +644,7 @@ export function TareasTablaBoard({
                               crono={crono}
                               actualizado={relativeUpdate(t.updatedAt)}
                               catalog={catalog}
+                              equipo={empleadosEquipo.map((e) => ({ _id: String(e._id), nombre: e.nombre }))}
                               onSelect={onSelect}
                               onPatch={(id, patch) => void patchTarea(id, patch)}
                             />

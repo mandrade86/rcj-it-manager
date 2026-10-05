@@ -80,6 +80,11 @@ export function TareaRapidaDialog({ open, onOpenChange, editing, onSaved, onDele
         responsable: responsable.trim() || undefined,
         responsable_id: responsableId || null,
         fecha_fin: fechaFin || null,
+        fecha_inicio: editing ? undefined : (() => {
+          const d = new Date()
+          const p = (n: number) => String(n).padStart(2, '0')
+          return new Date(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T12:00:00`)
+        })(),
         prioridad: prioridad || null,
         estado: editing?.estado ?? 'Pendiente',
       }

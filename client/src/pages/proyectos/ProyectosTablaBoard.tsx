@@ -9,12 +9,13 @@ import {
   BoardShell,
   BoardTable,
   BoardTh,
+  PRIORIDAD_TONE,
   formatBoardDateShort,
 } from '@/components/board/BoardPrimitives'
 import { transicionarProyecto } from '@/lib/api/proyectos'
 import { cn } from '@/lib/utils'
 import { useProyectosStore } from '@/store/proyectosStore'
-import type { Proyecto, ProyectoEstado, ProyectoPrioridad } from '@/types/proyecto'
+import type { Proyecto, ProyectoEstado } from '@/types/proyecto'
 import { PROYECTO_ESTADOS, proyectoOwnerName, proyectoPuedeEditar } from '@/types/proyecto'
 
 type Props = {
@@ -35,11 +36,7 @@ const ESTADO_BOARD: Record<ProyectoEstado, { label: string; bg: string; text: st
   Cancelado: { label: 'Cancelado', bg: BOARD.text, text: '#fff', color: BOARD.text },
 }
 
-const PRIORIDAD_BOARD: Record<ProyectoPrioridad, { bg: string; text: string }> = {
-  Baja: { bg: BOARD.blue, text: '#fff' },
-  Media: { bg: BOARD.indigo, text: '#fff' },
-  Alta: { bg: BOARD.purple, text: '#fff' },
-}
+const PRIORIDAD_BOARD = PRIORIDAD_TONE
 
 export function ProyectosTablaBoard({
   rows,

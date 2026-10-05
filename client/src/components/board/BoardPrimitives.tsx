@@ -30,13 +30,25 @@ export const BOARD = {
   gray: '#9ca3af',
   /** Infra — avatares / info */
   blue: '#1f4e79',
-  /** Gobierno IT — prioridad media */
+  /** Gobierno IT */
   indigo: '#4527a0',
-  /** Prioridad alta = navy */
+  /** Navy — etiquetas de marca, no usar para prioridad alta */
   purple: '#002060',
   hover: '#dce6f1',
   selected: '#eaf5d9',
 } as const
+
+/** Prioridad: Alta en rojo (se ve de inmediato), Media en ámbar, Baja en azul. */
+export const PRIORIDAD_TONE = {
+  Alta: { bg: '#c00000', text: '#ffffff' },
+  Media: { bg: '#7f6000', text: '#ffffff' },
+  Baja: { bg: '#1f4e79', text: '#ffffff' },
+} as const
+
+export function prioridadTone(p: string | null | undefined): { bg: string; text: string } {
+  if (p === 'Alta' || p === 'Media' || p === 'Baja') return PRIORIDAD_TONE[p]
+  return { bg: BOARD.gray, text: '#ffffff' }
+}
 
 export function BoardShell({
   children,
