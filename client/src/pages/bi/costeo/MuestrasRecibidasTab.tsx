@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileSpreadsheet, FlaskConical, Loader2, Search } from 'lucide-react'
+import { ChevronDown, FileSpreadsheet, Loader2 } from 'lucide-react'
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,24 +12,24 @@ import {
 } from 'recharts'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Table,
   TableBody,
   TableCell,
-  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { fetchMuestrasPorMatriz } from '@/lib/api/costeoMuestras'
 import { exportMuestrasPorMatrizExcel } from '@/lib/exportCosteoExcel'
+import { cn } from '@/lib/utils'
 import type { MuestrasPorMatrizPayload } from '@/types/costeoMuestras'
 
 import { BiChartTooltip } from './BiChartTooltip'
-import { BI_CHART } from './chartTheme'
+import { INGREDIENT_COLORS } from './chartTheme'
 
 type Props = {
   onError: (msg: string | null) => void
@@ -44,8 +45,21 @@ function isoYearStart(): string {
   return `${new Date().getFullYear()}-01-01`
 }
 
+function isoMonthStart(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-01`
+}
+
+function isoMonthsAgo(months: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() - months)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 function formatQty(v: number): string {
-  return v.toLocaleString('es-HN', { maximumFractionDigits: 1 })
+  return Math.round(v).toLocaleString('es-HN')
 }
 
 function formatRango(iso: string): string {
@@ -60,6 +74,7 @@ export function MuestrasRecibidasTab({ onError }: Props) {
   const [applied, setApplied] = useState({ desde: isoYearStart(), hasta: isoToday() })
   const [data, setData] = useState<MuestrasPorMatrizPayload | null>(null)
   const [loading, setLoading] = useState(false)
+  const [detalleAbierto, setDetalleAbierto] = useState(false)
 
   const load = useCallback(async (range: { desde: string; hasta: string }) => {
     onError(null)
@@ -80,126 +95,132 @@ export function MuestrasRecibidasTab({ onError }: Props) {
     void load({ desde: isoYearStart(), hasta: isoToday() })
   }, [load])
 
-  const chart = useMemo(() => {
-    const rows = (data?.filas ?? []).slice(0, 12)
-    const counts = new Map<string, number>()
-    for (const r of rows) counts.set(r.matriz, (counts.get(r.matriz) ?? 0) + 1)
-    return rows.map((r) => ({
-      name: (counts.get(r.matriz) ?? 0) > 1 ? `${r.matriz} (${r.codigo})` : r.matriz,
-      cantidad: r.cantidad,
-    }))
-  }, [data])
+  function aplicarRango(nextDesde: string, nextHasta: string) {
+    setDesde(nextDesde)
+    setHasta(nextHasta)
+    void load({ desde: nextDesde, hasta: nextHasta })
+  }
+
+  const resumen = data?.resumen ?? []
+  const principal = resumen[0]
+  const chart = useMemo(
+    () => resumen.map((r) => ({ name: r.tipo, cantidad: r.cantidad })),
+    [resumen],
+  )
 
   return (
     <div className="space-y-3">
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-3">
-          <div className="w-[150px]">
-            <Label htmlFor="m-desde" className="text-[11px]">Desde</Label>
-            <Input
-              id="m-desde"
-              type="date"
-              className="mt-0.5 h-8 text-xs"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-            />
+        <CardContent className="space-y-3 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--navy)]">
+              Muestras que recibió el laboratorio
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--text-muted)]">
+              {data && principal
+                ? `Del ${formatRango(applied.desde)} al ${formatRango(applied.hasta)} entraron ${formatQty(data.total_muestras)} muestras. La mayor parte fueron de ${principal.tipo.toLowerCase()} (${principal.pct.toFixed(0)}%).`
+                : 'Elija el periodo y vea de qué tipo de muestra llegó más trabajo al laboratorio.'}
+            </p>
           </div>
-          <div className="w-[150px]">
-            <Label htmlFor="m-hasta" className="text-[11px]">Hasta</Label>
-            <Input
-              id="m-hasta"
-              type="date"
-              className="mt-0.5 h-8 text-xs"
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => aplicarRango(isoMonthStart(), isoToday())}>
+              Este mes
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => aplicarRango(isoMonthsAgo(3), isoToday())}>
+              Últimos 3 meses
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => aplicarRango(isoYearStart(), isoToday())}>
+              Este año
+            </Button>
+            <div className="w-[148px]">
+              <Label htmlFor="m-desde" className="text-[11px]">Desde</Label>
+              <Input id="m-desde" type="date" className="mt-0.5 h-8 text-xs" value={desde} onChange={(e) => setDesde(e.target.value)} />
+            </div>
+            <div className="w-[148px]">
+              <Label htmlFor="m-hasta" className="text-[11px]">Hasta</Label>
+              <Input id="m-hasta" type="date" className="mt-0.5 h-8 text-xs" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8"
+              disabled={loading || !desde || !hasta}
+              onClick={() => void load({ desde, hasta })}
+            >
+              {loading ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : null}
+              Ver periodo
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!resumen.length}
+              onClick={() => data && exportMuestrasPorMatrizExcel(data)}
+            >
+              <FileSpreadsheet className="mr-1.5 size-3.5" />
+              Descargar
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8"
-            disabled={loading || !desde || !hasta}
-            onClick={() => void load({ desde, hasta })}
-          >
-            {loading ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Search className="mr-1.5 size-3.5" />}
-            Consultar
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8"
-            disabled={!data?.filas.length}
-            onClick={() => data && exportMuestrasPorMatrizExcel(data)}
-          >
-            <FileSpreadsheet className="mr-1.5 size-3.5" />
-            Excel
-          </Button>
-          <p className="max-w-xl text-[11px] text-[var(--text-muted)]">
-            Órdenes de producción de producto terminado de laboratorio. La matriz es la familia del código de la receta
-            (el texto antes del guion).
-          </p>
         </CardContent>
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>
-          <CardContent className="py-3">
-            <p className="text-[11px] text-[var(--text-muted)]">Muestras recibidas</p>
-            <p className="text-xl font-semibold text-[var(--navy)]">
+          <CardContent className="py-4">
+            <p className="text-xs text-[var(--text-muted)]">Muestras recibidas</p>
+            <p className="text-2xl font-semibold text-[var(--navy)]">
               {data ? formatQty(data.total_muestras) : '—'}
             </p>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              {applied.desde ? `${formatRango(applied.desde)} – ${formatRango(applied.hasta)}` : ''}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <p className="text-xs text-[var(--text-muted)]">Tipo con más volumen</p>
+            <p className="text-2xl font-semibold">{principal?.tipo ?? '—'}</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              {principal ? `${principal.pct.toFixed(0)}% del total` : ''}
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="py-3">
-            <p className="text-[11px] text-[var(--text-muted)]">Matrices</p>
-            <p className="text-xl font-semibold">{data ? data.total_matrices : '—'}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-3">
-            <p className="text-[11px] text-[var(--text-muted)]">Órdenes</p>
-            <p className="text-xl font-semibold">{data ? formatQty(data.total_ordenes) : '—'}</p>
+          <CardContent className="py-4">
+            <p className="text-xs text-[var(--text-muted)]">Tipos de muestra</p>
+            <p className="text-2xl font-semibold">{data ? resumen.length : '—'}</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <FlaskConical className="size-4 text-[var(--navy)]" />
-            Cantidad por matriz
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           {loading && !data ? (
             <div className="flex items-center justify-center py-10 text-sm text-[var(--text-muted)]">
               <Loader2 className="mr-2 size-4 animate-spin" />
-              Consultando SAP…
+              Preparando el resumen…
             </div>
           ) : chart.length === 0 ? (
             <p className="py-8 text-center text-sm text-[var(--text-muted)]">
-              No hay muestras de laboratorio en ese rango.
+              En ese periodo no hay muestras registradas.
             </p>
           ) : (
-            <div className="h-[320px] w-full">
+            <div className="h-[280px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 8 }}>
+                <BarChart data={chart} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 12 }} />
                   <Tooltip
                     content={(
                       <BiChartTooltip
-                        formatter={(v) => v.toLocaleString('es-HN', { maximumFractionDigits: 1 })}
+                        formatter={(v) => `${Math.round(v).toLocaleString('es-HN')} muestras`}
                       />
                     )}
                   />
-                  <Bar dataKey="cantidad" name="Muestras" fill={BI_CHART.navy} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="cantidad" name="Muestras" radius={[0, 4, 4, 0]}>
+                    {chart.map((row, i) => (
+                      <Cell key={row.name} fill={INGREDIENT_COLORS[i % INGREDIENT_COLORS.length]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -212,39 +233,74 @@ export function MuestrasRecibidasTab({ onError }: Props) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Matriz</TableHead>
-                <TableHead>Código</TableHead>
-                <TableHead>Área</TableHead>
-                <TableHead className="text-right">Órdenes</TableHead>
-                <TableHead className="text-right">Muestras</TableHead>
-                <TableHead className="text-right">%</TableHead>
+                <TableHead>Tipo de muestra</TableHead>
+                <TableHead className="text-right">Cantidad</TableHead>
+                <TableHead className="w-[42%]">Participación</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(data?.filas ?? []).map((r) => (
-                <TableRow key={r.codigo}>
-                  <TableCell className="font-medium">{r.matriz}</TableCell>
-                  <TableCell className="text-xs text-[var(--text-muted)]">{r.codigo}</TableCell>
-                  <TableCell className="text-xs">{r.area}</TableCell>
-                  <TableCell className="text-right text-xs">{formatQty(r.ordenes)}</TableCell>
-                  <TableCell className="text-right text-xs font-medium">{formatQty(r.cantidad)}</TableCell>
-                  <TableCell className="text-right text-xs">{r.pct.toFixed(1)}%</TableCell>
+              {resumen.map((r) => (
+                <TableRow key={r.tipo}>
+                  <TableCell className="font-medium">{r.tipo}</TableCell>
+                  <TableCell className="text-right">{formatQty(r.cantidad)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 min-w-0 flex-1 rounded-full bg-[var(--gray-lt)]">
+                        <div
+                          className="h-2 rounded-full bg-[var(--navy)]"
+                          style={{ width: `${Math.min(100, r.pct)}%` }}
+                        />
+                      </div>
+                      <span className="w-12 text-right text-xs text-[var(--text-muted)]">
+                        {r.pct.toFixed(0)}%
+                      </span>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
-            {data && data.filas.length > 0 && (
-              <TableFooter>
-                <TableRow>
-                  <TableCell colSpan={3}>Total</TableCell>
-                  <TableCell className="text-right">{formatQty(data.total_ordenes)}</TableCell>
-                  <TableCell className="text-right">{formatQty(data.total_muestras)}</TableCell>
-                  <TableCell className="text-right">100%</TableCell>
-                </TableRow>
-              </TableFooter>
-            )}
           </Table>
         </CardContent>
       </Card>
+
+      {data && data.filas.length > 0 && (
+        <div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+            onClick={() => setDetalleAbierto((v) => !v)}
+          >
+            <ChevronDown className={cn('size-3.5 transition-transform', detalleAbierto && 'rotate-180')} />
+            Ver el detalle por familia de análisis
+          </button>
+          {detalleAbierto && (
+            <Card className="mt-2">
+              <CardContent className="px-0 pb-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Familia</TableHead>
+                      <TableHead>Laboratorio</TableHead>
+                      <TableHead className="text-right">Muestras</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.filas.map((r) => (
+                      <TableRow key={r.codigo}>
+                        <TableCell>{r.tipo}</TableCell>
+                        <TableCell className="text-xs">{r.matriz}</TableCell>
+                        <TableCell className="text-xs">{r.area}</TableCell>
+                        <TableCell className="text-right text-xs">{formatQty(r.cantidad)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -247,7 +247,9 @@ export function exportVentasAnalisisExcel(data: VentaAnalisisPayload): void {
 export function exportMuestrasPorMatrizExcel(data: {
   desde: string
   hasta: string
+  resumen: Array<{ tipo: string; cantidad: number; pct: number }>
   filas: Array<{
+    tipo: string
     matriz: string
     codigo: string
     area: string
@@ -257,18 +259,29 @@ export function exportMuestrasPorMatrizExcel(data: {
   }>
 }): void {
   const wb = XLSX.utils.book_new()
-  const rows = data.filas.map((r) => ({
-    Matriz: r.matriz,
+  const resumen = data.resumen.map((r) => ({
+    'Tipo de muestra': r.tipo,
+    'Muestras recibidas': r.cantidad,
+    'Participación %': r.pct,
+  }))
+  const detalle = data.filas.map((r) => ({
+    'Tipo de muestra': r.tipo,
+    Familia: r.matriz,
     Código: r.codigo,
-    Área: r.area,
+    Laboratorio: r.area,
     Órdenes: r.ordenes,
     'Muestras recibidas': r.cantidad,
     '%': r.pct,
   }))
   XLSX.utils.book_append_sheet(
     wb,
-    sheetFromRows(rows.length ? rows : [{ Nota: 'Sin muestras en el rango' }], 'Muestras'),
-    'Muestras',
+    sheetFromRows(resumen.length ? resumen : [{ Nota: 'Sin muestras en el rango' }], 'Resumen'),
+    'Resumen',
   )
-  downloadWorkbook(wb, `BI-Muestras-por-matriz-${data.desde}_${data.hasta}.xlsx`)
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheetFromRows(detalle.length ? detalle : [{ Nota: 'Sin detalle' }], 'Detalle'),
+    'Detalle',
+  )
+  downloadWorkbook(wb, `Muestras-recibidas-${data.desde}_${data.hasta}.xlsx`)
 }

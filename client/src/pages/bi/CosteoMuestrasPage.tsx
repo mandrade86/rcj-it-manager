@@ -310,7 +310,7 @@ export function CosteoMuestrasPage() {
       ) : config?.configured ? (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex h-auto w-full max-w-4xl flex-wrap justify-start gap-1">
-            <TabsTrigger value="muestras" className="text-xs">Muestras recibidas</TabsTrigger>
+            <TabsTrigger value="muestras" className="text-xs">Resumen de muestras</TabsTrigger>
             <TabsTrigger value="general" className="text-xs">General Recetas</TabsTrigger>
             <TabsTrigger value="recetas" className="text-xs">Costos por receta</TabsTrigger>
             <TabsTrigger value="ventas" className="text-xs">Venta-Producción</TabsTrigger>

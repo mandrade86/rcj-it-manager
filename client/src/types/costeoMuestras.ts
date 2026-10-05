@@ -473,8 +473,15 @@ export type EnlaceFacturaPayload = {
 export type MuestraPorMatrizRow = {
   codigo: string
   matriz: string
+  tipo: string
   area: string
   ordenes: number
+  cantidad: number
+  pct: number
+}
+
+export type MuestraTipoResumen = {
+  tipo: string
   cantidad: number
   pct: number
 }
@@ -485,6 +492,7 @@ export type MuestrasPorMatrizPayload = {
   total_muestras: number
   total_ordenes: number
   total_matrices: number
+  resumen: MuestraTipoResumen[]
   filas: MuestraPorMatrizRow[]
   vista: string
 }
