@@ -50,6 +50,38 @@ planCarreraRouter.put('/item/:id', async (req, res, next) => {
   }
 })
 
+planCarreraRouter.put('/:colaborador_id', async (req, res, next) => {
+  try {
+    const { colaborador_id } = req.params
+    if (!mongoose.isValidObjectId(colaborador_id)) {
+      res.status(400).json({ error: 'Identificador inválido' })
+      return
+    }
+    const raw = (req.body as { mes_evaluacion?: unknown }).mes_evaluacion
+    let mes: number | null = null
+    if (raw !== null && raw !== undefined && raw !== '') {
+      const n = Number(raw)
+      if (!Number.isInteger(n) || n < 1 || n > 12) {
+        res.status(400).json({ error: 'El mes de evaluación debe ser de 1 a 12' })
+        return
+      }
+      mes = n
+    }
+    const doc = await PlanCarrera.findOneAndUpdate(
+      { colaborador_id },
+      { $set: { mes_evaluacion: mes } },
+      { new: true, runValidators: true },
+    ).lean()
+    if (!doc) {
+      res.status(404).json({ error: 'Plan de carrera no encontrado' })
+      return
+    }
+    res.json(doc)
+  } catch (err) {
+    next(err)
+  }
+})
+
 planCarreraRouter.get('/:colaborador_id', async (req, res, next) => {
   try {
     const { colaborador_id } = req.params

@@ -28,6 +28,8 @@ const PlanCarreraSchema = new Schema(
     plantilla_id: { type: Schema.Types.ObjectId, ref: 'PlantillaCarrera' },
     tipo: { type: String, required: true },
     fecha_inicio: { type: Date },
+    /** Mes calendario (1–12) en el que corresponde la evaluación de este plan. */
+    mes_evaluacion: { type: Number, min: 1, max: 12, default: null },
     periodo_estimado: { type: String },
     responsable_seguimiento: { type: String },
     items: [PlanCarreraItemSchema],

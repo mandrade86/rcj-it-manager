@@ -18,7 +18,9 @@ import {
   type PlanCarreraDoc,
   type PlanCarreraItem,
   updatePlanCarreraItem,
+  updatePlanCarreraMes,
 } from '@/lib/api/planCarrera'
+import { MESES } from '@/lib/meses'
 import { fetchCapacitaciones } from '@/lib/api/capacitaciones'
 import { printPlanCarrera } from '@/lib/printPlanCarrera'
 import { planCarreraTipoLabel } from '@/lib/planCarreraLabels'
@@ -194,6 +196,27 @@ export function PlanCarreraChecklist({
             </Button>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <label className="flex items-center gap-2">
+              <span>Mes de evaluación</span>
+              <select
+                className={selectClass + ' h-8 w-auto'}
+                value={plan.mes_evaluacion ?? ''}
+                disabled={!colaboradorId}
+                onChange={(e) => {
+                  if (!colaboradorId) return
+                  const raw = e.target.value
+                  const mes = raw ? Number(raw) : null
+                  void updatePlanCarreraMes(colaboradorId, mes)
+                    .then(onUpdated)
+                    .catch((err) => window.alert(err instanceof Error ? err.message : 'No se pudo guardar el mes'))
+                }}
+              >
+                <option value="">Sin mes</option>
+                {MESES.map((nombre, i) => (
+                  <option key={nombre} value={String(i + 1)}>{nombre}</option>
+                ))}
+              </select>
+            </label>
             {plan.periodo_estimado && <span>Periodo estimado: {plan.periodo_estimado}</span>}
             {plan.responsable_seguimiento && (
               <span>Seguimiento: {plan.responsable_seguimiento}</span>

@@ -10,11 +10,19 @@ import {
 
 export const plantillasCarreraRouter = Router()
 
-const ALLOWED = ['nombre', 'descripcion', 'departamento_id', 'tipo_ruta', 'activo', 'items'] as const
+const ALLOWED = ['nombre', 'descripcion', 'departamento_id', 'tipo_ruta', 'activo', 'items', 'mes_evaluacion'] as const
+
+function mesEvaluacion(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 1 || n > 12) return null
+  return n
+}
 
 function pickBody(body: Record<string, unknown>) {
   const out: Record<string, unknown> = {}
   for (const k of ALLOWED) if (body[k] !== undefined) out[k] = body[k]
+  if ('mes_evaluacion' in out) out.mes_evaluacion = mesEvaluacion(out.mes_evaluacion)
   return out
 }
 
@@ -168,6 +176,7 @@ plantillasCarreraRouter.post('/asignar', async (req, res, next) => {
       fecha_inicio: fecha_inicio ? new Date(fecha_inicio as string) : new Date(),
       periodo_estimado: periodo_estimado ?? plantilla.descripcion,
       responsable_seguimiento,
+      mes_evaluacion: plantilla.mes_evaluacion ?? null,
       items,
     })
 

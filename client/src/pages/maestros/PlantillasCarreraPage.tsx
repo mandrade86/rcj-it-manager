@@ -26,6 +26,7 @@ import type { PlantillaCarreraDoc, PlantillaItem } from '@/types/plantillaCarrer
 import { deptFromPlantilla } from '@/types/plantillaCarrera'
 import { printPlanCarrera } from '@/lib/printPlanCarrera'
 import { planCarreraTipoLabel } from '@/lib/planCarreraLabels'
+import { MESES, nombreMes } from '@/lib/meses'
 import { cn } from '@/lib/utils'
 
 import { MAESTRO_SELECT_CLASS } from '@/lib/maestroList'
@@ -47,11 +48,12 @@ type FormState = {
   descripcion: string
   departamento_id: string
   tipo_ruta: string
+  mes_evaluacion: string
   activo: boolean
 }
 
 function emptyForm(): FormState {
-  return { nombre: '', descripcion: '', departamento_id: '', tipo_ruta: '', activo: true }
+  return { nombre: '', descripcion: '', departamento_id: '', tipo_ruta: '', mes_evaluacion: '', activo: true }
 }
 function fromDoc(d: PlantillaCarreraDoc): FormState {
   const dept = deptFromPlantilla(d)
@@ -60,6 +62,7 @@ function fromDoc(d: PlantillaCarreraDoc): FormState {
     descripcion: d.descripcion ?? '',
     departamento_id: dept?._id ?? '',
     tipo_ruta: d.tipo_ruta,
+    mes_evaluacion: d.mes_evaluacion ? String(d.mes_evaluacion) : '',
     activo: d.activo ?? true,
   }
 }
@@ -270,7 +273,11 @@ export function PlantillasCarreraPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     try {
-      const payload = { ...form, departamento_id: form.departamento_id || undefined }
+      const payload = {
+        ...form,
+        departamento_id: form.departamento_id || undefined,
+        mes_evaluacion: form.mes_evaluacion ? Number(form.mes_evaluacion) : null,
+      }
       if (editingDoc) await updatePlantillaCarrera(editingDoc._id, payload)
       else await createPlantillaCarrera(payload)
       setFormOpen(false)
@@ -430,6 +437,9 @@ export function PlantillasCarreraPage() {
                       <p className="mt-0.5 text-sm text-muted-foreground">{selected.descripcion}</p>
                       <div className="mt-1 flex gap-2">
                         <Badge variant="outline" className="text-xs">{selected.tipo_ruta}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          Evaluación: {nombreMes(selected.mes_evaluacion)}
+                        </Badge>
                         <Badge variant="secondary" className={selected.activo ? 'bg-[var(--lime-lt)] text-[var(--navy)]' : ''}>
                           {selected.activo ? 'Activa' : 'Inactiva'}
                         </Badge>
@@ -550,6 +560,22 @@ export function PlantillasCarreraPage() {
             <div className="grid gap-2">
               <Label>Tipo de ruta <span className="text-destructive">*</span></Label>
               <Input required value={form.tipo_ruta} onChange={(e) => setF('tipo_ruta', e.target.value)} placeholder="N2_a_Coord, Jr_a_Mid, Custom_Finance…" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Mes de evaluación</Label>
+              <select
+                className={selectClass}
+                value={form.mes_evaluacion}
+                onChange={(e) => setF('mes_evaluacion', e.target.value)}
+              >
+                <option value="">— Sin mes —</option>
+                {MESES.map((nombre, i) => (
+                  <option key={nombre} value={String(i + 1)}>{nombre}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                El dashboard de empleados pide la evaluación en este mes.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label>Departamento</Label>

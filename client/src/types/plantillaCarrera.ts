@@ -16,6 +16,8 @@ export type PlantillaCarreraDoc = {
   descripcion?: string
   departamento_id?: string | DepartamentoDoc | null
   tipo_ruta: string
+  /** Mes (1–12) en el que corresponde evaluar a quien tenga este plan. */
+  mes_evaluacion?: number | null
   activo?: boolean
   items: PlantillaItem[]
   createdAt?: string

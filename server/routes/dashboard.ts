@@ -2,6 +2,9 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 
 import { Evaluacion } from '../db/models/Evaluacion.js'
+import { EvaluacionKpi } from '../db/models/EvaluacionKpi.js'
+import { PlanCarrera } from '../db/models/PlanCarrera.js'
+import { Colaborador } from '../db/models/Colaborador.js'
 import { Empleado } from '../db/models/Empleado.js'
 import { Departamento } from '../db/models/Departamento.js'
 import { KPI } from '../db/models/KPI.js'
@@ -420,7 +423,15 @@ dashboardRouter.get('/paneles', async (req, res, next) => {
     const admin = tiene(permisos, 'usuarios:ver') || tiene(permisos, 'roles:ver')
     const out: Record<string, unknown> = {}
     if (rrhh) {
-      const [activos, inactivos, caps, firmas] = await Promise.all([
+      const mesRaw = Number(req.query.mes)
+      const mes = Number.isInteger(mesRaw) && mesRaw >= 1 && mesRaw <= 12
+        ? mesRaw
+        : new Date().getMonth() + 1
+      const anio = new Date().getFullYear()
+      const desde = new Date(anio, mes - 1, 1)
+      const hasta = new Date(anio, mes, 1)
+
+      const [activos, inactivos, caps, firmas, planesDocs] = await Promise.all([
         Empleado.countDocuments({ activo: { $ne: false } }),
         Empleado.countDocuments({ activo: false }),
         Capacitacion.countDocuments({ estado: 'En progreso' }),
@@ -432,12 +443,84 @@ dashboardRouter.get('/paneles', async (req, res, next) => {
             { 'firmas.rrhh': { $ne: true } },
           ],
         }),
+        PlanCarrera.find()
+          .select('colaborador_id tipo mes_evaluacion items.estado')
+          .lean(),
       ])
+
+      const colIds = planesDocs.map((p) => p.colaborador_id)
+      const [colaboradores, evals, evalsKpi] = await Promise.all([
+        Colaborador.find({ _id: { $in: colIds } }).select('nombre puesto estado').lean(),
+        Evaluacion.find({
+          colaborador_id: { $in: colIds },
+          fecha: { $gte: desde, $lt: hasta },
+        }).select('colaborador_id fecha resultado_global').sort({ fecha: -1 }).lean(),
+        EvaluacionKpi.find({
+          colaborador_id: { $in: colIds },
+          fecha: { $gte: desde, $lt: hasta },
+        }).select('colaborador_id fecha nivel_cumplimiento').sort({ fecha: -1 }).lean(),
+      ])
+      const colMap = new Map(colaboradores.map((c) => [String(c._id), c]))
+      const evalMap = new Map<string, { fecha: Date; resultado: string }>()
+      for (const ev of evals) {
+        const id = String(ev.colaborador_id)
+        if (!evalMap.has(id) && ev.fecha) {
+          evalMap.set(id, { fecha: ev.fecha, resultado: ev.resultado_global ?? 'Registrada' })
+        }
+      }
+      for (const ev of evalsKpi) {
+        const id = String(ev.colaborador_id)
+        const previa = evalMap.get(id)
+        if (ev.fecha && (!previa || ev.fecha > previa.fecha)) {
+          evalMap.set(id, { fecha: ev.fecha, resultado: ev.nivel_cumplimiento ?? 'Registrada' })
+        }
+      }
+
+      const planes = planesDocs.flatMap((p) => {
+        const col = colMap.get(String(p.colaborador_id))
+        if (!col) return []
+        const items = p.items ?? []
+        const total = items.length
+        const completados = items.filter((it) => it.estado === 'Completado').length
+        return [{
+          colaborador_id: String(p.colaborador_id),
+          nombre: col.nombre,
+          puesto: col.puesto,
+          tipo: p.tipo,
+          mes_evaluacion: p.mes_evaluacion ?? null,
+          items_total: total,
+          items_completados: completados,
+          avance_pct: total > 0 ? Math.round((completados / total) * 100) : 0,
+        }]
+      }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+
+      const evaluaciones_mes = planes
+        .filter((p) => p.mes_evaluacion === mes)
+        .map((p) => {
+          const ev = evalMap.get(p.colaborador_id)
+          return {
+            colaborador_id: p.colaborador_id,
+            nombre: p.nombre,
+            puesto: p.puesto,
+            tipo: p.tipo,
+            tiene_evaluacion: Boolean(ev),
+            fecha: ev?.fecha.toISOString() ?? null,
+            resultado: ev?.resultado ?? null,
+          }
+        })
+
       out.rrhh = {
+        mes,
+        anio,
         empleados_activos: activos,
         empleados_inactivos: inactivos,
         capacitaciones_en_progreso: caps,
         evaluaciones_sin_firma: firmas,
+        planes_total: planes.length,
+        planes_sin_mes: planes.filter((p) => p.mes_evaluacion == null).length,
+        evaluaciones_pendientes_mes: evaluaciones_mes.filter((e) => !e.tiene_evaluacion).length,
+        planes,
+        evaluaciones_mes,
       }
     }
     if (admin) {

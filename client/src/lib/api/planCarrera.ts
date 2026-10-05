@@ -24,6 +24,8 @@ export type PlanCarreraDoc = {
   colaborador_id: string
   tipo: 'N2_a_Coord' | 'Jr_a_Mid' | 'Mid_a_Senior'
   fecha_inicio?: string
+  /** Mes (1–12) en el que corresponde la evaluación. */
+  mes_evaluacion?: number | null
   periodo_estimado?: string
   responsable_seguimiento?: string
   items: PlanCarreraItem[]
@@ -35,6 +37,19 @@ export async function fetchPlanCarrera(
   const res = await fetch(`/api/plan-carrera/${colaboradorId}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<PlanCarreraDoc | null>
+}
+
+export async function updatePlanCarreraMes(
+  colaboradorId: string,
+  mes_evaluacion: number | null,
+): Promise<PlanCarreraDoc> {
+  const res = await fetch(`/api/plan-carrera/${colaboradorId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mes_evaluacion }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<PlanCarreraDoc>
 }
 
 export async function updatePlanCarreraItem(

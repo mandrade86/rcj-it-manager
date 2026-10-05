@@ -21,6 +21,8 @@ const PlantillaCarreraSchema = new Schema(
     descripcion: { type: String, default: '' },
     departamento_id: { type: Schema.Types.ObjectId, ref: 'Departamento' },
     tipo_ruta: { type: String, required: true },
+    /** Mes calendario (1–12) en el que corresponde evaluar a quien tenga este plan. */
+    mes_evaluacion: { type: Number, min: 1, max: 12, default: null },
     activo: { type: Boolean, default: true },
     items: [PlantillaItemSchema],
   },
