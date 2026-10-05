@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 
 import { Departamento } from '../db/models/Departamento.js'
+import { Empresa } from '../db/models/Empresa.js'
 import { Proyecto } from '../db/models/Proyecto.js'
 import { Tarea } from '../db/models/Tarea.js'
 import { buildProyectoScopeFilter, isAdminProyectos, resolveDepartamentosUsuario } from './proyectoScope.js'
@@ -282,25 +283,30 @@ export async function generarReporteStatusProyectos(opts: {
       .filter(Boolean),
   )]
 
-  let departamentosCatalogo: Array<{ _id: string; nombre: string; codigo?: string }> = []
-  if (isAdminProyectos(opts.permisos)) {
-    departamentosCatalogo = (await Departamento.find({ activo: { $ne: false } })
-      .select('nombre codigo')
-      .sort({ nombre: 1 })
-      .lean()).map((d) => ({
+  /** Solo departamentos marcados activos en el maestro (y empresa activa, si tiene). */
+  let departamentosCatalogo: Array<{ _id: string; nombre: string; codigo?: string; empresa?: string }> = []
+  const filtroActivos = isAdminProyectos(opts.permisos)
+    ? { activo: true }
+    : deptIdsVisibles.length > 0
+      ? { _id: { $in: deptIdsVisibles }, activo: true }
+      : null
+  if (filtroActivos) {
+    const rows = await Departamento.find(filtroActivos)
+      .select('nombre codigo empresa_id')
+      .populate({ path: 'empresa_id', select: 'nombre activo', model: Empresa })
+      .sort({ nombre: 1, codigo: 1 })
+      .lean()
+    departamentosCatalogo = rows.flatMap((d) => {
+      const emp = d.empresa_id as { nombre?: string; activo?: boolean } | null
+      if (emp && emp.activo === false) return []
+      const empresa = emp?.nombre?.trim()
+      return [{
         _id: String(d._id),
         nombre: d.nombre ?? '',
         codigo: d.codigo,
-      }))
-  } else if (deptIdsVisibles.length > 0) {
-    departamentosCatalogo = (await Departamento.find({ _id: { $in: deptIdsVisibles } })
-      .select('nombre codigo')
-      .sort({ nombre: 1 })
-      .lean()).map((d) => ({
-        _id: String(d._id),
-        nombre: d.nombre ?? '',
-        codigo: d.codigo,
-      }))
+        ...(empresa ? { empresa } : {}),
+      }]
+    })
   }
 
   return {

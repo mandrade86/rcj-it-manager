@@ -66,5 +66,5 @@ export type ReporteStatusProyectos = {
     riesgos_alto: number
   }
   departamentos: ReporteStatusDepartamento[]
-  departamentos_disponibles: Array<{ _id: string; nombre: string; codigo?: string }>
+  departamentos_disponibles: Array<{ _id: string; nombre: string; codigo?: string; empresa?: string }>
 }

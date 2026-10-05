@@ -233,7 +233,8 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
   const [data, setData] = useState<ReporteStatusProyectos | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [filtroDepto, setFiltroDepto] = useState<string | null>(null)
+  const [filtroDeptos, setFiltroDeptos] = useState<string[]>([])
+  const [busquedaDepto, setBusquedaDepto] = useState('')
   const [filtroProyecto, setFiltroProyecto] = useState('')
   const [proyectoSheet, setProyectoSheet] = useState<ReporteStatusProyectoItem | null>(null)
   const [vista, setVista] = useState<'tabla' | 'tarjetas'>('tabla')
@@ -275,17 +276,21 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
 
   const proyectosVisibles = useMemo(() => {
     let list = todosProyectos
-    if (filtroDepto) list = list.filter((p) => p.departamento_id === filtroDepto)
+    if (filtroDeptos.length > 0) {
+      const ids = new Set(filtroDeptos)
+      list = list.filter((p) => p.departamento_id != null && ids.has(p.departamento_id))
+    }
     if (filtroProyecto) list = list.filter((p) => p.proyecto_id === filtroProyecto)
     return list
-  }, [todosProyectos, filtroDepto, filtroProyecto])
+  }, [todosProyectos, filtroDeptos, filtroProyecto])
 
   const opcionesProyecto = useMemo(() => {
-    const base = filtroDepto
-      ? todosProyectos.filter((p) => p.departamento_id === filtroDepto)
+    const ids = new Set(filtroDeptos)
+    const base = filtroDeptos.length > 0
+      ? todosProyectos.filter((p) => p.departamento_id != null && ids.has(p.departamento_id))
       : todosProyectos
     return [...base].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  }, [todosProyectos, filtroDepto])
+  }, [todosProyectos, filtroDeptos])
 
   const chartRiesgo = useMemo(() => {
     const counts: Record<string, number> = { Alto: 0, Medio: 0, Bajo: 0, 'Sin fecha': 0 }
@@ -360,8 +365,16 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
   }, [kpisVista])
 
   function limpiarFiltros() {
-    setFiltroDepto(null)
+    setFiltroDeptos([])
+    setBusquedaDepto('')
     setFiltroProyecto('')
+  }
+
+  function toggleDepto(id: string) {
+    setFiltroProyecto('')
+    setFiltroDeptos((prev) => (
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    ))
   }
 
   const tituloAlcance = useMemo(() => {
@@ -369,12 +382,23 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
       const p = todosProyectos.find((x) => x.proyecto_id === filtroProyecto)
       return p ? `Proyecto: ${p.nombre}` : 'Proyecto seleccionado'
     }
-    if (filtroDepto) {
-      const d = data?.departamentos_disponibles.find((x) => x._id === filtroDepto)
+    if (filtroDeptos.length === 1) {
+      const d = data?.departamentos_disponibles.find((x) => x._id === filtroDeptos[0])
       return d ? `Departamento: ${d.nombre}` : 'Departamento seleccionado'
     }
+    if (filtroDeptos.length > 1) return `${filtroDeptos.length} departamentos`
     return 'Todos los proyectos'
-  }, [filtroProyecto, filtroDepto, todosProyectos, data?.departamentos_disponibles])
+  }, [filtroProyecto, filtroDeptos, todosProyectos, data?.departamentos_disponibles])
+
+  const deptosFiltrados = useMemo(() => {
+    const lista = data?.departamentos_disponibles ?? []
+    const q = busquedaDepto.trim().toLocaleLowerCase('es')
+    if (!q) return lista
+    return lista.filter((d) => {
+      const blob = `${d.nombre} ${d.empresa ?? ''} ${d.codigo ?? ''}`.toLocaleLowerCase('es')
+      return blob.includes(q)
+    })
+  }, [data?.departamentos_disponibles, busquedaDepto])
 
   return (
     <div className={cn('reporte-status-page w-full space-y-6')}>
@@ -437,42 +461,56 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
         {/* Filtros integrados en hero */}
         <div className="relative mt-6 space-y-4 rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-blue-100/80">
-              Departamentos
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setFiltroDepto(null)
-                  setFiltroProyecto('')
-                }}
-                className={cn(
-                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all',
-                  filtroDepto === null
-                    ? 'bg-[var(--lime)] text-[var(--navy)] shadow-md'
-                    : 'bg-white/15 text-white hover:bg-white/25',
-                )}
-              >
-                Todos
-              </button>
-              {(data?.departamentos_disponibles ?? []).map((d) => (
-                <button
-                  key={d._id}
-                  type="button"
-                  onClick={() => {
-                    setFiltroDepto(d._id)
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-100/80">
+                Departamentos activos
+              </p>
+              <p className="text-[11px] text-blue-100/70">
+                {filtroDeptos.length === 0
+                  ? `${data?.departamentos_disponibles.length ?? 0} en el catálogo`
+                  : `${filtroDeptos.length} seleccionado${filtroDeptos.length === 1 ? '' : 's'}`}
+              </p>
+            </div>
+            <input
+              type="search"
+              value={busquedaDepto}
+              onChange={(e) => setBusquedaDepto(e.target.value)}
+              placeholder="Buscar departamento o empresa"
+              className="mb-2 h-9 w-full rounded-lg border border-white/20 bg-white/95 px-3 text-sm text-[var(--navy)] outline-none placeholder:text-slate-400 focus-visible:border-[var(--lime)] focus-visible:ring-2 focus-visible:ring-[var(--lime)]/40"
+            />
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-white/15 bg-[#001848]/35">
+              <label className="flex cursor-pointer items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-white">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--lime)]"
+                  checked={filtroDeptos.length === 0}
+                  onChange={() => {
+                    setFiltroDeptos([])
                     setFiltroProyecto('')
                   }}
-                  className={cn(
-                    'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all',
-                    filtroDepto === d._id
-                      ? 'bg-[var(--lime)] text-[var(--navy)] shadow-md'
-                      : 'bg-white/15 text-white hover:bg-white/25',
-                  )}
+                />
+                <span className="font-semibold">Todos</span>
+              </label>
+              {deptosFiltrados.length === 0 ? (
+                <p className="px-3 py-3 text-xs text-blue-100/80">
+                  Ningún departamento activo coincide con la búsqueda.
+                </p>
+              ) : deptosFiltrados.map((d) => (
+                <label
+                  key={d._id}
+                  className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-white hover:bg-white/10"
                 >
-                  {d.nombre}
-                </button>
+                  <input
+                    type="checkbox"
+                    className="size-3.5 shrink-0 accent-[var(--lime)]"
+                    checked={filtroDeptos.includes(d._id)}
+                    onChange={() => toggleDepto(d._id)}
+                  />
+                  <span className="min-w-0 truncate font-medium">{d.nombre}</span>
+                  {d.empresa && (
+                    <span className="ml-auto truncate text-[11px] text-blue-100/65">{d.empresa}</span>
+                  )}
+                </label>
               ))}
             </div>
           </div>
@@ -496,7 +534,7 @@ export function ReporteStatusProyectosPage({ embedded = false }: Props) {
                 ))}
               </select>
             </div>
-            {(filtroDepto || filtroProyecto) && (
+            {(filtroDeptos.length > 0 || filtroProyecto) && (
               <Button
                 type="button"
                 variant="ghost"
