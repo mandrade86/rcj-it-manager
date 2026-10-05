@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock, GripVertical, Inbox, Plus } from 'lucide-react'
+import { CheckCircle2, GripVertical, Inbox, Plus } from 'lucide-react'
 
 import { BOARD, BoardPill, prioridadTone } from '@/components/board/BoardPrimitives'
 import { Button } from '@/components/ui/button'
 import { fetchMiDia, type MiDiaAprobacion, type MiDiaTarea } from '@/lib/api/dashboard'
 import { fetchEmpleados } from '@/lib/api/empleados'
 import { deleteTarea, fetchTareasMias, updateTarea, type TareaMia } from '@/lib/api/tareas'
-import { formatDateDMY } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { DashboardPersonalTodos } from '@/pages/dashboard/DashboardPersonalTodos'
 import { TareaRapidaDialog } from '@/pages/inicio/TareaRapidaDialog'
@@ -25,7 +24,7 @@ const SECCIONES: Array<{
 }> = [
   { id: 'vencidas', label: 'Urgente', hint: 'Vencidas', color: BOARD.red },
   { id: 'hoy', label: 'Hoy', hint: 'Para hoy', color: BOARD.orange },
-  { id: 'proximas', label: 'Próximo', hint: 'Sin fecha o posteriores', color: BOARD.blue },
+  { id: 'proximas', label: 'Próximas', hint: 'Después de hoy o sin fecha', color: BOARD.blue },
   { id: 'completadas', label: 'Completadas', hint: 'Últimos 14 días', color: BOARD.green },
 ]
 
@@ -80,11 +79,44 @@ function mover(rows: MiDiaTarea[], dragId: string, dropId: string): MiDiaTarea[]
   return next
 }
 
+function fechaLarga(): string {
+  const s = new Date().toLocaleDateString('es-HN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function fraseEjecutiva(d: {
+  vencidas: MiDiaTarea[]
+  hoy: MiDiaTarea[]
+  proximas: MiDiaTarea[]
+  aprobaciones: MiDiaAprobacion[]
+}): string {
+  const partes: string[] = []
+  if (d.vencidas.length === 1) partes.push('1 tema requiere atención')
+  else if (d.vencidas.length > 1) partes.push(`${d.vencidas.length} temas requieren atención`)
+  if (d.hoy.length === 1) partes.push('1 compromiso para hoy')
+  else if (d.hoy.length > 1) partes.push(`${d.hoy.length} compromisos para hoy`)
+  if (d.aprobaciones.length === 1) partes.push('1 aprobación por firmar')
+  else if (d.aprobaciones.length > 1) partes.push(`${d.aprobaciones.length} aprobaciones por firmar`)
+  if (partes.length === 0) {
+    if (d.proximas.length === 0) return 'El día está al día. No hay temas abiertos en la bandeja.'
+    return d.proximas.length === 1
+      ? 'El día está al día. Queda 1 tarea para más adelante.'
+      : `El día está al día. Quedan ${d.proximas.length} tareas para más adelante.`
+  }
+  return `${partes.join('. ')}.`
+}
+
 function TareaRow({
   t,
   busy,
   empleados,
   dragging,
+  presentacion = false,
   onToggle,
   onPrioridad,
   onFecha,
@@ -97,6 +129,7 @@ function TareaRow({
   busy: boolean
   empleados: EmpleadoDoc[]
   dragging: boolean
+  presentacion?: boolean
   onToggle: () => void
   onPrioridad: (v: string) => void
   onFecha: (v: string) => void
@@ -107,6 +140,98 @@ function TareaRow({
 }) {
   const done = t.estado === 'Completado'
   const canDrag = Boolean(onDragStart && onDrop)
+  const tone = prioridadUi(t.prioridad)
+  if (presentacion) {
+    return (
+      <div
+        className={cn(
+          'group flex items-center gap-3 border-b px-4 py-3 last:border-b-0',
+          busy && 'opacity-60',
+          dragging && 'bg-[var(--lime-lt)]',
+        )}
+        style={{ borderColor: BOARD.borderSoft }}
+        onDragOver={(e) => { if (canDrag) e.preventDefault() }}
+        onDrop={(e) => {
+          if (!canDrag || !onDrop) return
+          e.preventDefault()
+          onDrop()
+        }}
+      >
+        {canDrag && (
+          <span
+            draggable
+            onDragStart={onDragStart}
+            className="cursor-grab text-muted-foreground opacity-0 group-hover:opacity-100 active:cursor-grabbing"
+            title="Arrastrar para ordenar"
+          >
+            <GripVertical className="size-4" />
+          </span>
+        )}
+        <button
+          type="button"
+          className="flex size-5 shrink-0 items-center justify-center rounded-full border"
+          style={{
+            borderColor: done ? BOARD.green : BOARD.border,
+            backgroundColor: done ? BOARD.green : '#fff',
+            color: '#fff',
+          }}
+          onClick={onToggle}
+          aria-label={done ? 'Marcar pendiente' : 'Completar'}
+        >
+          {done ? <CheckCircle2 className="size-3.5" /> : null}
+        </button>
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={onOpen}>
+          <p className={cn('truncate text-[15px] font-medium', done && 'line-through opacity-60')} style={{ color: BOARD.text }}>
+            {t.nombre}
+          </p>
+          <p className="truncate text-xs" style={{ color: BOARD.muted }}>
+            {t.proyecto_nombre || 'Personal'}
+            {' · '}
+            {t.porcentaje}% de avance
+          </p>
+        </button>
+        <select
+          aria-label="Responsable"
+          className="hidden h-7 max-w-[150px] truncate border-0 bg-transparent px-1 text-xs md:block"
+          style={{ color: BOARD.muted }}
+          value={t.responsable_id || ''}
+          disabled={busy}
+          onChange={(e) => {
+            const id = e.target.value
+            const emp = empleados.find((x) => x._id === id)
+            onResponsable(id, emp?.nombre ?? '')
+          }}
+        >
+          <option value="">{t.responsable || 'Sin responsable'}</option>
+          {empleados.map((emp) => (
+            <option key={emp._id} value={emp._id}>{emp.nombre}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Prioridad"
+          className="h-7 rounded-full border-0 px-2.5 text-[11px] font-semibold"
+          style={{ backgroundColor: tone.bg, color: tone.text }}
+          value={t.prioridad ?? ''}
+          disabled={busy}
+          onChange={(e) => onPrioridad(e.target.value)}
+        >
+          <option value="">Prioridad</option>
+          <option value="Alta">Alta</option>
+          <option value="Media">Media</option>
+          <option value="Baja">Baja</option>
+        </select>
+        <input
+          type="date"
+          aria-label="Fecha de vencimiento"
+          className="h-7 w-[132px] rounded-md border bg-white px-2 text-xs"
+          style={{ borderColor: BOARD.border, color: BOARD.text }}
+          value={t.fecha_fin ? t.fecha_fin.slice(0, 10) : ''}
+          disabled={busy}
+          onChange={(e) => onFecha(e.target.value)}
+        />
+      </div>
+    )
+  }
   return (
     <div
       className={cn(
@@ -513,22 +638,112 @@ function MiDiaView() {
     return data.vencidas.length + data.hoy.length + data.proximas.length
   }, [data])
 
-  const secciones = SECCIONES
+  function filasDe(id: SeccionId): MiDiaTarea[] {
+    if (!data) return []
+    return applyOrden(data[id], user ? loadOrden(user._id, id) : [])
+  }
+
+  function renderSeccion(id: SeccionId) {
+    const sec = SECCIONES.find((s) => s.id === id)!
+    const rows = filasDe(id)
+    void ordenTick
+    if (rows.length === 0 && (id === 'completadas' || id === 'proximas' || id === 'vencidas')) return null
+    return (
+      <section
+        key={id}
+        className="overflow-hidden rounded-xl border bg-white shadow-sm"
+        style={{ borderColor: BOARD.border }}
+      >
+        <div
+          className="flex items-center justify-between gap-3 border-b px-4 py-3"
+          style={{ borderColor: BOARD.borderSoft }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full" style={{ backgroundColor: sec.color }} />
+            <h2 className="text-sm font-semibold text-[var(--navy)]">{sec.label}</h2>
+            <span className="text-xs" style={{ color: BOARD.muted }}>{sec.hint}</span>
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-[var(--navy)]">{rows.length}</span>
+        </div>
+        {rows.length === 0 ? (
+          <p className="px-4 py-8 text-sm" style={{ color: BOARD.muted }}>
+            Nada vence hoy.
+          </p>
+        ) : (
+          rows.map((t) => (
+            <TareaRow
+              key={t._id}
+              presentacion
+              t={t}
+              busy={busyId === t._id}
+              empleados={empleados}
+              dragging={drag?.id === t._id}
+              onToggle={() =>
+                void patch(t._id, {
+                  estado: t.estado === 'Completado' ? 'Pendiente' : 'Completado',
+                  porcentaje: t.estado === 'Completado' ? Math.min(t.porcentaje, 90) : 100,
+                })
+              }
+              onPrioridad={(v) => void patch(t._id, { prioridad: v || null })}
+              onFecha={(v) => void patch(t._id, { fecha_fin: v || null })}
+              onResponsable={(id, nombre) => void patch(t._id, { responsable_id: id || null, responsable: nombre })}
+              onOpen={() => {
+                if (t.proyecto_id) {
+                  navigate(`/proyectos/${encodeURIComponent(t.proyecto_id)}`)
+                  return
+                }
+                setDetalle({
+                  _id: t._id,
+                  nombre: t.nombre,
+                  proyecto_id: '',
+                  proyecto_nombre: 'Personal',
+                  responsable: t.responsable,
+                  responsable_id: t.responsable_id,
+                  fecha_fin: t.fecha_fin,
+                  estado: t.estado,
+                  prioridad: t.prioridad,
+                  porcentaje: t.porcentaje,
+                })
+              }}
+              onDragStart={() => setDrag({ seccion: id, id: t._id })}
+              onDrop={() => {
+                if (!drag || drag.seccion !== id || !user) return
+                const next = mover(rows, drag.id, t._id)
+                saveOrden(user._id, id, next.map((x) => x._id))
+                setDrag(null)
+                setOrdenTick((n) => n + 1)
+              }}
+            />
+          ))
+        )}
+      </section>
+    )
+  }
+
+  const kpis = data
+    ? [
+        { label: 'Atención', value: data.vencidas.length, note: 'Vencidas', color: data.vencidas.length > 0 ? BOARD.red : BOARD.text },
+        { label: 'Hoy', value: data.hoy.length, note: 'Para cerrar hoy', color: BOARD.text },
+        { label: 'Próximas', value: data.proximas.length, note: 'Después de hoy o sin fecha', color: BOARD.text },
+        { label: 'Cerradas', value: data.completadas.length, note: 'Últimos 14 días', color: BOARD.green },
+      ]
+    : []
 
   return (
-    <div className="w-full space-y-6 pb-10">
-      <header className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-widest" style={{ color: BOARD.muted }}>
-          Mi día
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight" style={{ color: BOARD.text }}>
-          {saludoHora()}, {firstName}
-        </h1>
-        <p className="text-sm" style={{ color: BOARD.muted }}>
-          {data
-            ? `${totalPendiente} pendiente${totalPendiente === 1 ? '' : 's'} · ${formatDateDMY(new Date().toISOString())}`
-            : 'Cargando tu bandeja…'}
-        </p>
+    <div className="w-full space-y-5 pb-10">
+      <header className="overflow-hidden rounded-xl bg-[var(--navy)] text-white shadow-sm">
+        <div className="px-5 py-5 sm:px-6">
+          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-white/55">
+            Resumen del día
+          </p>
+          <h1 className="mt-2 text-[1.7rem] font-semibold tracking-tight">
+            {saludoHora()}, {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-white/70">{fechaLarga()}</p>
+          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-white/90">
+            {data ? fraseEjecutiva(data) : 'Cargando el resumen…'}
+          </p>
+        </div>
       </header>
 
       {err && (
@@ -537,130 +752,73 @@ function MiDiaView() {
         </p>
       )}
 
+      {data && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {kpis.map((k) => (
+            <div
+              key={k.label}
+              className="rounded-xl border bg-white px-4 py-3 shadow-sm"
+              style={{ borderColor: BOARD.border }}
+            >
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: BOARD.muted }}>
+                {k.label}
+              </p>
+              <p className="mt-1 text-3xl font-semibold tabular-nums leading-none" style={{ color: k.color }}>
+                {k.value}
+              </p>
+              <p className="mt-2 text-xs" style={{ color: BOARD.muted }}>{k.note}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!data ? (
         <p className="text-sm text-muted-foreground">Cargando tareas…</p>
-      ) : totalPendiente === 0 && data.completadas.length === 0 ? (
-        <div
-          className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-16 text-center"
-          style={{ borderColor: BOARD.border, color: BOARD.muted }}
-        >
-          <Inbox className="size-8" />
-          <p className="text-sm">No tienes tareas asignadas todavía.</p>
-          <Button variant="outline" size="sm" onClick={() => navigate('/proyectos')}>
-            Ir a proyectos
-          </Button>
-        </div>
       ) : (
-        secciones.map((sec) => {
-          const rows = applyOrden(
-            data[sec.id],
-            user ? loadOrden(user._id, sec.id) : [],
-          )
-          void ordenTick
-          if (rows.length === 0 && sec.id === 'completadas') return null
-          return (
-            <section key={sec.id} className="overflow-hidden rounded-lg border bg-white" style={{ borderColor: BOARD.border }}>
-              <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: BOARD.borderSoft }}>
-                {sec.id === 'vencidas' ? (
-                  <AlertTriangle className="size-4" style={{ color: sec.color }} />
-                ) : sec.id === 'hoy' ? (
-                  <CalendarDays className="size-4" style={{ color: sec.color }} />
-                ) : sec.id === 'completadas' ? (
-                  <CheckCircle2 className="size-4" style={{ color: sec.color }} />
-                ) : (
-                  <Clock className="size-4" style={{ color: sec.color }} />
-                )}
-                <h2 className="text-sm font-semibold" style={{ color: BOARD.text }}>
-                  {sec.label}
-                </h2>
-                <span className="text-xs" style={{ color: BOARD.muted }}>
-                  {sec.hint} · {rows.length}
-                </span>
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.85fr)]">
+          <div className="space-y-4">
+            {renderSeccion('vencidas')}
+            {renderSeccion('hoy')}
+            {renderSeccion('proximas')}
+            {renderSeccion('completadas')}
+            {totalPendiente === 0 && data.completadas.length === 0 && (
+              <div
+                className="flex flex-col items-center gap-2 rounded-xl border border-dashed bg-white px-6 py-14 text-center"
+                style={{ borderColor: BOARD.border, color: BOARD.muted }}
+              >
+                <Inbox className="size-8" />
+                <p className="text-sm">No tienes tareas asignadas todavía.</p>
+                <Button variant="outline" size="sm" onClick={() => navigate('/proyectos')}>
+                  Ir a proyectos
+                </Button>
               </div>
-              {rows.length === 0 ? (
-                <p className="px-3 py-6 text-xs" style={{ color: BOARD.muted }}>
-                  Nada en esta sección.
-                </p>
-              ) : (
-                rows.map((t) => (
-                  <TareaRow
-                    key={t._id}
-                    t={t}
-                    busy={busyId === t._id}
-                    empleados={empleados}
-                    dragging={drag?.id === t._id}
-                    onToggle={() =>
-                      void patch(t._id, {
-                        estado: t.estado === 'Completado' ? 'Pendiente' : 'Completado',
-                        porcentaje: t.estado === 'Completado' ? Math.min(t.porcentaje, 90) : 100,
-                      })
-                    }
-                    onPrioridad={(v) => void patch(t._id, { prioridad: v || null })}
-                    onFecha={(v) => void patch(t._id, { fecha_fin: v || null })}
-                    onResponsable={(id, nombre) => void patch(t._id, { responsable_id: id || null, responsable: nombre })}
-                    onOpen={() => {
-                      if (t.proyecto_id) {
-                        navigate(`/proyectos/${encodeURIComponent(t.proyecto_id)}`)
-                        return
-                      }
-                      setDetalle({
-                        _id: t._id,
-                        nombre: t.nombre,
-                        proyecto_id: '',
-                        proyecto_nombre: 'Personal',
-                        responsable: t.responsable,
-                        responsable_id: t.responsable_id,
-                        fecha_fin: t.fecha_fin,
-                        estado: t.estado,
-                        prioridad: t.prioridad,
-                        porcentaje: t.porcentaje,
-                      })
-                    }}
-                    onDragStart={() => setDrag({ seccion: sec.id, id: t._id })}
-                    onDrop={() => {
-                      if (!drag || drag.seccion !== sec.id || !user) return
-                      const next = mover(rows, drag.id, t._id)
-                      saveOrden(user._id, sec.id, next.map((x) => x._id))
-                      setDrag(null)
-                      setOrdenTick((n) => n + 1)
-                    }}
-                  />
-                ))
-              )}
-            </section>
-          )
-        })
-      )}
-
-      {data && data.aprobaciones.length > 0 && (
-        <section className="overflow-hidden rounded-lg border bg-white">
-          <div className="border-b px-3 py-2">
-            <h2 className="text-sm font-semibold text-[var(--navy)]">Aprobaciones</h2>
-            <p className="text-xs text-muted-foreground">Evaluaciones que aún no tienen todas las firmas.</p>
+            )}
           </div>
-          {data.aprobaciones.map((a) => (
-            <button
-              key={a._id}
-              type="button"
-              className="flex w-full flex-col items-start border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted/40"
-              onClick={() => navigate(a.href)}
-            >
-              <span className="text-sm font-medium text-[var(--navy)]">{a.titulo}</span>
-              <span className="text-[11px] text-muted-foreground">{a.detalle}</span>
-            </button>
-          ))}
-        </section>
-      )}
-
-      {user && <MiDiaReuniones userId={user._id} />}
-
-      {user && (
-        <section>
-          <h2 className="mb-2 text-sm font-semibold" style={{ color: BOARD.text }}>
-            Recordatorios personales
-          </h2>
-          <DashboardPersonalTodos userId={user._id} />
-        </section>
+          <div className="space-y-4">
+            {data.aprobaciones.length > 0 && (
+              <section className="overflow-hidden rounded-xl border bg-white shadow-sm" style={{ borderColor: BOARD.border }}>
+                <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: BOARD.borderSoft }}>
+                  <h2 className="text-sm font-semibold text-[var(--navy)]">Por firmar</h2>
+                  <span className="text-sm font-semibold tabular-nums text-[var(--navy)]">{data.aprobaciones.length}</span>
+                </div>
+                {data.aprobaciones.map((a) => (
+                  <button
+                    key={a._id}
+                    type="button"
+                    className="flex w-full flex-col items-start border-b px-4 py-3 text-left last:border-b-0 hover:bg-[var(--blue-lt)]/50"
+                    style={{ borderColor: BOARD.borderSoft }}
+                    onClick={() => navigate(a.href)}
+                  >
+                    <span className="text-sm font-medium text-[var(--navy)]">{a.titulo}</span>
+                    <span className="text-xs text-muted-foreground">{a.detalle}</span>
+                  </button>
+                ))}
+              </section>
+            )}
+            {user && <MiDiaReuniones userId={user._id} />}
+            {user && <DashboardPersonalTodos userId={user._id} compact />}
+          </div>
+        </div>
       )}
 
       <TareaRapidaDialog

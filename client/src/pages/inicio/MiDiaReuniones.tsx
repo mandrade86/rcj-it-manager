@@ -186,15 +186,16 @@ export function MiDiaReuniones({ userId }: { userId: string }) {
   const visibles = [...items].sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-white">
-      <div className="border-b px-3 py-2">
-        <h2 className="text-sm font-semibold text-[var(--navy)]">Reuniones</h2>
-        <p className="text-xs text-muted-foreground">
-          Se abre Teams con la reunión y los invitados de tu equipo. En Teams pulsa Enviar para crear la reunión y mandar la invitación.
-          {scope === 'all' ? ' Como administrador, se invitan tus reportes directos, no toda la empresa.' : ''}
-        </p>
+    <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="border-b px-4 py-3">
+        <h2 className="text-sm font-semibold text-[var(--navy)]">Agenda</h2>
+        <p className="text-xs text-muted-foreground">Reuniones del equipo</p>
       </div>
-      <form className="space-y-2 border-b px-3 py-2" onSubmit={crearEnTeams}>
+      <details className="border-b">
+        <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-[var(--navy)]">
+          Nueva reunión en Teams
+        </summary>
+      <form className="space-y-2 px-4 pb-3" onSubmit={crearEnTeams}>
         <div className="flex flex-wrap items-end gap-2">
           <Input
             value={titulo}
@@ -248,9 +249,13 @@ export function MiDiaReuniones({ userId }: { userId: string }) {
             })}
           </div>
         )}
+        {scope === 'all' && (
+          <p className="text-[11px] text-muted-foreground">Se invitan tus reportes directos.</p>
+        )}
       </form>
+      </details>
       {visibles.length === 0 ? (
-        <p className="px-3 py-6 text-xs text-muted-foreground">No hay reuniones anotadas.</p>
+        <p className="px-4 py-6 text-sm text-muted-foreground">Sin reuniones en la agenda.</p>
       ) : (
         visibles.map((r) => (
           <div key={r.id} className="flex items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0">

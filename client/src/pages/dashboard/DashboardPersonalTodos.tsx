@@ -65,9 +65,10 @@ function reorder(items: DashboardTodoItem[], dragId: string, dropId: string): Da
 
 type Props = {
   userId: string
+  compact?: boolean
 }
 
-export function DashboardPersonalTodos({ userId }: Props) {
+export function DashboardPersonalTodos({ userId, compact = false }: Props) {
   const [items, setItems] = useState<DashboardTodoItem[]>([])
   const [draft, setDraft] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -113,13 +114,21 @@ export function DashboardPersonalTodos({ userId }: Props) {
   }
 
   return (
-    <Card className="flex h-full min-h-[280px] flex-col shadow-sm">
+    <Card className={cn('flex h-full flex-col shadow-sm', compact ? 'min-h-0' : 'min-h-[280px]')}>
       <CardHeader className="space-y-1 pb-3">
-        <CardTitle className="text-sm font-semibold text-[var(--navy)]">Mi lista del día</CardTitle>
+        <CardTitle className="text-sm font-semibold text-[var(--navy)]">
+          {compact ? 'Notas' : 'Mi lista del día'}
+        </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Recordatorios personales (solo en tu navegador). Arrastra el icono{' '}
-          <GripVertical className="inline size-3 align-text-bottom text-muted-foreground" aria-hidden /> para
-          reordenar.
+          {compact
+            ? 'Recordatorios personales, solo en este equipo.'
+            : (
+              <>
+                Recordatorios personales (solo en tu navegador). Arrastra el icono{' '}
+                <GripVertical className="inline size-3 align-text-bottom text-muted-foreground" aria-hidden /> para
+                reordenar.
+              </>
+            )}
         </p>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3 pt-0">
