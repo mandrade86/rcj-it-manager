@@ -29,6 +29,8 @@ export type Tarea = {
   responsable_id?: string | null
   fecha_inicio?: string | null
   fecha_fin?: string | null
+  /** Días de calendario inclusivos entre inicio y fin. */
+  duracion_dias?: number | null
   estado: TareaEstado
   prioridad?: TareaPrioridad | null
   /** Presupuesto asignado a la tarea (moneda del proyecto). */

@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchEmpleados } from '@/lib/api/empleados'
+import { diasEntre, finDesdeDuracion, hoyIso, isoDia } from '@/lib/fechasTarea'
 import { collectTagsFromTareas } from '@/lib/tareaTags'
 import { ESTADOS_BASE, fetchTareaEstados, type TareaEstadoDef } from '@/lib/tareaBoardPrefs'
 import type { EmpleadoDoc } from '@/types/empleado'
@@ -29,6 +30,7 @@ type FormState = {
   responsable_id: string
   fecha_inicio: string
   fecha_fin: string
+  duracion_dias: string
   estado: string
   prioridad: TareaPrioridad | ''
   monto_asignado: string
@@ -38,20 +40,17 @@ type FormState = {
   tags: string[]
 }
 
-function hoyIso(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-function emptyForm(): FormState {
+function emptyForm(inicioProyecto?: string | null): FormState {
+  const fecha_inicio = isoDia(inicioProyecto) || hoyIso()
+  const duracion_dias = '5'
   return {
     nombre: '',
     descripcion: '',
     responsable: '',
     responsable_id: '',
-    fecha_inicio: hoyIso(),
-    fecha_fin: '',
+    fecha_inicio,
+    fecha_fin: finDesdeDuracion(fecha_inicio, 5),
+    duracion_dias,
     estado: 'Pendiente',
     prioridad: '',
     monto_asignado: '',
@@ -62,6 +61,17 @@ function emptyForm(): FormState {
   }
 }
 
+function duracionDeTarea(t: Tarea): string {
+  const inicio = t.fecha_inicio ? t.fecha_inicio.slice(0, 10) : ''
+  const fin = t.fecha_fin ? t.fecha_fin.slice(0, 10) : ''
+  if (inicio && fin) {
+    const dias = diasEntre(inicio, fin)
+    if (dias >= 1) return String(dias)
+  }
+  if (t.duracion_dias != null && t.duracion_dias >= 1) return String(t.duracion_dias)
+  return ''
+}
+
 function fromTarea(t: Tarea): FormState {
   return {
     nombre: t.nombre,
@@ -70,6 +80,7 @@ function fromTarea(t: Tarea): FormState {
     responsable_id: t.responsable_id ?? '',
     fecha_inicio: t.fecha_inicio ? t.fecha_inicio.slice(0, 10) : '',
     fecha_fin: t.fecha_fin ? t.fecha_fin.slice(0, 10) : '',
+    duracion_dias: duracionDeTarea(t),
     estado: t.estado,
     prioridad: t.prioridad ?? '',
     monto_asignado:
@@ -87,6 +98,8 @@ type Props = {
   onOpenChange: (open: boolean) => void
   proyectoId: string
   proyectoEje: string
+  /** Fecha de arranque del proyecto. Las tareas nuevas inician aquí. */
+  proyectoInicio?: string | null
   editing: Tarea | null
   tareasProyecto: Tarea[]
   /** Empleados del equipo del proyecto. La asignación solo ofrece esta lista. */
@@ -99,13 +112,14 @@ export function TareaFormDialog({
   onOpenChange,
   proyectoId,
   proyectoEje,
+  proyectoInicio,
   editing,
   tareasProyecto,
   equipoEmpleadoIds,
   onSave,
 }: Props) {
   const [form, setForm] = useState<FormState>(() =>
-    editing ? fromTarea(editing) : emptyForm(),
+    editing ? fromTarea(editing) : emptyForm(proyectoInicio),
   )
   const [saving, setSaving] = useState(false)
   const [empleados, setEmpleados] = useState<EmpleadoDoc[]>([])
@@ -140,8 +154,8 @@ export function TareaFormDialog({
 
   useEffect(() => {
     if (!open) return
-    setForm(editing ? fromTarea(editing) : emptyForm())
-  }, [open, editing])
+    setForm(editing ? fromTarea(editing) : emptyForm(proyectoInicio))
+  }, [open, editing, proyectoInicio])
 
   useEffect(() => {
     let alive = true
@@ -220,6 +234,10 @@ export function TareaFormDialog({
         eje: proyectoEje,
         depende_de_ids: form.depende_de_ids,
         tags: form.tags,
+        duracion_dias: (() => {
+          const n = Math.floor(Number(form.duracion_dias))
+          return Number.isFinite(n) && n >= 1 ? n : null
+        })(),
       }
       if (form.fecha_inicio.trim()) {
         o.fecha_inicio = new Date(`${form.fecha_inicio.trim()}T12:00:00`)
@@ -285,14 +303,43 @@ export function TareaFormDialog({
             onChange={(tags) => setForm((s) => ({ ...s, tags }))}
             suggestions={tagSugerencias}
           />
-          <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+          <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">
             <div className="grid gap-2">
               <Label htmlFor="t-fi">Inicio</Label>
               <Input
                 id="t-fi"
                 type="date"
                 value={form.fecha_inicio}
-                onChange={(e) => setForm((s) => ({ ...s, fecha_inicio: e.target.value }))}
+                onChange={(e) => {
+                  const fecha_inicio = e.target.value
+                  setForm((s) => {
+                    const n = Math.floor(Number(s.duracion_dias))
+                    if (fecha_inicio && Number.isFinite(n) && n >= 1) {
+                      return { ...s, fecha_inicio, fecha_fin: finDesdeDuracion(fecha_inicio, n) }
+                    }
+                    return { ...s, fecha_inicio }
+                  })
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="t-dur">Duración (días)</Label>
+              <Input
+                id="t-dur"
+                type="number"
+                min={1}
+                step={1}
+                value={form.duracion_dias}
+                onChange={(e) => {
+                  const duracion_dias = e.target.value
+                  setForm((s) => {
+                    const n = Math.floor(Number(duracion_dias))
+                    if (s.fecha_inicio && Number.isFinite(n) && n >= 1) {
+                      return { ...s, duracion_dias, fecha_fin: finDesdeDuracion(s.fecha_inicio, n) }
+                    }
+                    return { ...s, duracion_dias }
+                  })
+                }}
               />
             </div>
             <div className="grid gap-2">
@@ -301,10 +348,23 @@ export function TareaFormDialog({
                 id="t-ff"
                 type="date"
                 value={form.fecha_fin}
-                onChange={(e) => setForm((s) => ({ ...s, fecha_fin: e.target.value }))}
+                onChange={(e) => {
+                  const fecha_fin = e.target.value
+                  setForm((s) => {
+                    if (s.fecha_inicio && fecha_fin) {
+                      const dias = diasEntre(s.fecha_inicio, fecha_fin)
+                      if (dias >= 1) return { ...s, fecha_fin, duracion_dias: String(dias) }
+                    }
+                    return { ...s, fecha_fin }
+                  })
+                }}
               />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            El inicio toma la fecha de arranque del proyecto. La duración calcula el fin
+            (el mismo día cuenta como 1).
+          </p>
           <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
             <div className="grid gap-2">
               <Label htmlFor="t-est">Estado</Label>

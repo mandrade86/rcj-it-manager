@@ -26,6 +26,7 @@ import {
 } from '../utils/multerAdjuntosTareas.js'
 import { generarReporteSemanalTareas } from '../utils/reporteSemanalTareas.js'
 import { normalizeTareaTags, parseTagsFromExcel } from '../utils/tareaTags.js'
+import { aplicarFechasAlCrear } from '../utils/fechasTarea.js'
 
 export const tareasRouter = Router()
 
@@ -332,13 +333,12 @@ tareasRouter.post('/', async (req, res, next) => {
       body.responsable_id = req.user.empleado_id
       if (!body.responsable) body.responsable = req.user.empleado_nombre || req.user.nombre
     }
-    if (body.fecha_inicio == null || body.fecha_inicio === '') {
-      const now = new Date()
-      const p = (n: number) => String(n).padStart(2, '0')
-      body.fecha_inicio = new Date(
-        `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T12:00:00`,
-      )
+    let inicioProyecto: unknown = null
+    if (proyectoId) {
+      const proyecto = await Proyecto.findById(proyectoId).select('fecha_inicio').lean()
+      inicioProyecto = proyecto?.fecha_inicio ?? null
     }
+    aplicarFechasAlCrear(body, inicioProyecto)
     if (proyectoId && 'depende_de_ids' in body) {
       const v = await validarDependenciasTarea(proyectoId, null, body.depende_de_ids)
       if (v.error) {

@@ -61,7 +61,7 @@ export const COLUMNAS_TAREA: Array<{ id: ColId; label: string; width: number }> 
   { id: 'avance', label: 'Avance', width: 90 },
   { id: 'monto', label: 'Monto', width: 120 },
   { id: 'archivos', label: 'Archivos', width: 80 },
-  { id: 'cronograma', label: 'Cronograma', width: 140 },
+  { id: 'cronograma', label: 'Cronograma', width: 168 },
   { id: 'actualizado', label: 'Actualizado', width: 110 },
 ]
 

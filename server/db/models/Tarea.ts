@@ -36,6 +36,8 @@ const TareaSchema = new Schema(
     responsable_id: { type: Schema.Types.ObjectId, ref: 'Empleado', default: null },
     fecha_inicio: { type: Date },
     fecha_fin: { type: Date },
+    /** Días de calendario inclusivos entre inicio y fin. */
+    duracion_dias: { type: Number, min: 1, default: null },
     /** Clave del catálogo de estados (los cuatro de sistema o uno agregado en Configuración). */
     estado: { type: String, default: 'Pendiente' },
     prioridad: {

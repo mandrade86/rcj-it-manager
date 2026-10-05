@@ -16,6 +16,7 @@ import {
 } from '@/components/board/BoardPrimitives'
 import { fetchEmpleados } from '@/lib/api/empleados'
 import { createTarea, updateTarea } from '@/lib/api/tareas'
+import { diasEntre, finDesdeDuracion, hoyIso, isoDia } from '@/lib/fechasTarea'
 import {
   COLUMNAS_TAREA,
   ESTADOS_BASE,
@@ -79,12 +80,6 @@ function relativeUpdate(iso?: string | null): string {
   return formatDateDMY(iso)
 }
 
-function hoyIso(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
 function estadoDefaultGrupo(grupoId: BoardGrupoId): TareaEstado {
   const g = GRUPOS.find((x) => x.id === grupoId)
   return g?.estados[0] ?? 'Pendiente'
@@ -108,7 +103,7 @@ export function TareasTablaBoard({
   const [draftEstado, setDraftEstado] = useState('Pendiente')
   const [draftResponsableId, setDraftResponsableId] = useState('')
   const [draftPrioridad, setDraftPrioridad] = useState<TareaPrioridad | ''>('Media')
-  const [draftFecha, setDraftFecha] = useState('')
+  const [draftDuracion, setDraftDuracion] = useState('5')
   const [draftError, setDraftError] = useState<string | null>(null)
   const [empleados, setEmpleados] = useState<EmpleadoDoc[]>([])
   const [creating, setCreating] = useState(false)
@@ -233,7 +228,7 @@ export function TareasTablaBoard({
     setDraftEstado(catalog.find((e) => e.grupo === grupoId)?.clave ?? estadoDefaultGrupo(grupoId))
     setDraftResponsableId('')
     setDraftPrioridad('Media')
-    setDraftFecha('')
+    setDraftDuracion('5')
     setDraftError(null)
   }
 
@@ -248,10 +243,13 @@ export function TareasTablaBoard({
     if (!addingGrupo || !puedeEditar) return
     const nombre = draftNombre.trim()
     const responsable = empleados.find((e) => e._id === draftResponsableId)
-    if (!nombre || !responsable || !draftEstado || !draftPrioridad || !draftFecha) {
-      setDraftError('Indica nombre, asignado, estado, prioridad y fecha.')
+    const dias = Math.floor(Number(draftDuracion))
+    if (!nombre || !responsable || !draftEstado || !draftPrioridad || !Number.isFinite(dias) || dias < 1) {
+      setDraftError('Indica nombre, asignado, estado, prioridad y duración.')
       return
     }
+    const inicio = isoDia(proyecto.fecha_inicio) || hoyIso()
+    const fin = finDesdeDuracion(inicio, dias)
     setDraftError(null)
     setCreating(true)
     try {
@@ -260,15 +258,16 @@ export function TareasTablaBoard({
         nombre,
         estado: draftEstado,
         prioridad: draftPrioridad,
-        fecha_fin: new Date(`${draftFecha}T12:00:00`),
-        fecha_inicio: new Date(`${hoyIso()}T12:00:00`),
+        fecha_inicio: new Date(`${inicio}T12:00:00`),
+        fecha_fin: new Date(`${fin}T12:00:00`),
+        duracion_dias: dias,
         responsable: responsable.nombre,
         responsable_id: responsable._id,
         porcentaje: esListo(draftEstado) ? 100 : 0,
         eje: proyecto.eje,
       })
       setDraftNombre('')
-      setDraftFecha('')
+      setDraftDuracion('5')
       await onChanged()
       setAddingGrupo(addingGrupo)
     } catch (e) {
@@ -580,10 +579,18 @@ export function TareasTablaBoard({
                     const salud = evaluarSaludTarea(t, mapa)
                     const finLabel = formatBoardDateShort(t.fecha_fin)
                     const iniLabel = formatBoardDateShort(t.fecha_inicio)
-                    const crono =
+                    const rango =
                       iniLabel && finLabel
                         ? `${iniLabel} – ${finLabel}`
-                        : finLabel || iniLabel || '—'
+                        : finLabel || iniLabel || ''
+                    const dias = t.duracion_dias && t.duracion_dias >= 1
+                      ? t.duracion_dias
+                      : (t.fecha_inicio && t.fecha_fin
+                        ? diasEntre(t.fecha_inicio.slice(0, 10), t.fecha_fin.slice(0, 10))
+                        : 0)
+                    const crono = rango
+                      ? (dias >= 1 ? `${rango} · ${dias} d` : rango)
+                      : '—'
                     const selected = selectedId === t._id
                     return (
                       <tr
@@ -713,15 +720,26 @@ export function TareasTablaBoard({
                               ))}
                             </select>
                             <input
-                              aria-label="Fecha"
-                              type="date"
+                              aria-label="Duración en días"
+                              type="number"
+                              min={1}
+                              step={1}
                               required
-                              value={draftFecha}
+                              value={draftDuracion}
                               disabled={creating}
-                              className="h-8 rounded-md border bg-white px-2 text-xs"
+                              title="Días de duración. El inicio es la fecha de arranque del proyecto."
+                              className="h-8 w-16 rounded-md border bg-white px-2 text-xs"
                               style={{ borderColor: BOARD.border, color: BOARD.text }}
-                              onChange={(e) => setDraftFecha(e.target.value)}
+                              onChange={(e) => setDraftDuracion(e.target.value)}
                             />
+                            <span className="whitespace-nowrap text-[11px]" style={{ color: BOARD.muted }}>
+                              {(() => {
+                                const dias = Math.max(1, Math.floor(Number(draftDuracion) || 1))
+                                const inicio = isoDia(proyecto.fecha_inicio) || hoyIso()
+                                const fin = finDesdeDuracion(inicio, dias)
+                                return `${formatBoardDateShort(`${inicio}T12:00:00`)} – ${formatBoardDateShort(`${fin}T12:00:00`)}`
+                              })()}
+                            </span>
                             <select
                               aria-label="Prioridad"
                               required

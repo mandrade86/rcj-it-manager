@@ -1067,6 +1067,7 @@ export function ProyectoDetailView({
           }}
           proyectoId={proyecto._id}
           proyectoEje={proyecto.eje ?? ''}
+          proyectoInicio={proyecto.fecha_inicio}
           editing={tareaEditing}
           tareasProyecto={tareas}
           equipoEmpleadoIds={empleadoIdsDelEquipo(proyecto)}
