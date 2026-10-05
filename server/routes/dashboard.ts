@@ -2,7 +2,7 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 
 import { Evaluacion } from '../db/models/Evaluacion.js'
-import { EvaluacionKpi } from '../db/models/EvaluacionKpi.js'
+import { EvaluacionKPI } from '../db/models/EvaluacionKPI.js'
 import { PlanCarrera } from '../db/models/PlanCarrera.js'
 import { Colaborador } from '../db/models/Colaborador.js'
 import { Empleado } from '../db/models/Empleado.js'
@@ -455,7 +455,7 @@ dashboardRouter.get('/paneles', async (req, res, next) => {
           colaborador_id: { $in: colIds },
           fecha: { $gte: desde, $lt: hasta },
         }).select('colaborador_id fecha resultado_global').sort({ fecha: -1 }).lean(),
-        EvaluacionKpi.find({
+        EvaluacionKPI.find({
           colaborador_id: { $in: colIds },
           fecha: { $gte: desde, $lt: hasta },
         }).select('colaborador_id fecha nivel_cumplimiento').sort({ fecha: -1 }).lean(),
