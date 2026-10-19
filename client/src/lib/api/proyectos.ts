@@ -26,6 +26,8 @@ export async function fetchProyectos(params?: {
   tipo?: string
   usuario_id?: string
   departamento_id?: string
+  /** En vistas Míos y Área: incluir proyectos de otro departamento donde participa. */
+  incluir_participacion?: boolean
   scope?: 'equipo' | 'participo'
   empresa_id?: string
 }): Promise<Proyecto[]> {
@@ -37,6 +39,7 @@ export async function fetchProyectos(params?: {
   if (params?.tipo) q.set('tipo', params.tipo)
   if (params?.usuario_id) q.set('usuario_id', params.usuario_id)
   if (params?.departamento_id) q.set('departamento_id', params.departamento_id)
+  if (params?.incluir_participacion) q.set('incluir_participacion', '1')
   if (params?.empresa_id) q.set('empresa_id', params.empresa_id)
   if (params?.scope) q.set('scope', params.scope)
   const url = `/api/proyectos${q.toString() ? `?${q}` : ''}`

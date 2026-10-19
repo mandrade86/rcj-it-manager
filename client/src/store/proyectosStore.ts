@@ -7,9 +7,9 @@ import type { Proyecto } from '@/types/proyecto'
 
 /**
  * `alcance` controla la vista del usuario:
- *  - 'mis': solo los proyectos donde es propietario (usuario_id).
+ *  - 'mis': proyectos donde es propietario o participante.
  *  - 'equipo': proyectos de usuarios vinculados a mis subalternos.
- *  - 'depto': proyectos de su departamento.
+ *  - 'depto': proyectos de su departamento, más los de otras áreas en los que participa.
  *  - 'todos': todo lo que el backend permita (admins ven la organización).
  */
 export type ProyectoAlcance = 'mis' | 'equipo' | 'depto' | 'participo' | 'todos'
@@ -72,11 +72,15 @@ export const useProyectosStore = create<ProyectosState>((set, get) => ({
         tipo: tipo || undefined,
       }
       if (filtroEmp) params.empresa_id = filtroEmp
-      if (s.alcance === 'mis' && s.miUsuarioId) params.usuario_id = s.miUsuarioId
+      if (s.alcance === 'mis' && s.miUsuarioId) {
+        params.usuario_id = s.miUsuarioId
+        params.incluir_participacion = true
+      }
       if (s.alcance === 'equipo') params.scope = 'equipo'
       if (s.alcance === 'participo') params.scope = 'participo'
       if (s.alcance === 'depto' && s.miDepartamentoId) {
         params.departamento_id = s.miDepartamentoId
+        params.incluir_participacion = true
       } else if (s.alcance === 'todos' && filtroDept) {
         params.departamento_id = filtroDept
       }

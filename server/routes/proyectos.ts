@@ -587,9 +587,26 @@ proyectosRouter.get('/', async (req, res, next) => {
       filter.empresa_ids = new mongoose.Types.ObjectId(req.query.empresa_id)
     }
 
-    // Filtros de scope explícito (cuando el usuario quiere restringir más)
+    // Filtros de scope explícito (cuando el usuario quiere restringir más).
+    // En Míos y Área se pide incluir_participacion para no ocultar proyectos
+    // de otro departamento en los que la persona está como participante.
+    const selfId = req.user?._id ? String(req.user._id) : ''
+    const incluirParticipacion = req.query.incluir_participacion === '1' && Boolean(selfId)
+    const andClauses: Record<string, unknown>[] = []
+
     if (typeof req.query.usuario_id === 'string' && mongoose.isValidObjectId(req.query.usuario_id)) {
-      filter.usuario_id = req.query.usuario_id
+      const qUser = req.query.usuario_id
+      if (incluirParticipacion && qUser === selfId) {
+        const oid = new mongoose.Types.ObjectId(selfId)
+        andClauses.push({
+          $or: [
+            { usuario_id: oid },
+            { 'participantes.usuario_id': oid },
+          ],
+        })
+      } else {
+        filter.usuario_id = qUser
+      }
     }
     if (
       typeof req.query.departamento_id === 'string' &&
@@ -604,7 +621,20 @@ proyectosRouter.get('/', async (req, res, next) => {
           return
         }
       }
-      filter.departamento_id = qDept
+      if (incluirParticipacion) {
+        andClauses.push({
+          $or: [
+            { departamento_id: new mongoose.Types.ObjectId(qDept) },
+            { 'participantes.usuario_id': new mongoose.Types.ObjectId(selfId) },
+          ],
+        })
+      } else {
+        filter.departamento_id = qDept
+      }
+    }
+    if (andClauses.length) {
+      const prev = filter.$and
+      filter.$and = [...(Array.isArray(prev) ? prev : []), ...andClauses]
     }
 
     const rows = await Proyecto.find(filter)

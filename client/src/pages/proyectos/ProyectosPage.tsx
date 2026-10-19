@@ -223,7 +223,9 @@ export function ProyectosPage() {
   const cuentas = useMemo(() => {
     const mias = list.filter((p) => {
       const u = p.usuario_id
-      return typeof u === 'object' && u != null && u._id === user?._id
+      const esDueno = typeof u === 'object' && u != null && u._id === user?._id
+      const participa = (p.participantes ?? []).some((part) => participanteUsuarioId(part) === user?._id)
+      return esDueno || participa
     }).length
     const depto = list.filter((p) => {
       const d = p.departamento_id
