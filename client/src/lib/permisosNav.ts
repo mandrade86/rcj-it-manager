@@ -31,6 +31,7 @@ export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/mi-dia': 'dashboard:ver',
   '/mis-tareas': 'dashboard:ver',
   '/dashboard': 'dashboard:ver',
+  '/presidencia': 'dashboard:ver',
   '/notificaciones': 'dashboard:ver',
   '/admin/configuracion': ['usuarios:editar', 'roles:editar'],
   '/admin/auditoria': 'roles:ver',

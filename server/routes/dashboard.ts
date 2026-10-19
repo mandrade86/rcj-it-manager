@@ -25,6 +25,7 @@ import {
   type PortfolioProyecto,
   type PortfolioTarea,
 } from '../utils/dashboardPortfolio.js'
+import { guardarComentarioPresidencia, queryDashboardPresidencia } from '../utils/dashboardPresidencia.js'
 import { PROYECTO_ESTADOS_ACTIVOS } from '../utils/proyectoScope.js'
 import { kpiPromedioGlobal, type KpiLean } from '../utils/kpiPct.js'
 import type { MetaDeptoDoc } from '../utils/metasDepartamento.js'
@@ -405,6 +406,46 @@ dashboardRouter.get('/resumen', async (req, res, next) => {
       metas_estrategicas: [...metasMap.values()],
       portfolio,
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Portafolio del grupo para presidencia: empresas, departamentos, encargado y KPI. */
+dashboardRouter.get('/presidencia', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+    const data = await queryDashboardPresidencia(String(u._id), u.permisos ?? [])
+    res.json(data)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Guarda el comentario de presidencia de un proyecto visible para el usuario. */
+dashboardRouter.put('/presidencia/comentario', async (req, res, next) => {
+  try {
+    const u = req.user
+    if (!u) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+    const proyectoId = String(req.body?.proyecto_id ?? '').trim()
+    if (!proyectoId) {
+      res.status(400).json({ error: 'Falta el proyecto' })
+      return
+    }
+    const comentario = typeof req.body?.comentario === 'string' ? req.body.comentario : ''
+    const saved = await guardarComentarioPresidencia(String(u._id), u.permisos ?? [], proyectoId, comentario)
+    if (!saved) {
+      res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
+      return
+    }
+    res.json(saved)
   } catch (err) {
     next(err)
   }

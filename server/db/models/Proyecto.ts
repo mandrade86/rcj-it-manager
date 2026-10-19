@@ -128,6 +128,8 @@ const ProyectoSchema = new Schema(
     },
     presupuesto_notas: { type: String, default: '' },
     notas: { type: String },
+    /** Comentario de la jefatura para el tablero de presidencia. */
+    comentario_presidencia: { type: String, default: '' },
     historial: { type: [ProyectoCambioSchema], default: [] },
     /**
      * Miembros adicionales del proyecto (p. ej. categoría General).

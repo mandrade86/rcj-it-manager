@@ -22,6 +22,7 @@ const titles: Record<string, string> = {
   '/mi-dia': 'Mi día',
   '/mis-tareas': 'Mis tareas',
   '/dashboard': 'Dashboards',
+  '/presidencia': 'Presidencia',
   '/notificaciones': 'Notificaciones',
   '/admin/configuracion': 'Configuración',
   '/admin/auditoria': 'Auditoría',
@@ -52,6 +53,7 @@ const titles: Record<string, string> = {
 const QUICK_LINKS: Array<{ label: string; to: string; hint?: string }> = [
   { label: 'Mi día', to: '/', hint: 'Bandeja del día' },
   { label: 'Dashboards', to: '/dashboard', hint: 'Proyectos, RRHH y admin' },
+  { label: 'Presidencia', to: '/presidencia', hint: 'Empresas y departamentos' },
   { label: 'Mis tareas', to: '/mis-tareas', hint: 'Tareas asignadas' },
   { label: 'Proyectos', to: '/proyectos', hint: 'Tablero y lista' },
   { label: 'Roadmap', to: '/proyectos?vista=roadmap', hint: 'Vista ejecutiva' },

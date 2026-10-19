@@ -16,6 +16,7 @@ import {
   FolderKanban,
   GraduationCap,
   HelpCircle,
+  Landmark,
   LayoutDashboard,
   Map,
   Bell,
@@ -70,6 +71,7 @@ const ayudaNav: NavItemDef[] = [
 const workspaceNav: NavItemDef[] = [
   { to: '/', label: 'Mi día', icon: CalendarCheck, end: true, permiso: 'dashboard:ver' },
   { to: '/dashboard', label: 'Dashboards', icon: LayoutDashboard, permiso: 'dashboard:ver' },
+  { to: '/presidencia', label: 'Presidencia', icon: Landmark, permiso: 'dashboard:ver' },
   { to: '/mis-tareas', label: 'Mis tareas', icon: ListChecks, permiso: 'dashboard:ver' },
   { to: '/notificaciones', label: 'Notificaciones', icon: Bell, permiso: 'dashboard:ver' },
 ]

@@ -36,6 +36,7 @@ import { GastosPresupuestoPage } from '@/pages/gastos-it/GastosPresupuestoPage'
 import { ManualGuidePage } from '@/pages/manual/ManualGuidePage'
 import { ManualHubPage } from '@/pages/manual/ManualHubPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { PresidenciaPage } from '@/pages/dashboard/PresidenciaPage'
 import { MiDiaPage } from '@/pages/inicio/MiDiaPage'
 import { ConfiguracionPage } from '@/pages/admin/ConfiguracionPage'
 import { AuditoriaPage } from '@/pages/admin/AuditoriaPage'
@@ -62,6 +63,7 @@ export function AppRoutes() {
             <Route path="mi-dia" element={<MiDiaPage />} />
             <Route path="mis-tareas" element={<MiDiaPage soloPendientes />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="presidencia" element={<PresidenciaPage />} />
             <Route path="notificaciones" element={<NotificacionesPage />} />
             <Route path="resumen-departamento" element={<ResumenDepartamentoPage />} />
           </Route>
