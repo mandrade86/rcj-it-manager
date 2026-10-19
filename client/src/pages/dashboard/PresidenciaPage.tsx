@@ -670,10 +670,6 @@ function GraficoComparativo({
                 data={data}
                 layout="vertical"
                 margin={{ left: 4, right: 28, top: 4, bottom: 4 }}
-                onClick={(state) => {
-                  const id = state?.activePayload?.[0]?.payload?.id as string | undefined
-                  if (id) onElegir(id)
-                }}
               >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
@@ -692,7 +688,17 @@ function GraficoComparativo({
                     )
                   }}
                 />
-                <Bar dataKey="total" name="Proyectos" radius={[0, 6, 6, 0]} barSize={16} cursor="pointer">
+                <Bar
+                  dataKey="total"
+                  name="Proyectos"
+                  radius={[0, 6, 6, 0]}
+                  barSize={16}
+                  cursor="pointer"
+                  onClick={(item) => {
+                    const id = item?.payload?.id as string | undefined
+                    if (id) onElegir(id)
+                  }}
+                >
                   {data.map((d) => (
                     <Cell key={d.id} fill={d.color || '#002060'} />
                   ))}
@@ -742,10 +748,6 @@ function GraficoAvance({
                 data={data}
                 layout="vertical"
                 margin={{ left: 4, right: 28, top: 4, bottom: 4 }}
-                onClick={(state) => {
-                  const id = state?.activePayload?.[0]?.payload?.id as string | undefined
-                  if (id) onAbrir(id)
-                }}
               >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
@@ -765,7 +767,17 @@ function GraficoAvance({
                     )
                   }}
                 />
-                <Bar dataKey="avance" name="Avance" radius={[0, 6, 6, 0]} barSize={12} cursor="pointer">
+                <Bar
+                  dataKey="avance"
+                  name="Avance"
+                  radius={[0, 6, 6, 0]}
+                  barSize={12}
+                  cursor="pointer"
+                  onClick={(item) => {
+                    const id = item?.payload?.id as string | undefined
+                    if (id) onAbrir(id)
+                  }}
+                >
                   {data.map((d) => (
                     <Cell key={d.id} fill={d.color} />
                   ))}
