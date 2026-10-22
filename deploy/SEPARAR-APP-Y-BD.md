@@ -1,14 +1,26 @@
 # Separar app y base de datos (dos servidores)
 
-Hoy el despliegue por defecto (`docker-compose.prod.yml`) levanta **app + Mongo** en el mismo host.  
-Para dejarlos en servidores distintos:
+Hoy el despliegue por defecto levanta **app + Mongo** en el mismo host.  
+Para dejarlos en servidores distintos (producción o desarrollo):
 
-| Servidor | Compose | Variables | Comando |
-|----------|---------|-----------|---------|
-| **BD** | `docker-compose.mongo.yml` | `.env.mongo` | `bash scripts/deploy-ubuntu.sh --mongo` |
-| **App** | `docker-compose.app.yml` | `.env.production` con `MONGODB_URI` | `bash scripts/deploy-ubuntu.sh --app` |
+### Producción
 
-El todo-en-uno (`bash scripts/deploy-ubuntu.sh` sin flags) sigue funcionando igual.
+| Servidor | Compose | Variables | Comando | Base |
+|----------|---------|-----------|---------|------|
+| **BD** | `docker-compose.mongo.yml` | `.env.mongo` | `bash scripts/deploy-ubuntu.sh --mongo` | `rcj_it_manager` |
+| **App** | `docker-compose.app.yml` | `.env.production` + `MONGODB_URI` | `bash scripts/deploy-ubuntu.sh --app` | idem |
+
+### Desarrollo / staging
+
+| Servidor | Compose | Variables | Comando | Base |
+|----------|---------|-----------|---------|------|
+| **BD** | `docker-compose.dev-mongo.yml` | `.env.mongo.dev` | `bash scripts/deploy-ubuntu.sh --dev --mongo` | `rcj_it_manager_dev` |
+| **App** | `docker-compose.dev-app.yml` | `.env.development` + `MONGODB_URI` | `bash scripts/deploy-ubuntu.sh --dev --app` | idem |
+
+Todo-en-uno (sin separar):
+
+- Prod: `bash scripts/deploy-ubuntu.sh`
+- Dev: `bash scripts/deploy-ubuntu.sh --dev`
 
 ---
 
@@ -29,22 +41,27 @@ Sustituye en los ejemplos:
 
 ## 1. Servidor de base de datos
 
+### Producción
+
 ```bash
 ssh usuario@IP_BD
-sudo bash /ruta/install-docker-ubuntu.sh   # si aún no hay Docker
-# o clona el repo solo para los compose:
-sudo mkdir -p /opt/rcj-it-manager && cd /opt/rcj-it-manager
-# copia el repo (git clone / rsync) o al menos:
-#   docker-compose.mongo.yml  .env.mongo.example  scripts/
-
 cd /opt/rcj-it-manager
 cp .env.mongo.example .env.mongo
-nano .env.mongo   # opcional: descomenta MONGO_INITDB_ROOT_USERNAME / PASSWORD
-
+nano .env.mongo   # opcional: auth
 bash scripts/deploy-ubuntu.sh --mongo
 ```
 
-Firewall (ufw ejemplo):
+### Desarrollo
+
+```bash
+ssh usuario@IP_BD_DEV
+cd /opt/rcj-it-manager
+cp .env.mongo.dev.example .env.mongo.dev
+nano .env.mongo.dev
+bash scripts/deploy-ubuntu.sh --dev --mongo
+```
+
+Firewall (ufw ejemplo; usa la IP de la app correspondiente):
 
 ```bash
 sudo ufw allow from IP_APP to any port 27017 proto tcp
@@ -55,55 +72,53 @@ sudo ufw reload
 Prueba desde el servidor de app:
 
 ```bash
-# sin auth
 docker run --rm mongo:7 mongosh --host IP_BD --eval "db.adminCommand('ping')"
-# con auth
-docker run --rm mongo:7 mongosh "mongodb://rcjadmin:CLAVE@IP_BD:27017/admin" --eval "db.adminCommand('ping')"
 ```
 
 ---
 
 ## 2. Exportar datos del servidor actual
 
-En el servidor **viejo** (todo-en-uno):
+### Producción (todo-en-uno viejo → BD nueva)
 
 ```bash
+# En el servidor viejo
 cd /opt/rcj-it-manager
 bash scripts/mongo-export.sh
-# genera data/backups/rcj_it_manager-YYYYMMDD-HHMMSS.archive
-```
+scp data/backups/rcj_it_manager-*.archive usuario@IP_BD:/opt/rcj-it-manager/data/backups/
 
-Copia el archive al servidor de BD:
-
-```bash
-# desde tu PC o el servidor viejo
-scp /opt/rcj-it-manager/data/backups/rcj_it_manager-*.archive usuario@IP_BD:/opt/rcj-it-manager/data/backups/
-```
-
-En el servidor de BD (crea la carpeta si hace falta):
-
-```bash
-cd /opt/rcj-it-manager
+# En el servidor de BD
 mkdir -p data/backups
 bash scripts/mongo-import.sh data/backups/rcj_it_manager-XXXX.archive --drop
 ```
 
-`--drop` reemplaza la base si ya existía. Sin `--drop` solo agrega/actualiza.
+### Desarrollo (todo-en-uno viejo → BD nueva de desarrollo)
+
+```bash
+# En el servidor viejo de desarrollo
+bash scripts/mongo-export.sh --dev
+scp data/backups/rcj_it_manager_dev-*.archive usuario@IP_BD_DEV:/opt/rcj-it-manager/data/backups/
+
+# En el servidor de BD de desarrollo
+mkdir -p data/backups
+bash scripts/mongo-import.sh data/backups/rcj_it_manager_dev-XXXX.archive --dev --drop
+```
+
+`--drop` reemplaza la base si ya existía.
 
 ---
 
 ## 3. Servidor de la aplicación
 
+### Producción
+
 ```bash
 ssh usuario@IP_APP
 cd /opt/rcj-it-manager
 git pull
-
-cp .env.production.example .env.production   # si es la primera vez
+cp .env.production.example .env.production   # primera vez
 nano .env.production
 ```
-
-Variables mínimas:
 
 ```env
 APP_BIND=127.0.0.1
@@ -111,60 +126,74 @@ APP_PORT=3001
 APP_PUBLIC_URL=https://portal.rcjcorporacion.com
 JWT_SECRET=<secreto largo>
 INIT_DATA_ON_START=false
-
-# Sin auth en Mongo:
 MONGODB_URI=mongodb://IP_BD:27017/rcj_it_manager
-
-# Con auth:
-# MONGODB_URI=mongodb://rcjadmin:CLAVE@IP_BD:27017/rcj_it_manager?authSource=admin
 ```
-
-Copia adjuntos del servidor viejo (no están en Mongo):
 
 ```bash
 rsync -av usuario@SERVIDOR_VIEJO:/opt/rcj-it-manager/data/ /opt/rcj-it-manager/data/
-```
-
-Levanta solo la app:
-
-```bash
 bash scripts/deploy-ubuntu.sh --app
 curl -s http://127.0.0.1:3001/api/health
 ```
 
-Debe mostrar `"mongo":"connected"` (o equivalente en el JSON).
+Apache en este servidor: `deploy/HTTPS-APACHE.md`.
 
-Apache se configura **en este servidor**, igual que antes (`deploy/HTTPS-APACHE.md`).
+### Desarrollo
+
+```bash
+ssh usuario@IP_APP_DEV
+cd /opt/rcj-it-manager
+git pull
+cp .env.development.example .env.development   # primera vez
+nano .env.development
+```
+
+```env
+APP_BIND=0.0.0.0
+APP_PORT=3002
+APP_PUBLIC_URL=http://portal-dev.rcjcorporacion.com
+JWT_SECRET=<secreto largo de desarrollo>
+INIT_DATA_ON_START=false
+MONGODB_URI=mongodb://IP_BD_DEV:27017/rcj_it_manager_dev
+```
+
+```bash
+rsync -av usuario@SERVIDOR_DEV_VIEJO:/opt/rcj-it-manager/data/ /opt/rcj-it-manager/data/
+bash scripts/deploy-ubuntu.sh --dev --app
+curl -s http://127.0.0.1:3002/api/health
+```
 
 ---
 
 ## 4. Corte y DNS
 
 1. Avisa a usuarios / ventana corta de mantenimiento.  
-2. Export final + import en BD (para no perder cambios de última hora).  
+2. Export final + import en BD.  
 3. Confirma login y un módulo (proyectos, gastos).  
-4. Apunta DNS / Apache al `IP_APP`.  
-5. En el servidor viejo:  
-   `docker compose -f docker-compose.prod.yml --env-file .env.production down`
+4. Apunta DNS / Apache al servidor de app.  
+5. En el servidor viejo, baja el compose antiguo:  
+   - Prod: `docker compose -f docker-compose.prod.yml --env-file .env.production down`  
+   - Dev: `docker compose -f docker-compose.dev.yml --env-file .env.development down`
 
-No borres el volumen Mongo del servidor viejo hasta confirmar varios días de operación estable.
+No borres el volumen Mongo viejo hasta confirmar varios días estables.
 
 ---
 
 ## Comandos útiles
 
 ```bash
-# BD — logs
+# Prod — BD / app
 docker compose -f docker-compose.mongo.yml --env-file .env.mongo logs -f mongo
-
-# App — logs
 docker compose -f docker-compose.app.yml --env-file .env.production logs -f app
-
-# Actualizar solo la app
 cd /opt/rcj-it-manager && git pull && bash scripts/deploy-ubuntu.sh --app
 
-# Backup periódico desde la BD
+# Dev — BD / app
+docker compose -f docker-compose.dev-mongo.yml --env-file .env.mongo.dev logs -f mongo
+docker compose -f docker-compose.dev-app.yml --env-file .env.development logs -f app
+cd /opt/rcj-it-manager && git pull && bash scripts/deploy-ubuntu.sh --dev --app
+
+# Backup
 bash scripts/mongo-export.sh --compose docker-compose.mongo.yml --env-file .env.mongo
+bash scripts/mongo-export.sh --dev --compose docker-compose.dev-mongo.yml --env-file .env.mongo.dev
 ```
 
 ---

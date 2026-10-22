@@ -2,9 +2,9 @@
 # Restaura un archive de mongodump en el Mongo del servidor de BD.
 #
 # Uso:
-#   bash scripts/mongo-import.sh /ruta/rcj_it_manager.archive
-#   bash scripts/mongo-import.sh /ruta/archivo.archive --uri 'mongodb://user:pass@IP:27017'
-#   bash scripts/mongo-import.sh /ruta/archivo.archive --compose docker-compose.mongo.yml --env-file .env.mongo
+#   bash scripts/mongo-import.sh archivo.archive
+#   bash scripts/mongo-import.sh archivo.archive --dev
+#   bash scripts/mongo-import.sh archivo.archive --db rcj_it_manager_dev --compose docker-compose.dev-mongo.yml --env-file .env.mongo.dev --drop
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,18 +12,26 @@ cd "$ROOT"
 
 ARCHIVE=""
 URI=""
+DB=rcj_it_manager
 COMPOSE_FILE=docker-compose.mongo.yml
 ENV_FILE=.env.mongo
 DROP=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --dev)
+      DB=rcj_it_manager_dev
+      COMPOSE_FILE=docker-compose.dev-mongo.yml
+      ENV_FILE=.env.mongo.dev
+      shift
+      ;;
+    --db) DB="$2"; shift 2 ;;
     --uri) URI="$2"; shift 2 ;;
     --compose) COMPOSE_FILE="$2"; shift 2 ;;
     --env-file) ENV_FILE="$2"; shift 2 ;;
     --drop) DROP=true; shift ;;
     -h|--help)
-      echo "Uso: bash scripts/mongo-import.sh archivo.archive [--uri URI] [--drop]"
+      echo "Uso: bash scripts/mongo-import.sh archivo.archive [--dev] [--db NOMBRE] [--uri URI] [--drop]"
       exit 0
       ;;
     *)
@@ -61,16 +69,18 @@ if [[ -n "${MONGO_INITDB_ROOT_USERNAME:-}" && -n "${MONGO_INITDB_ROOT_PASSWORD:-
   )
 fi
 
+NS="${DB}.*"
+
 if [[ -n "$URI" ]]; then
-  echo "Restaurando en URI…"
+  echo "Restaurando ${DB} en URI…"
   docker run --rm --network host \
     -v "$(dirname "$ABS"):/backup:ro" mongo:7 \
-    mongorestore --uri="$URI" --archive="/backup/$(basename "$ABS")" --nsInclude='rcj_it_manager.*' "${DROP_FLAG[@]}"
+    mongorestore --uri="$URI" --archive="/backup/$(basename "$ABS")" --nsInclude="$NS" "${DROP_FLAG[@]}"
 else
-  echo "Restaurando en compose (${COMPOSE_FILE})…"
+  echo "Restaurando ${DB} en compose (${COMPOSE_FILE})…"
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" cp "$ABS" mongo:/tmp/restore.archive
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T mongo \
-    mongorestore "${AUTH_ARGS[@]}" --archive=/tmp/restore.archive --nsInclude='rcj_it_manager.*' "${DROP_FLAG[@]}"
+    mongorestore "${AUTH_ARGS[@]}" --archive=/tmp/restore.archive --nsInclude="$NS" "${DROP_FLAG[@]}"
 fi
 
-echo "Restore OK."
+echo "Restore OK (${DB})."

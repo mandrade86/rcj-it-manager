@@ -5,13 +5,15 @@
 | **Producción (todo-en-uno)** | `https://portal.rcjcorp.hn` (Apache) | `docker-compose.prod.yml` | `.env.production` |
 | **Producción — solo app** | mismo portal | `docker-compose.app.yml` | `.env.production` + `MONGODB_URI` |
 | **Producción — solo BD** | — | `docker-compose.mongo.yml` | `.env.mongo` |
-| **Desarrollo** | `http://portal-dev.rcjcorporacion.com` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
+| **Desarrollo (todo-en-uno)** | `http://portal-dev.rcjcorporacion.com` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
+| **Desarrollo — solo app** | mismo portal-dev | `docker-compose.dev-app.yml` | `.env.development` + `MONGODB_URI` |
+| **Desarrollo — solo BD** | — | `docker-compose.dev-mongo.yml` | `.env.mongo.dev` |
 | **Código local** | `http://localhost:5173` | — (`npm run dev`) | `.env` |
 
 Bases MongoDB separadas: `rcj_it_manager` (prod) y `rcj_it_manager_dev` (dev).
 
-**App y Mongo en servidores distintos:** guía paso a paso en [deploy/SEPARAR-APP-Y-BD.md](./deploy/SEPARAR-APP-Y-BD.md).  
-Comandos: `bash scripts/deploy-ubuntu.sh --mongo` (BD) y `bash scripts/deploy-ubuntu.sh --app` (aplicación).
+**App y Mongo en servidores distintos:** [deploy/SEPARAR-APP-Y-BD.md](./deploy/SEPARAR-APP-Y-BD.md).  
+Prod: `--mongo` / `--app`. Dev: `--dev --mongo` / `--dev --app`.
 
 ---
 
@@ -37,13 +39,24 @@ bash scripts/deploy-ubuntu.sh --mongo
 bash scripts/deploy-ubuntu.sh --app
 ```
 
+### Desarrollo — dos servidores (app + BD)
+
+```bash
+# En el servidor de BD de desarrollo:
+bash scripts/deploy-ubuntu.sh --dev --mongo
+
+# En el servidor de app de desarrollo
+# (.env.development con MONGODB_URI=mongodb://IP_BD_DEV:27017/rcj_it_manager_dev):
+bash scripts/deploy-ubuntu.sh --dev --app
+```
+
 Detalle (migración, firewall, dump/restore): [deploy/SEPARAR-APP-Y-BD.md](./deploy/SEPARAR-APP-Y-BD.md).
 
-### Desarrollo (servidor o PC con Docker)
+### Desarrollo (todo-en-uno, un solo servidor)
 
 ```bash
 cp .env.development.example .env.development
-docker compose -f docker-compose.dev.yml --env-file .env.development up -d --build
+bash scripts/deploy-ubuntu.sh --dev
 # http://localhost:3002  o  portal-dev.rcjcorporacion.com
 ```
 

@@ -1,0 +1,29 @@
+# Solo MongoDB — servidor de base de datos (desarrollo / staging)
+# Uso:
+#   cp .env.mongo.dev.example .env.mongo.dev
+#   bash scripts/deploy-ubuntu.sh --dev --mongo
+#
+# La app de desarrollo apunta a:
+#   MONGODB_URI=mongodb://IP_BD_DEV:27017/rcj_it_manager_dev
+
+name: rcj-it-manager-dev-mongo
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    env_file:
+      - .env.mongo.dev
+    ports:
+      - '${MONGO_BIND:-0.0.0.0}:${MONGO_PORT:-27017}:27017'
+    volumes:
+      - mongo_data_dev_remote:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  mongo_data_dev_remote:
