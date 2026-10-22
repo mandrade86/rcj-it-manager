@@ -1,0 +1,33 @@
+# Solo MongoDB — servidor de base de datos
+# Uso:
+#   cp .env.mongo.example .env.mongo
+#   bash scripts/deploy-ubuntu.sh --mongo
+#   o: docker compose -f docker-compose.mongo.yml --env-file .env.mongo up -d
+#
+# La app en el otro servidor apunta a:
+#   MONGODB_URI=mongodb://IP_BD:27017/rcj_it_manager
+# Con auth (si activaste MONGO_INITDB_ROOT_*):
+#   MONGODB_URI=mongodb://usuario:clave@IP_BD:27017/rcj_it_manager?authSource=admin
+
+name: rcj-it-manager-mongo
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    env_file:
+      - .env.mongo
+    ports:
+      # En producción: restringe el firewall a la IP del servidor de la app
+      - '${MONGO_BIND:-0.0.0.0}:${MONGO_PORT:-27017}:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  mongo_data:

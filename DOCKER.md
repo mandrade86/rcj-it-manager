@@ -2,17 +2,22 @@
 
 | Ambiente | URL | Compose | Variables |
 |----------|-----|---------|-----------|
-| **Producción** | `https://portal.rcjcorp.hn` (Apache) | `docker-compose.prod.yml` | `.env.production` |
+| **Producción (todo-en-uno)** | `https://portal.rcjcorp.hn` (Apache) | `docker-compose.prod.yml` | `.env.production` |
+| **Producción — solo app** | mismo portal | `docker-compose.app.yml` | `.env.production` + `MONGODB_URI` |
+| **Producción — solo BD** | — | `docker-compose.mongo.yml` | `.env.mongo` |
 | **Desarrollo** | `http://portal-dev.rcjcorporacion.com` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
 | **Código local** | `http://localhost:5173` | — (`npm run dev`) | `.env` |
 
 Bases MongoDB separadas: `rcj_it_manager` (prod) y `rcj_it_manager_dev` (dev).
 
+**App y Mongo en servidores distintos:** guía paso a paso en [deploy/SEPARAR-APP-Y-BD.md](./deploy/SEPARAR-APP-Y-BD.md).  
+Comandos: `bash scripts/deploy-ubuntu.sh --mongo` (BD) y `bash scripts/deploy-ubuntu.sh --app` (aplicación).
+
 ---
 
 ## Resumen rápido
 
-### Producción (Ubuntu Server)
+### Producción (Ubuntu Server) — todo-en-uno
 
 ```bash
 cd /opt/rcj-it-manager
@@ -21,6 +26,18 @@ cp .env.production.example .env.production   # primera vez; edita JWT_SECRET
 bash scripts/deploy-ubuntu.sh
 # Configurar Apache + DNS → portal.rcjcorp.hn
 ```
+
+### Producción — dos servidores (app + BD)
+
+```bash
+# En el servidor de BD:
+bash scripts/deploy-ubuntu.sh --mongo
+
+# En el servidor de app (.env.production con MONGODB_URI=mongodb://IP_BD:27017/rcj_it_manager):
+bash scripts/deploy-ubuntu.sh --app
+```
+
+Detalle (migración, firewall, dump/restore): [deploy/SEPARAR-APP-Y-BD.md](./deploy/SEPARAR-APP-Y-BD.md).
 
 ### Desarrollo (servidor o PC con Docker)
 

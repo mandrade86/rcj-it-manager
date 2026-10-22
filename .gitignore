@@ -11,6 +11,7 @@ PlanIT2026/
 !.env.example
 !.env.development.example
 !.env.production.example
+!.env.mongo.example
 
 # Datos de negocio (Excel OPEX, certificados, adjuntos) — no subir a GitHub
 data/*

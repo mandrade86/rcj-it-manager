@@ -1,0 +1,45 @@
+# Solo la app — servidor de aplicación (Mongo en otro host)
+# Uso:
+#   En .env.production define MONGODB_URI hacia el servidor de BD
+#   bash scripts/deploy-ubuntu.sh --app
+#   o: docker compose -f docker-compose.app.yml --env-file .env.production up -d --build
+
+name: rcj-it-manager-app
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3001}:3001'
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+      # Obligatoria: IP o hostname del servidor Mongo (no uses "mongo" aquí)
+      MONGODB_URI: ${MONGODB_URI:?Defina MONGODB_URI en .env.production apuntando al servidor de BD}
+      MONGODB_CONNECT_RETRIES: ${MONGODB_CONNECT_RETRIES:-30}
+      MONGODB_CONNECT_DELAY_MS: ${MONGODB_CONNECT_DELAY_MS:-2000}
+      AUTH_AD_ENABLED: 'false'
+      AUTH_LOCAL_FALLBACK: 'false'
+      AD_DOMAIN: ${AD_DOMAIN:-RCJ}
+      AD_EMAIL_DOMAINS: ${AD_EMAIL_DOMAINS:-rcjcorp.com,grupoc.com}
+      EHR_LOGIN_URL: ${EHR_LOGIN_URL:-https://ehrapi.rcjcorp.hn/api/Login}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://portal.rcjcorporacion.com}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      SAP_BI_DRIVER: ${SAP_BI_DRIVER:-hana}
+      SAP_BI_HOST: ${SAP_BI_HOST:-172.16.146.16}
+      SAP_BI_PORT: ${SAP_BI_PORT:-30015}
+      SAP_BI_DATABASE: ${SAP_BI_DATABASE:-RCJ_BI}
+      SAP_BI_SCHEMA: ${SAP_BI_SCHEMA:-RCJ_BI}
+      SAP_BI_VIEW: ${SAP_BI_VIEW:-VW_BI_VENTA_COSTO}
+      SAP_BI_USERNAME: ${SAP_BI_USERNAME:-B2User}
+      SAP_BI_PASSWORD: ${SAP_BI_PASSWORD:-}
+      SAP_BI_ENCRYPT: ${SAP_BI_ENCRYPT:-true}
+      SAP_BI_TRUST_CERT: ${SAP_BI_TRUST_CERT:-true}
+      SAP_BUDGET_IT_VIEW: ${SAP_BUDGET_IT_VIEW:-TS_VW_BUDGET_IT}
+      SAP_BUDGET_IT_SCHEMA: ${SAP_BUDGET_IT_SCHEMA:-TS_ZOLIHN}
+    volumes:
+      - ./data:/app/data
