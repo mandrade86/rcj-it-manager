@@ -253,7 +253,7 @@ newgrp docker
 
 ```bash
 cp .env.production.example .env.production
-nano .env.production   # JWT_SECRET obligatorio; usuarios con correo + contraseña en MongoDB
+nano .env.production   # JWT_SECRET; SENDGRID_API_KEY + SENDGRID_FROM para correo
 ```
 
 ### 3. Levantar contenedores

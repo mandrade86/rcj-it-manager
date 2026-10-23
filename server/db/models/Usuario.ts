@@ -31,6 +31,9 @@ const UsuarioSchema = new Schema(
     departamento_id: { type: Schema.Types.ObjectId, ref: 'Departamento', default: null },
     activo: { type: Boolean, default: true },
     ultimo_acceso: { type: Date, default: null },
+    /** Hash bcrypt del código de un solo uso (login sin contraseña). */
+    login_codigo_hash: { type: String, default: '' },
+    login_codigo_expira: { type: Date, default: null },
   },
   { timestamps: true },
 )

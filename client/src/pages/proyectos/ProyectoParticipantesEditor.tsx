@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Eye, Pencil, Trash2, UserPlus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronsUpDown, Eye, Pencil, Search, Trash2, UserPlus, X } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import type { ProyectoParticipanteRol } from '@/types/proyecto'
 import { rolParticipanteLabel } from '@/types/proyecto'
 import type { UsuarioDoc } from '@/types/usuario'
@@ -26,6 +27,13 @@ type Props = {
   onChange: (next: ParticipanteDraft[]) => void
   usuarios: UsuarioDoc[]
   puedeGestionar?: boolean
+}
+
+function norm(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
 }
 
 export function ProyectoParticipantesEditor({
@@ -117,10 +125,15 @@ export function ProyectoParticipantesEditor({
       {puedeGestionar && (
         <ParticipanteAgregar
           disponibles={disponibles}
-          onAgregar={(usuario_id, rol) => {
+          onAgregar={(usuarioIds, rol) => {
+            const stamp = Date.now()
             onChange([
               ...draft,
-              { key: `new-${Date.now()}`, usuario_id, rol },
+              ...usuarioIds.map((usuario_id, i) => ({
+                key: `new-${stamp}-${i}`,
+                usuario_id,
+                rol,
+              })),
             ])
           }}
         />
@@ -129,32 +142,185 @@ export function ProyectoParticipantesEditor({
   )
 }
 
-function ParticipanteAgregar({
+export function ParticipanteAgregar({
   disponibles,
   onAgregar,
 }: {
   disponibles: UsuarioDoc[]
-  onAgregar: (usuarioId: string, rol: ProyectoParticipanteRol) => void
+  onAgregar: (usuarioIds: string[], rol: ProyectoParticipanteRol) => void
 }) {
-  const [usuarioId, setUsuarioId] = useState('')
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [rol, setRol] = useState<ProyectoParticipanteRol>('lectura')
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const filtrados = useMemo(() => {
+    const q = norm(query.trim())
+    const list = [...disponibles].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    if (!q) return list
+    return list.filter((u) => norm(`${u.nombre} ${u.email}`).includes(q))
+  }, [disponibles, query])
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => searchRef.current?.focus(), 0)
+    } else {
+      setQuery('')
+    }
+  }, [open])
+
+  useEffect(() => {
+    const ids = new Set(disponibles.map((u) => u._id))
+    setSeleccionados((prev) => prev.filter((id) => ids.has(id)))
+  }, [disponibles])
+
+  function toggle(id: string) {
+    setSeleccionados((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
+
+  function quitarChip(id: string) {
+    setSeleccionados((prev) => prev.filter((x) => x !== id))
+  }
+
+  const etiquetas = seleccionados
+    .map((id) => disponibles.find((u) => u._id === id))
+    .filter((u): u is UsuarioDoc => Boolean(u))
 
   return (
     <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
-      <div className="min-w-[200px] flex-1">
-        <label className="mb-1 block text-xs text-muted-foreground">Agregar usuario</label>
-        <Select value={usuarioId} onValueChange={setUsuarioId}>
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Seleccionar usuario…" />
-          </SelectTrigger>
-          <SelectContent>
-            {disponibles.map((u) => (
-              <SelectItem key={u._id} value={u._id}>
-                {u.nombre} ({u.email})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="min-w-[220px] flex-1" ref={wrapRef}>
+        <label className="mb-1 block text-xs text-muted-foreground">Agregar usuarios</label>
+        <div className="relative">
+          <button
+            type="button"
+            className={cn(
+              'flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-xs outline-none',
+              'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+            )}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-haspopup="listbox"
+          >
+            <span className="min-w-0 flex-1 text-left">
+              {seleccionados.length === 0 ? (
+                <span className="text-muted-foreground">Buscar y seleccionar…</span>
+              ) : (
+                <span className="flex flex-wrap gap-1">
+                  {etiquetas.slice(0, 3).map((u) => (
+                    <span
+                      key={u._id}
+                      className="inline-flex max-w-[140px] items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs"
+                    >
+                      <span className="truncate">{u.nombre}</span>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="rounded p-0.5 hover:bg-background"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          quitarChip(u._id)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            quitarChip(u._id)
+                          }
+                        }}
+                        aria-label={`Quitar ${u.nombre}`}
+                      >
+                        <X className="size-3" />
+                      </span>
+                    </span>
+                  ))}
+                  {seleccionados.length > 3 && (
+                    <span className="text-xs text-muted-foreground">+{seleccionados.length - 3}</span>
+                  )}
+                </span>
+              )}
+            </span>
+            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+
+          {open && (
+            <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-md">
+              <div className="flex items-center gap-2 border-b px-2 py-1.5">
+                <Search className="size-3.5 shrink-0 text-muted-foreground" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar por nombre o correo…"
+                  className="h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+              <ul className="max-h-56 overflow-y-auto py-1" role="listbox" aria-multiselectable>
+                {disponibles.length === 0 ? (
+                  <li className="px-3 py-3 text-sm text-muted-foreground">No hay más usuarios para agregar.</li>
+                ) : filtrados.length === 0 ? (
+                  <li className="px-3 py-3 text-sm text-muted-foreground">Sin coincidencias.</li>
+                ) : (
+                  filtrados.map((u) => {
+                    const checked = seleccionados.includes(u._id)
+                    return (
+                      <li key={u._id}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={checked}
+                          className={cn(
+                            'flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted',
+                            checked && 'bg-muted/60',
+                          )}
+                          onClick={() => toggle(u._id)}
+                        >
+                          <span
+                            className={cn(
+                              'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border',
+                              checked
+                                ? 'border-[var(--navy)] bg-[var(--navy)] text-white'
+                                : 'border-input',
+                            )}
+                          >
+                            {checked ? <Check className="size-3" /> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block font-medium">{u.nombre}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{u.email}</span>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })
+                )}
+              </ul>
+              {seleccionados.length > 0 && (
+                <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs text-muted-foreground">
+                  <span>{seleccionados.length} seleccionado{seleccionados.length === 1 ? '' : 's'}</span>
+                  <button
+                    type="button"
+                    className="text-[var(--navy)] underline-offset-2 hover:underline"
+                    onClick={() => setSeleccionados([])}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       <div className="w-[150px]">
         <label className="mb-1 block text-xs text-muted-foreground">Rol</label>
@@ -173,16 +339,18 @@ function ParticipanteAgregar({
         size="sm"
         variant="outline"
         className="gap-1"
-        disabled={!usuarioId}
+        disabled={seleccionados.length === 0}
         onClick={() => {
-          if (!usuarioId) return
-          onAgregar(usuarioId, rol)
-          setUsuarioId('')
+          if (seleccionados.length === 0) return
+          onAgregar(seleccionados, rol)
+          setSeleccionados([])
           setRol('lectura')
+          setOpen(false)
+          setQuery('')
         }}
       >
         <UserPlus className="size-4" />
-        Agregar
+        Agregar{seleccionados.length > 1 ? ` (${seleccionados.length})` : ''}
       </Button>
     </div>
   )

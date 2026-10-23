@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, Pencil, Trash2, UserPlus, Users } from 'lucide-react'
+import { Eye, Pencil, Trash2, Users } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import {
 import { fetchUsuarios } from '@/lib/api/usuarios'
 import { updateProyectoParticipantes } from '@/lib/api/proyectos'
 import { cn } from '@/lib/utils'
+import { ParticipanteAgregar } from '@/pages/proyectos/ProyectoParticipantesEditor'
 import type { Proyecto, ProyectoParticipanteRol } from '@/types/proyecto'
 import {
   participanteUsuarioId,
@@ -47,8 +48,6 @@ export function ProyectoParticipantesPanel({ proyecto, onUpdated }: Props) {
   const puedeGestionar = proyectoPuedeGestionarParticipantes(proyecto)
   const [usuarios, setUsuarios] = useState<UsuarioDoc[]>([])
   const [draft, setDraft] = useState<ParticipanteDraft[]>(() => participantesToDraft(proyecto))
-  const [nuevoUsuarioId, setNuevoUsuarioId] = useState('')
-  const [nuevoRol, setNuevoRol] = useState<ProyectoParticipanteRol>('lectura')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -74,17 +73,6 @@ export function ProyectoParticipantesPanel({ proyecto, onUpdated }: Props) {
     if (ownerId) usados.add(ownerId)
     return usuarios.filter((u) => !usados.has(u._id))
   }, [usuarios, draft, ownerId])
-
-  function agregarParticipante() {
-    if (!nuevoUsuarioId) return
-    setDraft((prev) => [
-      ...prev,
-      { key: `new-${Date.now()}`, usuario_id: nuevoUsuarioId, rol: nuevoRol },
-    ])
-    setNuevoUsuarioId('')
-    setNuevoRol('lectura')
-    setDirty(true)
-  }
 
   function quitarParticipante(key: string) {
     setDraft((prev) => prev.filter((p) => p.key !== key))
@@ -229,46 +217,21 @@ export function ProyectoParticipantesPanel({ proyecto, onUpdated }: Props) {
       )}
 
       {puedeGestionar ? (
-        <div className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-muted/10 p-3">
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs text-muted-foreground">Agregar usuario</label>
-            <Select value={nuevoUsuarioId} onValueChange={setNuevoUsuarioId}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Seleccionar usuario…" />
-              </SelectTrigger>
-              <SelectContent>
-                {usuariosDisponibles.map((u) => (
-                  <SelectItem key={u._id} value={u._id}>
-                    {u.nombre} ({u.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-[150px]">
-            <label className="mb-1 block text-xs text-muted-foreground">Rol</label>
-            <Select value={nuevoRol} onValueChange={(v) => setNuevoRol(v as ProyectoParticipanteRol)}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lectura">Solo lectura</SelectItem>
-                <SelectItem value="editor">Editor</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="gap-1"
-            disabled={!nuevoUsuarioId}
-            onClick={agregarParticipante}
-          >
-            <UserPlus className="size-4" />
-            Agregar
-          </Button>
-        </div>
+        <ParticipanteAgregar
+          disponibles={usuariosDisponibles}
+          onAgregar={(usuarioIds, rol) => {
+            const stamp = Date.now()
+            setDraft((prev) => [
+              ...prev,
+              ...usuarioIds.map((usuario_id, i) => ({
+                key: `new-${stamp}-${i}`,
+                usuario_id,
+                rol,
+              })),
+            ])
+            setDirty(true)
+          }}
+        />
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Eye className="size-3.5" />

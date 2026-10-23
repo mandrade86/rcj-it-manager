@@ -20,6 +20,14 @@ import {
   readUsuariosExcelRows,
   resolveUsuarioExcelRow,
 } from '../utils/usuariosExcel.js'
+import {
+  cuerpoReseteoClave,
+  enviarCorreo,
+  generarCodigoAcceso,
+  generarPasswordTemporal,
+  isMailConfigured,
+} from '../utils/mailer.js'
+import { registrarAuditoria, clientIp } from '../utils/auditoria.js'
 
 export const usuariosRouter = Router()
 
@@ -403,6 +411,82 @@ usuariosRouter.post('/:id/reset-password', requirePermiso('usuarios:editar'), as
     const hash = await bcrypt.hash(password_nuevo, BCRYPT_ROUNDS)
     await Usuario.findByIdAndUpdate(id, { password: hash })
     res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Genera contraseña temporal + código de 6 dígitos y los envía por correo. */
+usuariosRouter.post('/:id/enviar-reset', requirePermiso('usuarios:editar'), async (req, res, next) => {
+  try {
+    const { id } = req.params
+    if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }
+    const user = await Usuario.findById(id).select('nombre email activo').lean() as {
+      _id: unknown
+      nombre?: string
+      email?: string
+      activo?: boolean
+    } | null
+    if (!user) { res.status(404).json({ error: 'Usuario no encontrado' }); return }
+    if (user.activo === false) {
+      res.status(400).json({ error: 'El usuario está inactivo.' })
+      return
+    }
+    const email = (user.email ?? '').trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      res.status(400).json({ error: 'El usuario no tiene un correo válido.' })
+      return
+    }
+
+    const password = generarPasswordTemporal()
+    const codigo = generarCodigoAcceso()
+    const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
+    const codigoHash = await bcrypt.hash(codigo, BCRYPT_ROUNDS)
+
+    await Usuario.findByIdAndUpdate(id, {
+      password: passwordHash,
+      login_codigo_hash: codigoHash,
+      login_codigo_expira: expira,
+    })
+
+    const cuerpo = cuerpoReseteoClave({
+      nombre: user.nombre ?? email,
+      email,
+      password,
+      codigo,
+    })
+    const mail = await enviarCorreo({
+      to: email,
+      subject: 'RCJ IT Manager — acceso temporal',
+      text: cuerpo.text,
+      html: cuerpo.html,
+    })
+
+    void registrarAuditoria({
+      usuario_id: req.user?._id,
+      usuario_nombre: req.user?.nombre,
+      accion: 'editar',
+      entidad: 'usuarios',
+      entidad_id: String(id),
+      detalle: mail.ok
+        ? `Reseteo enviado a ${email}`
+        : `Reseteo generado (correo no enviado: ${mail.error})`,
+      ip: clientIp(req),
+    }).catch(() => undefined)
+
+    res.json({
+      ok: true,
+      email,
+      correo_enviado: mail.ok,
+      correo_error: mail.ok ? null : mail.error,
+      correo_configurado: isMailConfigured(),
+      smtp_configurado: isMailConfigured(),
+      /** Solo si el correo falló: el admin puede copiarlas y entregarlas a mano. */
+      password_temporal: mail.ok ? undefined : password,
+      codigo_acceso: mail.ok ? undefined : codigo,
+      expira: expira.toISOString(),
+    })
   } catch (err) {
     next(err)
   }

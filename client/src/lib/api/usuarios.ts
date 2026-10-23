@@ -61,6 +61,24 @@ export async function resetPasswordUsuario(id: string, password_nuevo: string): 
   if (!res.ok) throw await readApiError(res)
 }
 
+export type EnviarResetResult = {
+  ok: boolean
+  email: string
+  correo_enviado: boolean
+  correo_error: string | null
+  correo_configurado?: boolean
+  smtp_configurado: boolean
+  password_temporal?: string
+  codigo_acceso?: string
+  expira?: string
+}
+
+export async function enviarResetUsuario(id: string): Promise<EnviarResetResult> {
+  const res = await fetch(`/api/usuarios/${id}/enviar-reset`, { method: 'POST' })
+  if (!res.ok) throw await readApiError(res)
+  return res.json() as Promise<EnviarResetResult>
+}
+
 export async function deleteUsuario(id: string): Promise<void> {
   const res = await fetch(`/api/usuarios/${id}`, { method: 'DELETE' })
   if (res.status === 204) return

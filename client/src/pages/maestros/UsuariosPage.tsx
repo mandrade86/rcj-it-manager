@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BadgeCheck, Download, Edit2, Key, Plus, Search, Trash2, Upload, User as UserIcon, X } from 'lucide-react'
+import { BadgeCheck, Download, Edit2, Key, Mail, Plus, Search, Trash2, Upload, User as UserIcon, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -18,9 +18,9 @@ import { BOARD, BoardAvatar, BoardPill, EntityBoard, BoardPrimaryButton } from '
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
 import { isApiRequestError } from '@/lib/api/errors'
 import {
-  createUsuario, deleteUsuario, descargarPlantillaUsuarios, fetchUsuarios,
+  createUsuario, deleteUsuario, descargarPlantillaUsuarios, enviarResetUsuario, fetchUsuarios,
   importUsuariosExcel, resetPasswordUsuario, updateUsuario,
-  type ImportUsuariosResult,
+  type EnviarResetResult, type ImportUsuariosResult,
 } from '@/lib/api/usuarios'
 import { formatDateDMY } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -564,6 +564,33 @@ export function UsuariosPage() {
     } catch (ex) { window.alert(ex instanceof Error ? ex.message : 'Error') }
   }
 
+  async function handleEnviarReset(u: UsuarioDoc) {
+    if (!window.confirm(
+      `¿Enviar a ${u.email} una contraseña temporal y un código de acceso?\n\nEl usuario podrá entrar con cualquiera de los dos.`,
+    )) return
+    try {
+      const r: EnviarResetResult = await enviarResetUsuario(u._id)
+      if (r.correo_enviado) {
+        window.alert(`Correo enviado a ${r.email}.\nIncluye contraseña temporal y código de 6 dígitos (válido 24 h).`)
+        return
+      }
+      const parts = [
+        `No se pudo enviar el correo${r.correo_error ? `: ${r.correo_error}` : '.'}`,
+        '',
+        'Entrega estos datos al usuario a mano:',
+        `Correo: ${r.email}`,
+        r.password_temporal ? `Contraseña temporal: ${r.password_temporal}` : null,
+        r.codigo_acceso ? `Código: ${r.codigo_acceso}` : null,
+        !(r.correo_configurado ?? r.smtp_configurado)
+          ? '\nConfigura SENDGRID_API_KEY y SENDGRID_FROM en el servidor para enviar por correo.'
+          : null,
+      ].filter(Boolean)
+      window.alert(parts.join('\n'))
+    } catch (ex) {
+      window.alert(ex instanceof Error ? ex.message : 'No se pudo generar el reseteo')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -763,7 +790,15 @@ export function UsuariosPage() {
               align: 'right',
               render: (u) => (
                 <div className="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" title="Resetear contraseña" onClick={() => setResetTarget(u)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Enviar reseteo por correo"
+                    onClick={() => void handleEnviarReset(u)}
+                  >
+                    <Mail className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" title="Asignar contraseña" onClick={() => setResetTarget(u)}>
                     <Key className="size-4" />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
@@ -1017,11 +1052,27 @@ export function UsuariosPage() {
       </Dialog>
 
       <Dialog open={Boolean(resetTarget)} onOpenChange={(o) => { if (!o) { setResetTarget(null); setNewPwd('') } }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Resetear contraseña</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Asigna una nueva contraseña para <strong>{resetTarget?.nombre}</strong>.
+            Para <strong>{resetTarget?.nombre}</strong> ({resetTarget?.email}).
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => {
+              if (!resetTarget) return
+              setResetTarget(null)
+              void handleEnviarReset(resetTarget)
+            }}
+          >
+            <Mail className="size-4" />
+            Enviar reseteo por correo
+          </Button>
+          <div className="relative py-1 text-center text-xs text-muted-foreground">
+            <span className="bg-background px-2">o asignar a mano</span>
+          </div>
           <div className="grid gap-2">
             <Label>Nueva contraseña</Label>
             <Input type="password" minLength={8} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="Mínimo 8 caracteres" />

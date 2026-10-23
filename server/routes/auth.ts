@@ -15,6 +15,12 @@ import {
 } from '../utils/directoryAuth.js'
 import { isAdLoginEnabled } from '../utils/ehrAuth.js'
 import { clientIp, registrarAuditoria } from '../utils/auditoria.js'
+import {
+  cuerpoReseteoClave,
+  enviarCorreo,
+  generarCodigoAcceso,
+  isMailConfigured,
+} from '../utils/mailer.js'
 
 export const authRouter = Router()
 
@@ -158,6 +164,114 @@ authRouter.post('/login', async (req, res, next) => {
       token,
       user: payload,
       authMethod: adValidated ? 'active_directory' : 'local',
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Login con código de 6 dígitos enviado por correo. */
+authRouter.post('/login-codigo', async (req, res, next) => {
+  try {
+    const body = req.body as { email?: string; codigo?: string }
+    const email = (body.email ?? '').trim().toLowerCase()
+    const codigo = (body.codigo ?? '').trim().replace(/\s/g, '')
+    if (!email || !codigo) {
+      res.status(400).json({ error: 'Indica tu correo y el código de 6 dígitos.' })
+      return
+    }
+    const user = await findUsuarioByLoginId(email)
+    if (!user) {
+      res.status(401).json({ error: 'Código incorrecto o vencido.' })
+      return
+    }
+    const full = await Usuario.findById(user._id)
+      .select('login_codigo_hash login_codigo_expira activo')
+      .lean() as {
+      login_codigo_hash?: string
+      login_codigo_expira?: Date | null
+      activo?: boolean
+    } | null
+    if (!full || full.activo === false || !full.login_codigo_hash) {
+      res.status(401).json({ error: 'Código incorrecto o vencido.' })
+      return
+    }
+    if (!full.login_codigo_expira || new Date(full.login_codigo_expira) < new Date()) {
+      res.status(401).json({ error: 'El código ya venció. Pide un nuevo reseteo a IT.' })
+      return
+    }
+    const ok = await bcrypt.compare(codigo, full.login_codigo_hash)
+    if (!ok) {
+      res.status(401).json({ error: 'Código incorrecto o vencido.' })
+      return
+    }
+
+    await Usuario.findByIdAndUpdate(user._id, {
+      login_codigo_hash: '',
+      login_codigo_expira: null,
+      ultimo_acceso: new Date(),
+    })
+
+    const payload = buildAuthPayload(
+      user as unknown as Parameters<typeof buildAuthPayload>[0],
+    )
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES })
+    void registrarAuditoria({
+      usuario_id: String(user._id),
+      usuario_nombre: payload.nombre,
+      accion: 'login',
+      entidad: 'sesion',
+      detalle: 'Inicio con código de acceso',
+      ip: clientIp(req),
+    }).catch(() => undefined)
+
+    res.json({ token, user: payload, authMethod: 'codigo' })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * El usuario pide un código a su correo (sin cambiar la contraseña).
+ * Respuesta genérica para no revelar si el correo existe.
+ */
+authRouter.post('/solicitar-codigo', async (req, res, next) => {
+  try {
+    const email = String((req.body as { email?: string }).email ?? '').trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      res.status(400).json({ error: 'Indica un correo válido.' })
+      return
+    }
+    if (!isMailConfigured()) {
+      res.status(503).json({
+        error: 'El envío de correo no está configurado en el servidor. Solicita el acceso a IT.',
+      })
+      return
+    }
+    const user = await findUsuarioByLoginId(email)
+    if (user && user.activo !== false) {
+      const codigo = generarCodigoAcceso()
+      const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      const codigoHash = await bcrypt.hash(codigo, 10)
+      await Usuario.findByIdAndUpdate(user._id, {
+        login_codigo_hash: codigoHash,
+        login_codigo_expira: expira,
+      })
+      const cuerpo = cuerpoReseteoClave({
+        nombre: user.nombre ?? email,
+        email: user.email,
+        codigo,
+      })
+      await enviarCorreo({
+        to: user.email,
+        subject: 'RCJ IT Manager — código de acceso',
+        text: cuerpo.text,
+        html: cuerpo.html,
+      })
+    }
+    res.json({
+      ok: true,
+      mensaje: 'Si el correo está registrado, recibirás un código de acceso en unos minutos.',
     })
   } catch (err) {
     next(err)

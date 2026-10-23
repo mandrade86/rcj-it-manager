@@ -33,6 +33,26 @@ export async function loginApi(usuario: string, password: string): Promise<{ tok
   return res.json() as Promise<{ token: string; user: AuthUser }>
 }
 
+export async function loginCodigoApi(email: string, codigo: string): Promise<{ token: string; user: AuthUser }> {
+  const res = await fetch('/api/auth/login-codigo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), codigo: codigo.trim() }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<{ token: string; user: AuthUser }>
+}
+
+export async function solicitarCodigoApi(email: string): Promise<{ ok: boolean; mensaje: string }> {
+  const res = await fetch('/api/auth/solicitar-codigo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim() }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<{ ok: boolean; mensaje: string }>
+}
+
 export async function getMeApi(): Promise<AuthUser> {
   const res = await fetch('/api/auth/me')
   if (!res.ok) throw new Error(await parseError(res))
