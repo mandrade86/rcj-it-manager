@@ -79,6 +79,29 @@ export async function enviarResetUsuario(id: string): Promise<EnviarResetResult>
   return res.json() as Promise<EnviarResetResult>
 }
 
+export type EnviarAccesoNuncaEntraronResult = {
+  ok: boolean
+  total_candidatos: number
+  enviados: number
+  fallidos: number
+  omitidos: number
+  correo_configurado: boolean
+  resultados: Array<{
+    id: string
+    nombre: string
+    email: string
+    enviado: boolean
+    error: string | null
+  }>
+}
+
+/** Invita por correo a usuarios activos que nunca han entrado al sitio. */
+export async function enviarAccesoNuncaEntraron(): Promise<EnviarAccesoNuncaEntraronResult> {
+  const res = await fetch('/api/usuarios/enviar-acceso-nunca-entraron', { method: 'POST' })
+  if (!res.ok) throw await readApiError(res)
+  return res.json() as Promise<EnviarAccesoNuncaEntraronResult>
+}
+
 export async function deleteUsuario(id: string): Promise<void> {
   const res = await fetch(`/api/usuarios/${id}`, { method: 'DELETE' })
   if (res.status === 204) return

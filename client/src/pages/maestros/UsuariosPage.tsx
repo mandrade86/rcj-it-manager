@@ -18,9 +18,10 @@ import { BOARD, BoardAvatar, BoardPill, EntityBoard, BoardPrimaryButton } from '
 import { useMaestroBulkDelete } from '@/hooks/useMaestroBulkDelete'
 import { isApiRequestError } from '@/lib/api/errors'
 import {
-  createUsuario, deleteUsuario, descargarPlantillaUsuarios, enviarResetUsuario, fetchUsuarios,
+  createUsuario, deleteUsuario, descargarPlantillaUsuarios,
+  enviarAccesoNuncaEntraron, enviarResetUsuario, fetchUsuarios,
   importUsuariosExcel, resetPasswordUsuario, updateUsuario,
-  type EnviarResetResult, type ImportUsuariosResult,
+  type EnviarAccesoNuncaEntraronResult, type EnviarResetResult, type ImportUsuariosResult,
 } from '@/lib/api/usuarios'
 import { formatDateDMY } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -366,6 +367,8 @@ export function UsuariosPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [importando, setImportando] = useState(false)
   const [importResult, setImportResult] = useState<ImportUsuariosResult | null>(null)
+  const [invitandoNunca, setInvitandoNunca] = useState(false)
+  const [inviteNuncaResult, setInviteNuncaResult] = useState<EnviarAccesoNuncaEntraronResult | null>(null)
   const [list, setList] = useState<UsuarioDoc[]>([])
   const [roles, setRoles] = useState<RolDoc[]>([])
   const [depts, setDepts] = useState<DepartamentoDoc[]>([])
@@ -591,6 +594,31 @@ export function UsuariosPage() {
     }
   }
 
+  const nuncaEntraronCount = useMemo(
+    () => list.filter((u) => u.activo !== false && !u.ultimo_acceso).length,
+    [list],
+  )
+
+  async function handleInvitarNuncaEntraron() {
+    if (nuncaEntraronCount === 0) {
+      window.alert('No hay usuarios activos que nunca hayan entrado.')
+      return
+    }
+    if (!window.confirm(
+      `¿Enviar correo de bienvenida / primer acceso a ${nuncaEntraronCount} usuario(s) que nunca han entrado?\n\nCada uno recibirá contraseña temporal y código (válido 24 h).`,
+    )) return
+    setInvitandoNunca(true)
+    try {
+      const r = await enviarAccesoNuncaEntraron()
+      setInviteNuncaResult(r)
+      await reload()
+    } catch (ex) {
+      window.alert(ex instanceof Error ? ex.message : 'No se pudo enviar las invitaciones')
+    } finally {
+      setInvitandoNunca(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -668,6 +696,24 @@ export function UsuariosPage() {
                 >
                   <Upload className={`size-3.5 ${importando ? 'animate-pulse' : ''}`} />
                   {importando ? 'Importando…' : 'Creación masiva'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={invitandoNunca || nuncaEntraronCount === 0}
+                  title={
+                    nuncaEntraronCount === 0
+                      ? 'No hay usuarios activos sin primer acceso'
+                      : `Enviar acceso a ${nuncaEntraronCount} usuario(s) que nunca entraron`
+                  }
+                  onClick={() => void handleInvitarNuncaEntraron()}
+                >
+                  <Mail className={`size-3.5 ${invitandoNunca ? 'animate-pulse' : ''}`} />
+                  {invitandoNunca
+                    ? 'Enviando…'
+                    : `Invitar sin acceso (${nuncaEntraronCount})`}
                 </Button>
               </div>
             ) : undefined
@@ -1139,6 +1185,58 @@ export function UsuariosPage() {
           )}
           <DialogFooter>
             <Button onClick={() => setImportResult(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(inviteNuncaResult)} onOpenChange={(o) => !o && setInviteNuncaResult(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invitación a usuarios sin acceso</DialogTitle>
+          </DialogHeader>
+          {inviteNuncaResult && (
+            <div className="space-y-3 text-sm">
+              <p>
+                Candidatos: <strong>{inviteNuncaResult.total_candidatos}</strong>
+                {' · '}
+                <span className="font-medium text-[var(--lime)]">{inviteNuncaResult.enviados} enviados</span>
+                {inviteNuncaResult.fallidos > 0 ? ` · ${inviteNuncaResult.fallidos} fallidos` : ''}
+                {inviteNuncaResult.omitidos > 0 ? ` · ${inviteNuncaResult.omitidos} omitidos` : ''}
+              </p>
+              {!inviteNuncaResult.correo_configurado && (
+                <p className="text-xs text-destructive">
+                  SendGrid no está configurado (SENDGRID_API_KEY / SENDGRID_FROM).
+                </p>
+              )}
+              {inviteNuncaResult.resultados.some((r) => !r.enviado) && (
+                <div className="max-h-56 overflow-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Usuario</TableHead>
+                        <TableHead>Detalle</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inviteNuncaResult.resultados
+                        .filter((r) => !r.enviado)
+                        .map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="text-xs">
+                              <div className="font-medium">{r.nombre || '—'}</div>
+                              <div className="text-muted-foreground">{r.email}</div>
+                            </TableCell>
+                            <TableCell className="text-xs text-destructive">{r.error ?? 'No enviado'}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setInviteNuncaResult(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -105,6 +105,88 @@ const POPULATE_FIELDS = [
   { path: 'departamento_id', select: 'codigo nombre color' },
 ]
 
+type UsuarioAccesoLean = {
+  _id: unknown
+  nombre?: string
+  email?: string
+  activo?: boolean
+}
+
+async function generarYEnviarAccesoTemporal(
+  user: UsuarioAccesoLean,
+  opts: { primeraVez?: boolean } = {},
+): Promise<{
+  ok: boolean
+  email: string
+  correo_enviado: boolean
+  correo_error: string | null
+  password_temporal?: string
+  codigo_acceso?: string
+  expira: string
+  error?: string
+}> {
+  if (user.activo === false) {
+    return {
+      ok: false,
+      email: '',
+      correo_enviado: false,
+      correo_error: null,
+      expira: '',
+      error: 'El usuario está inactivo.',
+    }
+  }
+  const email = (user.email ?? '').trim().toLowerCase()
+  if (!email || !email.includes('@')) {
+    return {
+      ok: false,
+      email: email || '',
+      correo_enviado: false,
+      correo_error: null,
+      expira: '',
+      error: 'El usuario no tiene un correo válido.',
+    }
+  }
+
+  const password = generarPasswordTemporal()
+  const codigo = generarCodigoAcceso()
+  const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
+  const codigoHash = await bcrypt.hash(codigo, BCRYPT_ROUNDS)
+
+  await Usuario.findByIdAndUpdate(user._id, {
+    password: passwordHash,
+    login_codigo_hash: codigoHash,
+    login_codigo_expira: expira,
+  })
+
+  const cuerpo = cuerpoReseteoClave({
+    nombre: user.nombre ?? email,
+    email,
+    password,
+    codigo,
+    primeraVez: opts.primeraVez,
+  })
+  const subject = opts.primeraVez
+    ? 'RCJ IT Manager — bienvenida / primer acceso'
+    : 'RCJ IT Manager — acceso temporal'
+  const mail = await enviarCorreo({
+    to: email,
+    subject,
+    text: cuerpo.text,
+    html: cuerpo.html,
+  })
+
+  return {
+    ok: true,
+    email,
+    correo_enviado: mail.ok,
+    correo_error: mail.ok ? null : (mail.error ?? 'Error de correo'),
+    password_temporal: mail.ok ? undefined : password,
+    codigo_acceso: mail.ok ? undefined : codigo,
+    expira: expira.toISOString(),
+  }
+}
+
 usuariosRouter.get('/', async (_req, res, next) => {
   try {
     const rows = await Usuario.find()
@@ -117,6 +199,107 @@ usuariosRouter.get('/', async (_req, res, next) => {
     next(err)
   }
 })
+
+/**
+ * Envía acceso temporal a todos los usuarios activos que nunca han entrado
+ * (`ultimo_acceso` nulo) y tienen correo válido.
+ * Debe ir antes de rutas `/:id`…
+ */
+usuariosRouter.post(
+  '/enviar-acceso-nunca-entraron',
+  requirePermiso('usuarios:editar'),
+  async (req, res, next) => {
+    try {
+      const candidatos = await Usuario.find({
+        activo: true,
+        $or: [{ ultimo_acceso: null }, { ultimo_acceso: { $exists: false } }],
+      })
+        .select('nombre email activo')
+        .lean() as UsuarioAccesoLean[]
+
+      const resultados: Array<{
+        id: string
+        nombre: string
+        email: string
+        enviado: boolean
+        error: string | null
+      }> = []
+
+      let enviados = 0
+      let fallidos = 0
+      let omitidos = 0
+
+      for (const user of candidatos) {
+        const r = await generarYEnviarAccesoTemporal(user, { primeraVez: true })
+        if (!r.ok) {
+          omitidos++
+          resultados.push({
+            id: String(user._id),
+            nombre: user.nombre ?? '',
+            email: r.email || (user.email ?? ''),
+            enviado: false,
+            error: r.error ?? 'Omitido',
+          })
+          continue
+        }
+
+        void registrarAuditoria({
+          usuario_id: req.user?._id,
+          usuario_nombre: req.user?.nombre,
+          accion: 'editar',
+          entidad: 'usuarios',
+          entidad_id: String(user._id),
+          detalle: r.correo_enviado
+            ? `Invitación primer acceso enviada a ${r.email}`
+            : `Invitación generada (correo no enviado: ${r.correo_error})`,
+          ip: clientIp(req),
+        }).catch(() => undefined)
+
+        if (r.correo_enviado) {
+          enviados++
+          resultados.push({
+            id: String(user._id),
+            nombre: user.nombre ?? '',
+            email: r.email,
+            enviado: true,
+            error: null,
+          })
+        } else {
+          fallidos++
+          resultados.push({
+            id: String(user._id),
+            nombre: user.nombre ?? '',
+            email: r.email,
+            enviado: false,
+            error: r.correo_error,
+          })
+        }
+      }
+
+      void registrarAuditoria({
+        usuario_id: req.user?._id,
+        usuario_nombre: req.user?.nombre,
+        accion: 'editar',
+        entidad: 'usuarios',
+        entidad_id: '',
+        detalle: `Envío masivo primer acceso: ${enviados} enviados, ${fallidos} fallidos, ${omitidos} omitidos (de ${candidatos.length})`,
+        ip: clientIp(req),
+      }).catch(() => undefined)
+
+      res.json({
+        ok: true,
+        total_candidatos: candidatos.length,
+        enviados,
+        fallidos,
+        omitidos,
+        correo_configurado: isMailConfigured(),
+        resultados,
+      })
+    } catch (err) {
+      next(err)
+    }
+  },
+)
 
 usuariosRouter.post('/eliminar-lote', requirePermiso('usuarios:editar'), async (req, res, next) => {
   try {
@@ -421,47 +604,14 @@ usuariosRouter.post('/:id/enviar-reset', requirePermiso('usuarios:editar'), asyn
   try {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) { res.status(400).json({ error: 'ID inválido' }); return }
-    const user = await Usuario.findById(id).select('nombre email activo').lean() as {
-      _id: unknown
-      nombre?: string
-      email?: string
-      activo?: boolean
-    } | null
+    const user = await Usuario.findById(id).select('nombre email activo').lean() as UsuarioAccesoLean | null
     if (!user) { res.status(404).json({ error: 'Usuario no encontrado' }); return }
-    if (user.activo === false) {
-      res.status(400).json({ error: 'El usuario está inactivo.' })
+
+    const r = await generarYEnviarAccesoTemporal(user)
+    if (!r.ok) {
+      res.status(400).json({ error: r.error ?? 'No se pudo generar el acceso' })
       return
     }
-    const email = (user.email ?? '').trim().toLowerCase()
-    if (!email || !email.includes('@')) {
-      res.status(400).json({ error: 'El usuario no tiene un correo válido.' })
-      return
-    }
-
-    const password = generarPasswordTemporal()
-    const codigo = generarCodigoAcceso()
-    const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
-    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
-    const codigoHash = await bcrypt.hash(codigo, BCRYPT_ROUNDS)
-
-    await Usuario.findByIdAndUpdate(id, {
-      password: passwordHash,
-      login_codigo_hash: codigoHash,
-      login_codigo_expira: expira,
-    })
-
-    const cuerpo = cuerpoReseteoClave({
-      nombre: user.nombre ?? email,
-      email,
-      password,
-      codigo,
-    })
-    const mail = await enviarCorreo({
-      to: email,
-      subject: 'RCJ IT Manager — acceso temporal',
-      text: cuerpo.text,
-      html: cuerpo.html,
-    })
 
     void registrarAuditoria({
       usuario_id: req.user?._id,
@@ -469,23 +619,22 @@ usuariosRouter.post('/:id/enviar-reset', requirePermiso('usuarios:editar'), asyn
       accion: 'editar',
       entidad: 'usuarios',
       entidad_id: String(id),
-      detalle: mail.ok
-        ? `Reseteo enviado a ${email}`
-        : `Reseteo generado (correo no enviado: ${mail.error})`,
+      detalle: r.correo_enviado
+        ? `Reseteo enviado a ${r.email}`
+        : `Reseteo generado (correo no enviado: ${r.correo_error})`,
       ip: clientIp(req),
     }).catch(() => undefined)
 
     res.json({
       ok: true,
-      email,
-      correo_enviado: mail.ok,
-      correo_error: mail.ok ? null : mail.error,
+      email: r.email,
+      correo_enviado: r.correo_enviado,
+      correo_error: r.correo_error,
       correo_configurado: isMailConfigured(),
       smtp_configurado: isMailConfigured(),
-      /** Solo si el correo falló: el admin puede copiarlas y entregarlas a mano. */
-      password_temporal: mail.ok ? undefined : password,
-      codigo_acceso: mail.ok ? undefined : codigo,
-      expira: expira.toISOString(),
+      password_temporal: r.password_temporal,
+      codigo_acceso: r.codigo_acceso,
+      expira: r.expira,
     })
   } catch (err) {
     next(err)

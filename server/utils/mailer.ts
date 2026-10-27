@@ -109,15 +109,20 @@ export function cuerpoReseteoClave(opts: {
   email: string
   password?: string
   codigo: string
+  /** Si true, redacta el correo como invitación de primer acceso. */
+  primeraVez?: boolean
 }): { text: string; html: string } {
   const url = appPublicUrl()
+  const intro = opts.primeraVez
+    ? 'Te damos la bienvenida a RCJ IT Manager. Aquí tienes tu acceso para entrar por primera vez.'
+    : 'Se generó un acceso temporal a RCJ IT Manager.'
   const pwdLine = opts.password
     ? `Contraseña temporal: ${opts.password}\n`
     : ''
   const text = [
     `Hola ${opts.nombre},`,
     '',
-    'Se generó un acceso temporal a RCJ IT Manager.',
+    intro,
     '',
     `Correo: ${opts.email}`,
     pwdLine.trim() ? pwdLine.trim() : null,
@@ -132,7 +137,7 @@ export function cuerpoReseteoClave(opts: {
 
   const html = `
     <p>Hola <strong>${escapeHtml(opts.nombre)}</strong>,</p>
-    <p>Se generó un acceso temporal a <strong>RCJ IT Manager</strong>.</p>
+    <p>${escapeHtml(intro)}</p>
     <ul>
       <li>Correo: <code>${escapeHtml(opts.email)}</code></li>
       ${opts.password ? `<li>Contraseña temporal: <code>${escapeHtml(opts.password)}</code></li>` : ''}
