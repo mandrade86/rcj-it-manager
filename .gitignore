@@ -21,3 +21,5 @@ data/*
 # Archivos temporales de Excel / Office
 ~$*
 *.tmp
+
+logs/
