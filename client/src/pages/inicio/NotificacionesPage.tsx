@@ -2,46 +2,20 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { formatDateDMY } from '@/lib/format'
-
-type Item = {
-  id: string
-  tipo: string
-  titulo: string
-  detalle: string
-  fecha: string | null
-  href: string
-}
-
-const LEIDAS = 'rcj_notif_leidas'
-
-function leidas(): Set<string> {
-  try {
-    const raw = localStorage.getItem(LEIDAS)
-    const arr = raw ? JSON.parse(raw) as string[] : []
-    return new Set(arr)
-  } catch {
-    return new Set()
-  }
-}
-
-function guardarLeidas(set: Set<string>) {
-  localStorage.setItem(LEIDAS, JSON.stringify([...set].slice(-400)))
-}
+import {
+  fetchNotificaciones, guardarLeidas, leerLeidas, type NotificacionItem,
+} from '@/lib/notificaciones'
 
 export function NotificacionesPage() {
-  const [items, setItems] = useState<Item[]>([])
-  const [vistas, setVistas] = useState<Set<string>>(() => leidas())
+  const [items, setItems] = useState<NotificacionItem[]>([])
+  const [vistas, setVistas] = useState<Set<string>>(() => leerLeidas())
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancel = false
-    void fetch('/api/dashboard/notificaciones')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('No se pudieron cargar las notificaciones')
-        return res.json() as Promise<{ items: Item[] }>
-      })
-      .then((data) => { if (!cancel) setItems(data.items ?? []) })
+    void fetchNotificaciones()
+      .then((rows) => { if (!cancel) setItems(rows) })
       .catch((e) => { if (!cancel) setErr(e instanceof Error ? e.message : 'Error') })
       .finally(() => { if (!cancel) setLoading(false) })
     return () => { cancel = true }
@@ -69,7 +43,7 @@ export function NotificacionesPage() {
         <div>
           <h2 className="text-lg font-semibold text-[var(--navy)]">Notificaciones</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tareas vencidas o por vencer en 7 días, y evaluaciones que aún no tienen todas las firmas.
+            Proyectos a los que te agregaron, tareas vencidas o por vencer en 7 días, y evaluaciones que aún no tienen todas las firmas.
           </p>
         </div>
         {items.length > 0 && (

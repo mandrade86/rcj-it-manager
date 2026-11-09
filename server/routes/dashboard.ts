@@ -14,6 +14,7 @@ import { Capacitacion } from '../db/models/Capacitacion.js'
 import { Rol } from '../db/models/Rol.js'
 import { Usuario } from '../db/models/Usuario.js'
 import { Auditoria } from '../db/models/Auditoria.js'
+import { Notificacion } from '../db/models/Notificacion.js'
 import {
   buildKpiFilter,
   countCapacitacionesEnProgreso,
@@ -613,6 +614,23 @@ dashboardRouter.get('/notificaciones', async (req, res, next) => {
       fecha: string | null
       href: string
     }> = []
+
+    if (mongoose.isValidObjectId(u._id)) {
+      const avisos = await Notificacion.find({ usuario_id: u._id })
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .lean() as unknown as Array<{ _id: unknown; tipo: string; titulo: string; detalle?: string; href?: string; createdAt?: Date }>
+      for (const a of avisos) {
+        items.push({
+          id: `notif-${String(a._id)}`,
+          tipo: a.tipo,
+          titulo: a.titulo,
+          detalle: a.detalle ?? '',
+          fecha: a.createdAt ? new Date(a.createdAt).toISOString() : null,
+          href: a.href || '/',
+        })
+      }
+    }
 
     const or: Record<string, unknown>[] = []
     if (u.empleado_id && mongoose.isValidObjectId(u.empleado_id)) {

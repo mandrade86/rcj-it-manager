@@ -23,6 +23,7 @@ import {
 } from '../utils/proyectoPermisos.js'
 import { ADJUNTOS_TAREAS_DIR } from '../utils/multerAdjuntosTareas.js'
 import { ADJUNTOS_PROYECTOS_DIR, uploadAdjuntoProyectoRiesgo } from '../utils/multerAdjuntosProyectos.js'
+import { notificarAgregadoAProyecto } from '../utils/notificaciones.js'
 import { calcularRiesgo } from '../utils/proyectoRiesgo.js'
 import {
   PROYECTO_EXCEL_COLS,
@@ -737,8 +738,16 @@ proyectosRouter.put('/:id/participantes', async (req, res, next) => {
     if (scope === null) { res.status(401).json({ error: 'No autenticado' }); return }
 
     const exists = await Proyecto.findOne({ _id: req.params.id, ...scope })
-      .select('usuario_id participantes')
-      .lean() as { usuario_id?: mongoose.Types.ObjectId; participantes?: unknown[] } | null
+      .select('nombre usuario_id participantes')
+      .lean() as {
+        nombre?: string
+        usuario_id?: mongoose.Types.ObjectId
+        participantes?: Array<{
+          usuario_id?: mongoose.Types.ObjectId | string | null
+          rol?: string
+          agregado_en?: Date
+        }>
+      } | null
     if (!exists) {
       res.status(404).json({ error: 'Proyecto no encontrado o sin acceso' })
       return
@@ -756,6 +765,9 @@ proyectosRouter.put('/:id/participantes', async (req, res, next) => {
     }
 
     const ownerId = exists.usuario_id ? String(exists.usuario_id) : null
+    const previos = new Map(
+      (exists.participantes ?? []).map((p) => [String(p.usuario_id ?? ''), p.agregado_en]),
+    )
     const seen = new Set<string>()
     const participantes: Array<{
       usuario_id: mongoose.Types.ObjectId
@@ -776,7 +788,7 @@ proyectosRouter.put('/:id/participantes', async (req, res, next) => {
       participantes.push({
         usuario_id: new mongoose.Types.ObjectId(uid),
         rol,
-        agregado_en: new Date(),
+        agregado_en: previos.get(uid) ?? new Date(),
       })
     }
 
@@ -785,6 +797,14 @@ proyectosRouter.put('/:id/participantes', async (req, res, next) => {
       { participantes },
       { new: true, runValidators: true },
     ).populate(POPULATE_FIELDS).lean()
+
+    const nuevos = participantes.filter((p) => !previos.has(String(p.usuario_id)))
+    void notificarAgregadoAProyecto({
+      proyectoId: String(req.params.id),
+      proyectoNombre: exists.nombre ?? String(req.params.id),
+      usuarios: nuevos.map((p) => ({ usuario_id: String(p.usuario_id), rol: p.rol })),
+      actor: u,
+    })
 
     res.json(enrichProyectoAcceso(doc as Record<string, unknown>, u._id, u.permisos ?? []))
   } catch (err) {
@@ -834,6 +854,14 @@ proyectosRouter.post('/', async (req, res, next) => {
       }],
     })
     const full = await Proyecto.findById(doc._id).populate(POPULATE_FIELDS).lean()
+    if (payload.usuario_id) {
+      void notificarAgregadoAProyecto({
+        proyectoId: String(doc._id),
+        proyectoNombre: String(payload.nombre ?? doc._id),
+        usuarios: [{ usuario_id: String(payload.usuario_id), rol: 'responsable' }],
+        actor: u,
+      })
+    }
     res.status(201).json(full)
   } catch (err) {
     next(err)
@@ -878,6 +906,15 @@ proyectosRouter.put('/:id', async (req, res, next) => {
     const doc = await Proyecto.findByIdAndUpdate(id, patch, {
       new: true, runValidators: true,
     }).populate(POPULATE_FIELDS).lean()
+    const nuevoResponsable = patch.usuario_id ? String(patch.usuario_id) : null
+    if (doc && nuevoResponsable && nuevoResponsable !== String(exists.usuario_id ?? '')) {
+      void notificarAgregadoAProyecto({
+        proyectoId: String(id),
+        proyectoNombre: String((doc as { nombre?: string }).nombre ?? id),
+        usuarios: [{ usuario_id: nuevoResponsable, rol: 'responsable' }],
+        actor: u,
+      })
+    }
     res.json(enrichProyectoAcceso(doc as Record<string, unknown>, u._id, u.permisos ?? []))
   } catch (err) {
     next(err)

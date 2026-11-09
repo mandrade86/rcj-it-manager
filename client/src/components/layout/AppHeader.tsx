@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useNotificacionesPendientes } from '@/lib/notificaciones'
 import { esPerfilSoloBiCosteo } from '@/lib/permisosNav'
 import { useAuthStore } from '@/store/authStore'
 
@@ -141,6 +142,7 @@ export function AppHeader() {
   const [hits, setHits] = useState<Array<{ tipo: string; id: string; titulo: string; subtitulo: string; href: string }>>([])
   const searchWrapRef = useRef<HTMLDivElement>(null)
   const soloBiCosteo = esPerfilSoloBiCosteo(hasPermiso)
+  const notifPendientes = useNotificacionesPendientes(Boolean(user))
 
   const title = titleFromPath(pathname, search)
 
@@ -300,8 +302,18 @@ export function AppHeader() {
           )}
         </div>
 
-        <HeaderIconButton label="Notificaciones" onClick={() => navigate('/notificaciones')}>
-          <Bell className="size-[18px]" strokeWidth={1.75} />
+        <HeaderIconButton
+          label={notifPendientes > 0 ? `Notificaciones (${notifPendientes} sin leer)` : 'Notificaciones'}
+          onClick={() => navigate('/notificaciones')}
+        >
+          <span className="relative">
+            <Bell className="size-[18px]" strokeWidth={1.75} />
+            {notifPendientes > 0 && (
+              <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C00000] px-1 text-[10px] font-semibold leading-none text-white">
+                {notifPendientes > 9 ? '9+' : notifPendientes}
+              </span>
+            )}
+          </span>
         </HeaderIconButton>
         <HeaderIconButton label="Mi día" onClick={() => navigate('/')}>
           <Inbox className="size-[18px]" strokeWidth={1.75} />
