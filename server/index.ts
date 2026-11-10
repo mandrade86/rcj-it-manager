@@ -117,8 +117,15 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter)
 
 // PMO bot (Bot Framework) y digest (clave compartida) — sin JWT de portal
-app.post('/api/pmo/messages', (req, res) => {
-  void handlePmoBotMessages(req, res)
+app.post('/api/pmo/messages', (req, res, next) => {
+  void handlePmoBotMessages(req, res).catch(next)
+})
+app.get('/api/pmo/bot-status', (_req, res) => {
+  res.json({
+    ok: true,
+    bot_configurado: isPmoBotConfigured(),
+    messaging_path: '/api/pmo/messages',
+  })
 })
 app.post('/api/pmo/digest/enviar', async (req, res, next) => {
   try {

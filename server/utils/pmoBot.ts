@@ -154,7 +154,20 @@ export async function handlePmoBotMessages(req: Request, res: Response): Promise
     })
     return
   }
-  await ad.process(req, res, async (context) => {
-    await handleTurn(context)
-  })
+  try {
+    console.log(
+      `[pmo-bot] POST /api/pmo/messages auth=${Boolean(req.headers.authorization)} content-type=${req.headers['content-type'] ?? ''}`,
+    )
+    await ad.process(req, res, async (context) => {
+      await handleTurn(context)
+    })
+  } catch (err) {
+    console.error('[pmo-bot] process falló:', err)
+    if (!res.headersSent) {
+      const msg = err instanceof Error ? err.message : 'Error del bot'
+      // Sin Authorization de Bot Framework es normal que falle la validación.
+      const status = /authorization|authenticate|unauthorized|401/i.test(msg) ? 401 : 500
+      res.status(status).json({ error: msg })
+    }
+  }
 }

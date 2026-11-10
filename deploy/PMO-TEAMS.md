@@ -131,6 +131,43 @@ Prueba manual:
 curl.exe -s -X POST -H "x-pmo-digest-key: TU_CLAVE" http://127.0.0.1:3001/api/pmo/digest/enviar
 ```
 
+## IIS: reenviar Authorization (si el chat no responde)
+
+Si el portal está detrás de IIS + ARR, el header `Authorization` de Bot Framework a veces no llega a Node y el bot no contesta. En el `web.config` del sitio (regla de reverse proxy), agrega:
+
+```xml
+<system.webServer>
+  <rewrite>
+    <allowedServerVariables>
+      <add name="HTTP_AUTHORIZATION" />
+    </allowedServerVariables>
+    <rules>
+      <rule name="ReverseProxyInboundRule1" stopProcessing="true">
+        <match url="(.*)" />
+        <action type="Rewrite" url="http://127.0.0.1:3001/{R:1}" />
+        <serverVariables>
+          <set name="HTTP_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" />
+        </serverVariables>
+      </rule>
+    </rules>
+  </rewrite>
+</system.webServer>
+```
+
+En el servidor IIS (una vez, como Administrador):
+
+```powershell
+& "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.webServer/rewrite/allowedServerVariables /+"[name='HTTP_AUTHORIZATION']" /commit:apphost
+iisreset
+```
+
+Comprueba desde fuera:
+
+```powershell
+curl.exe -s https://portal.rcjcorp.hn/api/pmo/bot-status
+# {"ok":true,"bot_configurado":true,...}
+```
+
 ## 4. Checklist de prueba
 
 1. [ ] `GET /api/health` OK tras reinicio.
