@@ -27,6 +27,7 @@ import {
 import { generarReporteSemanalTareas } from '../utils/reporteSemanalTareas.js'
 import { normalizeTareaTags, parseTagsFromExcel } from '../utils/tareaTags.js'
 import { aplicarFechasAlCrear } from '../utils/fechasTarea.js'
+import { notificarAsignacionTarea } from '../utils/notificaciones.js'
 
 export const tareasRouter = Router()
 
@@ -356,6 +357,19 @@ tareasRouter.post('/', async (req, res, next) => {
     sanitizeMontoField(body, 'monto_ejecutado')
     const doc = await Tarea.create(body)
     if (proyectoId) await recalcularAvanceProyecto(proyectoId)
+    if (req.user && body.responsable_id) {
+      const proy = proyectoId
+        ? await Proyecto.findById(proyectoId).select('nombre').lean() as { nombre?: string } | null
+        : null
+      void notificarAsignacionTarea({
+        tareaId: String(doc._id),
+        tareaNombre: nombre,
+        proyectoId: proyectoId || null,
+        proyectoNombre: proy?.nombre,
+        responsableEmpleadoId: String(body.responsable_id),
+        actor: req.user,
+      })
+    }
     res.status(201).json(doc)
   } catch (err) {
     next(err)
@@ -888,6 +902,26 @@ tareasRouter.put('/:id', async (req, res, next) => {
     }).lean()
     const pid = (doc as { proyecto_id?: string | null })?.proyecto_id ?? prev.proyecto_id
     if (pid) await recalcularAvanceProyecto(pid)
+    const nuevoResp = rest.responsable_id != null ? String(rest.responsable_id) : null
+    const prevResp = prev.responsable_id ? String(prev.responsable_id) : null
+    if (req.user && nuevoResp && nuevoResp !== prevResp) {
+      const proy = pid
+        ? await Proyecto.findById(pid).select('nombre').lean() as { nombre?: string } | null
+        : null
+      const tareaNombre = String(
+        (doc as { nombre?: string } | null)?.nombre
+        ?? (rest.nombre as string | undefined)
+        ?? 'Tarea',
+      )
+      void notificarAsignacionTarea({
+        tareaId: String(id),
+        tareaNombre,
+        proyectoId: pid ?? null,
+        proyectoNombre: proy?.nombre,
+        responsableEmpleadoId: nuevoResp,
+        actor: req.user,
+      })
+    }
     res.json(doc)
   } catch (err) {
     next(err)

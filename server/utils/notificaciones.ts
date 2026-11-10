@@ -21,9 +21,86 @@ const ROL_TEXTO: Record<string, string> = {
   lectura: 'como participante de solo lectura',
 }
 
+async function enviarAvisoUsuarios(opts: {
+  usuarioIds: string[]
+  actor: Actor
+  tipo: string
+  titulo: string
+  detalle: string
+  href: string
+  mensaje: string
+}): Promise<void> {
+  const destinos = [...new Set(opts.usuarioIds)].filter(
+    (id) => mongoose.isValidObjectId(id) && id !== String(opts.actor._id),
+  )
+  if (destinos.length === 0) {
+    console.log(`[notif] sin destinatarios (actor=${opts.actor._id}, tipo=${opts.tipo})`)
+    return
+  }
+
+  await Notificacion.insertMany(
+    destinos.map((id) => ({
+      usuario_id: id,
+      tipo: opts.tipo,
+      titulo: opts.titulo,
+      detalle: opts.detalle,
+      href: opts.href,
+      creado_por: opts.actor.nombre || 'Alguien',
+    })),
+  )
+  console.log(`[notif] ${destinos.length} aviso(s) en app · tipo=${opts.tipo} · ${opts.titulo}`)
+
+  const porCorreo = isMailConfigured()
+  const porTeams = isTeamsConfigured()
+  if (!porCorreo && !porTeams) {
+    console.warn('[notif] SendGrid y Teams no configurados; solo quedó el aviso en la app')
+    return
+  }
+
+  const usuarios = await Usuario.find({
+    _id: { $in: destinos },
+    activo: { $ne: false },
+  }).select('nombre email').lean() as unknown as Array<{ _id: unknown; nombre: string; email: string }>
+
+  const url = `${appPublicUrl()}${opts.href}`
+  await Promise.all(usuarios.map(async (usr) => {
+    if (!usr.email) {
+      console.warn(`[notif] usuario ${String(usr._id)} sin email`)
+      return
+    }
+    if (porTeams) {
+      const t = await enviarTeams({
+        destinatario: usr.email,
+        titulo: opts.titulo,
+        mensaje: opts.mensaje,
+        url,
+        boton: 'Abrir en IT Manager',
+      })
+      if (!t.ok) console.warn(`[notif] Teams a ${usr.email}: ${t.error}`)
+      else console.log(`[notif] Teams OK → ${usr.email}`)
+    }
+    if (!porCorreo) return
+    const text = [
+      `Hola ${usr.nombre},`,
+      '',
+      opts.mensaje,
+      '',
+      `Ver: ${url}`,
+    ].join('\n')
+    const html = `
+      <p>Hola <strong>${escapeHtml(usr.nombre)}</strong>,</p>
+      <p>${escapeHtml(opts.mensaje)}</p>
+      <p><a href="${escapeHtml(url)}">Abrir en IT Manager</a></p>
+    `
+    const r = await enviarCorreo({ to: usr.email, subject: opts.titulo, text, html })
+    if (!r.ok) console.warn(`[notif] correo a ${usr.email}: ${r.error}`)
+    else console.log(`[notif] correo OK → ${usr.email}`)
+  }))
+}
+
 /**
- * Crea la notificación en la app y avisa por correo y Teams a cada usuario agregado a un proyecto.
- * Nunca lanza: un fallo de correo o Teams no debe romper el guardado del proyecto.
+ * Avisa a cada usuario agregado a un proyecto (participante o responsable).
+ * No lanza: un fallo de correo/Teams no debe romper el guardado.
  */
 export async function notificarAgregadoAProyecto(opts: {
   proyectoId: string
@@ -32,66 +109,71 @@ export async function notificarAgregadoAProyecto(opts: {
   actor: Actor
 }): Promise<void> {
   try {
-    const destinos = opts.usuarios.filter(
-      (d) => mongoose.isValidObjectId(d.usuario_id) && d.usuario_id !== String(opts.actor._id),
-    )
-    if (destinos.length === 0) return
-
     const actorNombre = opts.actor.nombre || 'Alguien'
     const href = `/proyectos/${encodeURIComponent(opts.proyectoId)}`
-    const titulo = `Te agregaron al proyecto ${opts.proyectoNombre}`
-
-    await Notificacion.insertMany(
-      destinos.map((d) => ({
-        usuario_id: d.usuario_id,
+    for (const u of opts.usuarios) {
+      const rol = ROL_TEXTO[u.rol] ?? ''
+      await enviarAvisoUsuarios({
+        usuarioIds: [u.usuario_id],
+        actor: opts.actor,
         tipo: 'proyecto_agregado',
-        titulo,
-        detalle: `${actorNombre} te agregó ${ROL_TEXTO[d.rol] ?? ''} · ${opts.proyectoId}`,
+        titulo: `Te agregaron al proyecto ${opts.proyectoNombre}`,
+        detalle: `${actorNombre} te agregó ${rol} · ${opts.proyectoId}`,
         href,
-        creado_por: actorNombre,
-      })),
-    )
-
-    const porCorreo = isMailConfigured()
-    const porTeams = isTeamsConfigured()
-    if (!porCorreo && !porTeams) return
-    const usuarios = await Usuario.find({
-      _id: { $in: destinos.map((d) => d.usuario_id) },
-      activo: { $ne: false },
-    }).select('nombre email').lean() as unknown as Array<{ _id: unknown; nombre: string; email: string }>
-    const rolPorId = new Map(destinos.map((d) => [d.usuario_id, d.rol]))
-    const url = `${appPublicUrl()}${href}`
-
-    await Promise.all(usuarios.map(async (usr) => {
-      if (!usr.email) return
-      const rol = ROL_TEXTO[rolPorId.get(String(usr._id)) ?? ''] ?? ''
-      const mensaje = `${actorNombre} te agregó al proyecto "${opts.proyectoNombre}" (${opts.proyectoId}) ${rol}.`
-
-      if (porTeams) {
-        const t = await enviarTeams({
-          destinatario: usr.email, titulo, mensaje, url, boton: 'Abrir proyecto',
-        })
-        if (!t.ok) console.warn(`Aviso de Teams a ${usr.email} no enviado: ${t.error}`)
-      }
-      if (!porCorreo) return
-
-      const text = [
-        `Hola ${usr.nombre},`,
-        '',
-        mensaje,
-        '',
-        `Ver proyecto: ${url}`,
-      ].join('\n')
-      const html = `
-        <p>Hola <strong>${escapeHtml(usr.nombre)}</strong>,</p>
-        <p>${escapeHtml(actorNombre)} te agregó al proyecto
-          <strong>${escapeHtml(opts.proyectoNombre)}</strong> (${escapeHtml(opts.proyectoId)}) ${escapeHtml(rol)}.</p>
-        <p><a href="${escapeHtml(url)}">Abrir proyecto en IT Manager</a></p>
-      `
-      const r = await enviarCorreo({ to: usr.email, subject: titulo, text, html })
-      if (!r.ok) console.warn(`Notificación de proyecto a ${usr.email} no enviada: ${r.error}`)
-    }))
+        mensaje: `${actorNombre} te agregó al proyecto "${opts.proyectoNombre}" (${opts.proyectoId}) ${rol}.`,
+      })
+    }
   } catch (err) {
-    console.warn('No se pudo notificar la asignación al proyecto:', err)
+    console.warn('[notif] error al notificar asignación a proyecto:', err)
+  }
+}
+
+/** Resuelve el usuario del portal ligado a un empleado (responsable de tarea). */
+export async function usuarioIdDesdeEmpleado(empleadoId: string | null | undefined): Promise<string | null> {
+  if (!empleadoId || !mongoose.isValidObjectId(empleadoId)) return null
+  const u = await Usuario.findOne({
+    empleado_id: empleadoId,
+    activo: { $ne: false },
+  }).select('_id').lean() as { _id?: unknown } | null
+  return u?._id ? String(u._id) : null
+}
+
+/**
+ * Avisa cuando se asigna (o reasigna) una tarea a un empleado con usuario en el portal.
+ */
+export async function notificarAsignacionTarea(opts: {
+  tareaId: string
+  tareaNombre: string
+  proyectoId?: string | null
+  proyectoNombre?: string
+  responsableEmpleadoId: string | null | undefined
+  actor: Actor
+}): Promise<void> {
+  try {
+    const usuarioId = await usuarioIdDesdeEmpleado(opts.responsableEmpleadoId)
+    if (!usuarioId) {
+      console.log(`[notif] tarea ${opts.tareaId}: responsable sin usuario de portal, sin aviso`)
+      return
+    }
+    const actorNombre = opts.actor.nombre || 'Alguien'
+    const href = opts.proyectoId
+      ? `/proyectos/${encodeURIComponent(opts.proyectoId)}`
+      : '/mis-tareas'
+    const proyectoTxt = opts.proyectoNombre
+      ? ` del proyecto "${opts.proyectoNombre}"`
+      : opts.proyectoId
+        ? ` del proyecto ${opts.proyectoId}`
+        : ''
+    await enviarAvisoUsuarios({
+      usuarioIds: [usuarioId],
+      actor: opts.actor,
+      tipo: 'tarea_asignada',
+      titulo: `Te asignaron la tarea ${opts.tareaNombre}`,
+      detalle: `${actorNombre} te asignó una tarea${proyectoTxt}`,
+      href,
+      mensaje: `${actorNombre} te asignó la tarea "${opts.tareaNombre}"${proyectoTxt}.`,
+    })
+  } catch (err) {
+    console.warn('[notif] error al notificar asignación de tarea:', err)
   }
 }
