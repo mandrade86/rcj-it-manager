@@ -5,7 +5,7 @@
 | **Producción (todo-en-uno)** | `https://portal.rcjcorp.hn` (Apache) | `docker-compose.prod.yml` | `.env.production` |
 | **Producción — solo app** | mismo portal | `docker-compose.app.yml` | `.env.production` + `MONGODB_URI` |
 | **Producción — solo BD** | — | `docker-compose.mongo.yml` | `.env.mongo` |
-| **Desarrollo (todo-en-uno)** | `http://portal-dev.rcjcorporacion.com` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
+| **Desarrollo (todo-en-uno)** | `http://portal-dev.rcjcorp.hn` (o `:3002`) | `docker-compose.dev.yml` | `.env.development` |
 | **Desarrollo — solo app** | mismo portal-dev | `docker-compose.dev-app.yml` | `.env.development` + `MONGODB_URI` |
 | **Desarrollo — solo BD** | — | `docker-compose.dev-mongo.yml` | `.env.mongo.dev` |
 | **Código local** | `http://localhost:5173` | — (`npm run dev`) | `.env` |
@@ -57,7 +57,7 @@ Detalle (migración, firewall, dump/restore): [deploy/SEPARAR-APP-Y-BD.md](./dep
 ```bash
 cp .env.development.example .env.development
 bash scripts/deploy-ubuntu.sh --dev
-# http://localhost:3002  o  portal-dev.rcjcorporacion.com
+# http://localhost:3002  o  portal-dev.rcjcorp.hn
 ```
 
 ### Desarrollo en tu PC (sin Docker, día a día)
@@ -181,7 +181,7 @@ HTTPS con dominio (cuando el DNS apunte al servidor): ver **`deploy/HTTPS-APACHE
 
 ```bash
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d portal.rcjcorporacion.com
+sudo certbot --apache -d portal.rcjcorp.hn
 ```
 
 ---
@@ -228,13 +228,13 @@ Registro en el DNS corporativo (o archivo hosts para pruebas):
 | Registro | Tipo | Destino |
 |----------|------|---------|
 | `portal.rcjcorp.hn` | A | IP del servidor Ubuntu (producción) |
-| `portal-dev.rcjcorporacion.com` | A | Misma IP u otro servidor (desarrollo) |
+| `portal-dev.rcjcorp.hn` | A | Misma IP u otro servidor (desarrollo) |
 
 Prueba local en `C:\Windows\System32\drivers\etc\hosts`:
 
 ```
 192.168.x.x   portal.rcjcorp.hn
-192.168.x.x   portal-dev.rcjcorporacion.com
+192.168.x.x   portal-dev.rcjcorp.hn
 ```
 
 ---
@@ -274,10 +274,10 @@ Guía detallada: **`deploy/HTTPS-APACHE.md`**.
 sudo apt install -y apache2
 sudo a2enmod proxy proxy_http headers rewrite ssl
 
-# Dominio público/intranet (ej. portal.rcjcorporacion.com):
-sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example \
-  /etc/apache2/sites-available/portal.rcjcorporacion.com.conf
-sudo a2ensite portal.rcjcorporacion.com.conf
+# Dominio público/intranet (ej. portal.rcjcorp.hn):
+sudo cp deploy/apache-portal.rcjcorp.hn.conf.example \
+  /etc/apache2/sites-available/portal.rcjcorp.hn.conf
+sudo a2ensite portal.rcjcorp.hn.conf
 
 # O dominio interno portal.rcjcorp.hn:
 # sudo cp deploy/apache-portal.rcjcorp.hn.conf.example /etc/apache2/sites-available/portal.rcjcorp.hn.conf
@@ -287,11 +287,11 @@ sudo apachectl configtest && sudo systemctl reload apache2
 
 # Certificado TLS (Let's Encrypt)
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d portal.rcjcorporacion.com
+sudo certbot --apache -d portal.rcjcorp.hn
 # sudo certbot --apache -d portal.rcjcorp.hn
 
 # .env.production en el servidor:
-# APP_PUBLIC_URL=https://portal.rcjcorporacion.com
+# APP_PUBLIC_URL=https://portal.rcjcorp.hn
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
@@ -314,7 +314,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 
 ---
 
-## Desarrollo — `portal-dev.rcjcorporacion.com`
+## Desarrollo — `portal-dev.rcjcorp.hn`
 
 Puerto por defecto **3002** y MongoDB en **27018** (no choca con prod ni con `mongod` local).
 
@@ -323,7 +323,7 @@ cp .env.development.example .env.development
 bash scripts/deploy-ubuntu.sh --dev
 ```
 
-Apache opcional (bloque comentado en `deploy/apache-portal.rcjcorporacion.com.conf.example`).
+Apache opcional (bloque comentado en `deploy/apache-portal.rcjcorp.hn.conf.example`).
 
 Login con **correo y contraseña IT Manager** (Maestros → Usuarios).
 

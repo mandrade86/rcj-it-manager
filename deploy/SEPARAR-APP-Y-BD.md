@@ -123,7 +123,7 @@ nano .env.production
 ```env
 APP_BIND=127.0.0.1
 APP_PORT=3001
-APP_PUBLIC_URL=https://portal.rcjcorporacion.com
+APP_PUBLIC_URL=https://portal.rcjcorp.hn
 JWT_SECRET=<secreto largo>
 INIT_DATA_ON_START=false
 MONGODB_URI=mongodb://IP_BD:27017/rcj_it_manager
@@ -150,7 +150,7 @@ nano .env.development
 ```env
 APP_BIND=0.0.0.0
 APP_PORT=3002
-APP_PUBLIC_URL=http://portal-dev.rcjcorporacion.com
+APP_PUBLIC_URL=http://portal-dev.rcjcorp.hn
 JWT_SECRET=<secreto largo de desarrollo>
 INIT_DATA_ON_START=false
 MONGODB_URI=mongodb://IP_BD_DEV:27017/rcj_it_manager_dev

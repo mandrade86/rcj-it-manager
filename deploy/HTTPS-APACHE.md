@@ -4,7 +4,7 @@ La app Docker escucha en `127.0.0.1:3001`. Apache termina TLS en **443** y hace 
 
 ## Requisitos previos
 
-- DNS `portal.rcjcorporacion.com` (o `portal.rcjcorp.hn`) → IP del servidor (`172.16.146.163` u otra).
+- DNS `portal.rcjcorp.hn` (o `portal.rcjcorp.hn`) → IP del servidor (`172.16.146.163` u otra).
 - Sitio HTTP activo y `curl http://127.0.0.1:3001/api/health` → `{"ok":true,...}`.
 - Firewall: `sudo ufw allow 'Apache Full'` (puertos 80 y 443).
 
@@ -13,19 +13,19 @@ La app Docker escucha en `127.0.0.1:3001`. Apache termina TLS en **443** y hace 
 ```bash
 cd /opt/rcj-it-manager
 sudo a2enmod proxy proxy_http headers rewrite ssl
-sudo cp deploy/apache-portal.rcjcorporacion.com.conf.example \
-  /etc/apache2/sites-available/portal.rcjcorporacion.com.conf
+sudo cp deploy/apache-portal.rcjcorp.hn.conf.example \
+  /etc/apache2/sites-available/portal.rcjcorp.hn.conf
 
 # Si aún no tienes certificado, comenta temporalmente el bloque <VirtualHost *:443>
 # y deja solo el :80 con ProxyPass (sin RewriteRule) hasta ejecutar certbot.
-sudo a2ensite portal.rcjcorporacion.com.conf
+sudo a2ensite portal.rcjcorp.hn.conf
 sudo apachectl configtest && sudo systemctl reload apache2
 
 sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d portal.rcjcorporacion.com
+sudo certbot --apache -d portal.rcjcorp.hn
 ```
 
-Certbot crea/ajusta el VirtualHost `:443` y el certificado en `/etc/letsencrypt/live/portal.rcjcorporacion.com/`.
+Certbot crea/ajusta el VirtualHost `:443` y el certificado en `/etc/letsencrypt/live/portal.rcjcorp.hn/`.
 
 Renovación automática (timer de certbot):
 
@@ -37,16 +37,16 @@ sudo certbot renew --dry-run
 
 ```bash
 sudo openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
-  -keyout /etc/ssl/private/portal.rcjcorporacion.com.key \
-  -out /etc/ssl/certs/portal.rcjcorporacion.com.crt \
-  -subj "/CN=portal.rcjcorporacion.com"
+  -keyout /etc/ssl/private/portal.rcjcorp.hn.key \
+  -out /etc/ssl/certs/portal.rcjcorp.hn.crt \
+  -subj "/CN=portal.rcjcorp.hn"
 ```
 
 En el VirtualHost `:443` del sitio Apache, apunta a esos archivos en lugar de Let's Encrypt:
 
 ```apache
-SSLCertificateFile    /etc/ssl/certs/portal.rcjcorporacion.com.crt
-SSLCertificateKeyFile /etc/ssl/private/portal.rcjcorporacion.com.key
+SSLCertificateFile    /etc/ssl/certs/portal.rcjcorp.hn.crt
+SSLCertificateKeyFile /etc/ssl/private/portal.rcjcorp.hn.key
 ```
 
 Los navegadores mostrarán advertencia con certificado autofirmado; en dominio interno suele usarse la CA de la empresa.
@@ -56,7 +56,7 @@ Los navegadores mostrarán advertencia con certificado autofirmado; en dominio i
 En `/opt/rcj-it-manager/.env.production`:
 
 ```env
-APP_PUBLIC_URL=https://portal.rcjcorporacion.com
+APP_PUBLIC_URL=https://portal.rcjcorp.hn
 APP_BIND=127.0.0.1
 ```
 
@@ -69,8 +69,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ## Comprobación
 
 ```bash
-curl -sI https://portal.rcjcorporacion.com | head -5
-curl -s https://portal.rcjcorporacion.com/api/health
+curl -sI https://portal.rcjcorp.hn | head -5
+curl -s https://portal.rcjcorp.hn/api/health
 ```
 
 Debe responder por HTTPS sin redirigir a `http://`.

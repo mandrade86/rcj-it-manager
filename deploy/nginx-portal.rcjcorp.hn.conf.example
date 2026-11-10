@@ -4,17 +4,17 @@
 # (plantilla Nginx antigua — portal.rcjcorp.hn)
 #
 # sudo apt install -y nginx
-# sudo cp deploy/nginx-portal.rcjcorporacion.com.conf.example /etc/nginx/sites-available/portal.rcjcorporacion.com
-# sudo ln -sf /etc/nginx/sites-available/portal.rcjcorporacion.com /etc/nginx/sites-enabled/
+# sudo cp deploy/nginx-portal.rcjcorp.hn.conf.example /etc/nginx/sites-available/portal.rcjcorp.hn
+# sudo ln -sf /etc/nginx/sites-available/portal.rcjcorp.hn /etc/nginx/sites-enabled/
 # sudo nginx -t && sudo systemctl reload nginx
 #
 # HTTPS (si el DNS apunta al servidor y el puerto 443 está abierto):
 # sudo apt install -y certbot python3-certbot-nginx
-# sudo certbot --nginx -d portal.rcjcorporacion.com
+# sudo certbot --nginx -d portal.rcjcorp.hn
 
 server {
     listen 80;
-    server_name portal.rcjcorporacion.com;
+    server_name portal.rcjcorp.hn;
 
     client_max_body_size 12M;
 
@@ -32,7 +32,7 @@ server {
 # Opcional — ambiente Docker de desarrollo (puerto 3002 en el host)
 # server {
 #     listen 80;
-#     server_name portal-dev.rcjcorporacion.com;
+#     server_name portal-dev.rcjcorp.hn;
 #     client_max_body_size 12M;
 #     location / {
 #         proxy_pass http://127.0.0.1:3002;

@@ -56,13 +56,13 @@ if [[ "$ENV_NAME" == "dev" && "$MODE" == "all" ]]; then
   ENV_FILE=.env.development
   ENV_EXAMPLE=.env.development.example
   DEFAULT_PORT=3002
-  URL_HINT="http://portal-dev.rcjcorporacion.com (o http://IP:${DEFAULT_PORT})"
+  URL_HINT="http://portal-dev.rcjcorp.hn (o http://IP:${DEFAULT_PORT})"
 elif [[ "$ENV_NAME" == "dev" && "$MODE" == "app" ]]; then
   COMPOSE_FILE=docker-compose.dev-app.yml
   ENV_FILE=.env.development
   ENV_EXAMPLE=.env.development.example
   DEFAULT_PORT=3002
-  URL_HINT="http://portal-dev.rcjcorporacion.com (app; Mongo en otro host)"
+  URL_HINT="http://portal-dev.rcjcorp.hn (app; Mongo en otro host)"
 elif [[ "$ENV_NAME" == "dev" && "$MODE" == "mongo" ]]; then
   COMPOSE_FILE=docker-compose.dev-mongo.yml
   ENV_FILE=.env.mongo.dev

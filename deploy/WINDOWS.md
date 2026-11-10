@@ -206,7 +206,7 @@ pm2 save
 # pm2 startup  (sigue las instrucciones que imprime)
 ```
 
-### D. IIS como reverse proxy → Node (`portal.rcjcorporacion.com`)
+### D. IIS como reverse proxy → Node (`portal.rcjcorp.hn`)
 
 La app Node debe estar corriendo en `http://127.0.0.1:3001` (`npm start`). IIS solo reenvía 80/443.
 
@@ -232,10 +232,10 @@ Reinicia IIS / el servidor si el instalador lo pide.
 2. **Site name:** `portal-rcj`
 3. **Physical path:** carpeta vacía, ej. `C:\inetpub\portal-rcj` (no hace falta el código ahí).
 4. Binding:
-   - **http** — puerto **80** — Host name: `portal.rcjcorporacion.com`
+   - **http** — puerto **80** — Host name: `portal.rcjcorp.hn`
    - **https** — puerto **443** — mismo Host name + certificado (si ya tienes uno)
 
-DNS de `portal.rcjcorporacion.com` debe apuntar a la **IP de este Windows**.
+DNS de `portal.rcjcorp.hn` debe apuntar a la **IP de este Windows**.
 
 #### 4. Regla de Reverse Proxy
 
@@ -271,8 +271,8 @@ En `D:\rcj-it-manager\.env`:
 ```env
 HOST=127.0.0.1
 PORT=3001
-APP_PUBLIC_URL=https://portal.rcjcorporacion.com
-CORS_ORIGINS=http://portal.rcjcorporacion.com,https://portal.rcjcorporacion.com
+APP_PUBLIC_URL=https://portal.rcjcorp.hn
+CORS_ORIGINS=http://portal.rcjcorp.hn,https://portal.rcjcorp.hn
 ```
 
 Con IIS delante, Node solo escucha en localhost (`HOST=127.0.0.1`). Reinicia `npm start`.
@@ -281,10 +281,10 @@ Con IIS delante, Node solo escucha en localhost (`HOST=127.0.0.1`). Reinicia `np
 
 ```powershell
 curl.exe http://127.0.0.1:3001/api/health
-curl.exe http://portal.rcjcorporacion.com/api/health
+curl.exe http://portal.rcjcorp.hn/api/health
 ```
 
-Navegador: `https://portal.rcjcorporacion.com` (o `http://` si aún no hay certificado).
+Navegador: `https://portal.rcjcorp.hn` (o `http://` si aún no hay certificado).
 
 #### 7. HTTPS (certificado)
 
