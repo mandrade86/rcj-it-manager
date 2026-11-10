@@ -11,7 +11,8 @@ export function isTeamsConfigured(): boolean {
 /**
  * Envía un aviso al chat de Teams del usuario a través de un flujo de Power Automate
  * ("When a Teams webhook request is received" → "Post card in a chat or channel" como Flow bot).
- * El flujo lee `destinatario` (UPN/correo) y publica `attachments[0].content` (Adaptive Card).
+ * El flujo lee `destinatario` (UPN/correo) y publica `tarjeta` (Adaptive Card ya serializada,
+ * que es lo que espera el campo "Adaptive Card" de la acción).
  */
 export async function enviarTeams(opts: {
   destinatario: string
@@ -46,6 +47,7 @@ export async function enviarTeams(opts: {
         titulo: opts.titulo,
         mensaje: opts.mensaje,
         url: opts.url ?? '',
+        tarjeta: JSON.stringify(card),
         type: 'message',
         attachments: [
           { contentType: 'application/vnd.microsoft.card.adaptive', contentUrl: null, content: card },
