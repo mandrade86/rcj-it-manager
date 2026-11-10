@@ -24,6 +24,8 @@
     "proyectos:asignar-marcela": "tsx server/db/assignProjectsToMarcela.ts",
     "admin:crear": "tsx server/scripts/crearAdministrador.ts",
     "teams:probar": "tsx server/scripts/probarTeams.ts",
+    "pmo:digest": "tsx server/scripts/enviarDigestPmo.ts",
+
     "departamentos:cargar": "tsx server/scripts/cargarDepartamentos.ts",
     "departamentos:exportar": "tsx server/scripts/exportarDepartamentos.ts",
     "departamentos:importar": "tsx server/scripts/importarDepartamentos.ts",
@@ -36,6 +38,7 @@
   "dependencies": {
     "@sap/hana-client": "^2.29.25",
     "bcrypt": "^6.0.0",
+    "botbuilder": "^4.23.3",
     "cors": "^2.8.5",
     "date-fns": "^4.2.1",
     "dotenv": "^17.4.2",

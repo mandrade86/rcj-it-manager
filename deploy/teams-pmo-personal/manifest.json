@@ -1,0 +1,48 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "YOUR_BOT_APP_ID",
+  "packageName": "hn.rcjcorp.pmo.personal",
+  "developer": {
+    "name": "RCJ Corporación — IT",
+    "websiteUrl": "https://portal.rcjcorp.hn",
+    "privacyUrl": "https://portal.rcjcorp.hn",
+    "termsOfUseUrl": "https://portal.rcjcorp.hn"
+  },
+  "name": {
+    "short": "PMO",
+    "full": "PMO Personal"
+  },
+  "description": {
+    "short": "Tu PMO en Teams: proyectos, atrasos y portafolio.",
+    "full": "PMO Personal consulta el portal RCJ IT Manager (proyectos y tareas) para darte resúmenes, vencidos, riesgos y vista de jefatura."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#002060",
+  "bots": [
+    {
+      "botId": "YOUR_BOT_APP_ID",
+      "scopes": ["personal"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            { "title": "ayuda", "description": "Lista de comandos" },
+            { "title": "resumen", "description": "Tu briefing de proyectos" },
+            { "title": "atrasados", "description": "Tareas y proyectos vencidos" },
+            { "title": "riesgos", "description": "Proyectos en riesgo alto" },
+            { "title": "portafolio", "description": "Vista jefatura (si tienes permiso)" }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["portal.rcjcorp.hn"]
+}

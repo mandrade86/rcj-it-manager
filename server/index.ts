@@ -59,6 +59,9 @@ import { rolesRouter } from './routes/roles.js'
 import { tareasRouter } from './routes/tareas.js'
 import { usuariosRouter } from './routes/usuarios.js'
 import { vacacionesRouter } from './routes/vacaciones.js'
+import { pmoRouter } from './routes/pmo.js'
+import { handlePmoBotMessages, isPmoBotConfigured } from './utils/pmoBot.js'
+import { enviarDigestsPmo, startPmoDigestCron } from './utils/pmoDigest.js'
 import { ADJUNTOS_TAREAS_DIR } from './utils/multerAdjuntosTareas.js'
 import { ADJUNTOS_PROYECTOS_DIR } from './utils/multerAdjuntosProyectos.js'
 import { CERTS_DIR } from './utils/multerCertificados.js'
@@ -113,6 +116,25 @@ app.get('/api/health', (_req, res) => {
 })
 app.use('/api/auth', authRouter)
 
+// PMO bot (Bot Framework) y digest (clave compartida) — sin JWT de portal
+app.post('/api/pmo/messages', (req, res) => {
+  void handlePmoBotMessages(req, res)
+})
+app.post('/api/pmo/digest/enviar', async (req, res, next) => {
+  try {
+    const key = (process.env.PMO_DIGEST_KEY ?? '').trim()
+    const provided = String(req.headers['x-pmo-digest-key'] ?? req.query.key ?? '').trim()
+    if (!key || provided !== key) {
+      res.status(401).json({ error: 'Clave de digest inválida (x-pmo-digest-key).' })
+      return
+    }
+    const result = await enviarDigestsPmo()
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // All other /api routes require authentication
 app.use('/api', requireAuth)
 app.use('/api', auditMutations)
@@ -149,6 +171,7 @@ app.use('/api/plan-carrera', planCarreraRouter)
 app.use('/api/proyectos', proyectosRouter)
 app.use('/api/tareas', tareasRouter)
 app.use('/api/vacaciones', vacacionesRouter)
+app.use('/api/pmo', pmoRouter)
 
 const clientMounted = mountClientApp(app)
 if (clientMounted) {
@@ -242,6 +265,12 @@ async function main() {
         void runStartupTasks()
       } else {
         console.log('Carga de datos iniciales desactivada (INIT_DATA_ON_START=false).')
+      }
+      startPmoDigestCron()
+      if (isPmoBotConfigured()) {
+        console.log('PMO Personal bot: endpoint /api/pmo/messages listo')
+      } else {
+        console.log('PMO Personal bot: sin PMO_BOT_APP_ID/PASSWORD (solo API REST y digests)')
       }
     })
     .catch((err) => {

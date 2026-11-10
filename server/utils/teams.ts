@@ -34,12 +34,12 @@ export async function enviarTeams(opts: {
     type: 'AdaptiveCard',
     version: '1.4',
     body: [
-      { type: 'TextBlock', text: 'RCJ IT Manager', size: 'Small', color: 'Accent', weight: 'Bolder' },
+      { type: 'TextBlock', text: 'PMO Personal', size: 'Small', color: 'Accent', weight: 'Bolder' },
       { type: 'TextBlock', text: opts.titulo, size: 'Medium', weight: 'Bolder', wrap: true },
       { type: 'TextBlock', text: opts.mensaje, wrap: true },
     ],
     actions: opts.url
-      ? [{ type: 'Action.OpenUrl', title: opts.boton ?? 'Abrir en IT Manager', url: opts.url }]
+      ? [{ type: 'Action.OpenUrl', title: opts.boton ?? 'Abrir en el portal', url: opts.url }]
       : [],
   }
 
