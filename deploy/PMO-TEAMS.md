@@ -2,6 +2,22 @@
 
 El bot **PMO Personal** responde en chat 1:1 de Teams y envía avisos proactivos (asignaciones, digest) usando los proyectos y tareas de MongoDB en `portal.rcjcorp.hn`.
 
+## Costo: diseñado para ser gratis
+
+No usa Copilot Studio, Azure OpenAI ni GPT. El “cerebro” corre en tu servidor (`portal.rcjcorp.hn`), que ya tienes.
+
+| Pieza | Costo |
+|---|---|
+| App Registration (Entra ID) | Gratis |
+| Azure Bot plan **F0 (Free)** | Gratis (límite de mensajes; suficiente para uso interno) |
+| Hosting del bot | Gratis (tu Node/IIS actual; el endpoint es `/api/pmo/messages`) |
+| Avisos / digest (Power Automate + `TEAMS_WEBHOOK_URL`) | Incluido en Microsoft 365 que ya usan |
+| Canal Teams | Gratis |
+
+**Importante al crear el bot en Azure:** elige el plan **Free (F0)**, no Standard (S1). Si el portal solo ofrece S1, crea el recurso en otra región o con “Create a free bot” / F0; no actives Cognitive Services de pago.
+
+Si por política de la empresa no pueden crear Azure Bot, igual quedan **gratis** los avisos proactivos y el digest (Power Automate). El chat 1:1 con nombre *PMO Personal* sí necesita el registro Free F0 + la app de Teams.
+
 ## Qué hace
 
 | Canal | Qué |
@@ -54,16 +70,19 @@ PMO_DIGEST_INTERVAL_HOURS=24
 APP_PUBLIC_URL=https://portal.rcjcorp.hn
 ```
 
-## 1. Crear el bot en Azure
+## 1. Crear el bot en Azure (plan Free F0)
 
 1. Entra a [Azure Portal](https://portal.azure.com) → **App registrations** → **New registration**  
    - Name: `PMO Personal`  
    - Accounts: multitenant o solo tu organización (`PMO_BOT_APP_TYPE` / `PMO_BOT_TENANT_ID`).
 2. Copia el **Application (client) ID** → `PMO_BOT_APP_ID`.
-3. **Certificates & secrets** → New client secret → `PMO_BOT_APP_PASSWORD`.
-4. Crea un recurso **Azure Bot** (Bot Services) y asocia ese App ID.  
+3. **Certificates & secrets** → New client secret → `PMO_BOT_APP_PASSWORD` (el secreto no tiene costo).
+4. Crea un recurso **Azure Bot** (Bot Services):  
+   - **Pricing tier: Free F0** (no Standard S1).  
+   - Type of App: Multi Tenant o Single Tenant (igual que el registro).  
+   - Creation type: **Use existing app registration** → pega el App ID.  
    - Messaging endpoint: `https://portal.rcjcorp.hn/api/pmo/messages`  
-   - Canal: **Microsoft Teams**.
+   - Channels → **Microsoft Teams** → Enable.
 5. En el servidor Windows:
 
 ```powershell
@@ -126,4 +145,5 @@ curl.exe -s -X POST -H "x-pmo-digest-key: TU_CLAVE" http://127.0.0.1:3001/api/pm
 
 - El correo de Teams debe coincidir con `Usuario.email` del portal.
 - Los avisos proactivos siguen usando `TEAMS_WEBHOOK_URL` (flujo Power Automate); el chat conversacional usa el Bot Framework.
-- v1 no escribe en la base (solo consulta) ni usa GPT.
+- v1 no escribe en la base (solo consulta) ni usa GPT / Copilot Studio (evita costos).
+- Revisa en Azure Cost Management que el bot esté en **F0**; si alguien lo subió a S1, bájalo a Free.
