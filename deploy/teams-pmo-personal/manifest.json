@@ -1,11 +1,10 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
-  "version": "1.0.0",
-  "id": "YOUR_BOT_APP_ID",
-  "packageName": "hn.rcjcorp.pmo.personal",
+  "version": "1.0.1",
+  "id": "a14390c6-cd83-46a8-bf44-3be9e360f7df",
   "developer": {
-    "name": "RCJ Corporación — IT",
+    "name": "RCJ Corporacion - IT",
     "websiteUrl": "https://portal.rcjcorp.hn",
     "privacyUrl": "https://portal.rcjcorp.hn",
     "termsOfUseUrl": "https://portal.rcjcorp.hn"
@@ -16,7 +15,7 @@
   },
   "description": {
     "short": "Tu PMO en Teams: proyectos, atrasos y portafolio.",
-    "full": "PMO Personal consulta el portal RCJ IT Manager (proyectos y tareas) para darte resúmenes, vencidos, riesgos y vista de jefatura."
+    "full": "PMO Personal consulta el portal RCJ IT Manager (proyectos y tareas) para darte resumenes, vencidos, riesgos y vista de jefatura."
   },
   "icons": {
     "color": "color.png",
@@ -25,7 +24,7 @@
   "accentColor": "#002060",
   "bots": [
     {
-      "botId": "YOUR_BOT_APP_ID",
+      "botId": "a14390c6-cd83-46a8-bf44-3be9e360f7df",
       "scopes": ["personal"],
       "supportsFiles": false,
       "isNotificationOnly": false,
