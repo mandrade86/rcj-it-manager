@@ -24,6 +24,11 @@ export async function enviarTeams(opts: {
   const endpoint = webhookUrl()
   if (!endpoint) return { ok: false, error: 'Teams no configurado (TEAMS_WEBHOOK_URL).' }
 
+  const destinatario = opts.destinatario.trim().toLowerCase()
+  if (!destinatario || !destinatario.includes('@')) {
+    return { ok: false, error: 'Destinatario de Teams inválido.' }
+  }
+
   const card = {
     $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
     type: 'AdaptiveCard',
@@ -43,7 +48,7 @@ export async function enviarTeams(opts: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        destinatario: opts.destinatario,
+        destinatario,
         titulo: opts.titulo,
         mensaje: opts.mensaje,
         url: opts.url ?? '',
