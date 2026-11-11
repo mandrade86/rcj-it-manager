@@ -69,7 +69,7 @@ New-Item -ItemType Directory -Force -Path $sslDir | Out-Null
 $pfxPath = Join-Path $sslDir 'portal-bot.pfx'
 $secure = ConvertTo-SecureString -String $PfxPassword -Force -AsPlainText
 
-Write-Host '== 2) Exportar PFX ==' -ForegroundColor Cyan
+Write-Host '== 2) Exportar PFX (+ PEM si hay openssl) ==' -ForegroundColor Cyan
 try {
   Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $secure | Out-Null
 } catch {
@@ -81,6 +81,21 @@ Error: $($_.Exception.Message)
 "@
 }
 Write-Host "  OK: $pfxPath" -ForegroundColor Green
+
+$keyPem = Join-Path $sslDir 'portal-bot-key.pem'
+$certPem = Join-Path $sslDir 'portal-bot-cert.pem'
+$usePem = $false
+$openssl = Get-Command openssl -ErrorAction SilentlyContinue
+if ($openssl) {
+  & openssl pkcs12 -in $pfxPath -passin "pass:$PfxPassword" -nocerts -nodes -out $keyPem 2>$null
+  & openssl pkcs12 -in $pfxPath -passin "pass:$PfxPassword" -clcerts -nokeys -out $certPem 2>$null
+  if ((Test-Path $keyPem) -and (Test-Path $certPem) -and ((Get-Item $keyPem).Length -gt 0)) {
+    $usePem = $true
+    Write-Host "  OK PEM: $keyPem / $certPem" -ForegroundColor Green
+  }
+} else {
+  Write-Host '  openssl no está en PATH — Node usará el PFX' -ForegroundColor Yellow
+}
 
 Write-Host "== 3) Firewall TCP $HttpsPort ==" -ForegroundColor Cyan
 $ruleName = "RCJ PMO Bot HTTPS $HttpsPort"
@@ -102,12 +117,17 @@ function Set-EnvLine([string]$text, [string]$key, [string]$value) {
   if ($text -and -not $text.EndsWith("`n")) { $text += "`r`n" }
   return $text + $line + "`r`n"
 }
-$pfxRel = 'data/ssl/portal-bot.pfx'
 $envText = Set-EnvLine $envText 'PMO_BOT_HTTPS_PORT' "$HttpsPort"
-$envText = Set-EnvLine $envText 'PMO_BOT_SSL_PFX' $pfxRel
+$envText = Set-EnvLine $envText 'PMO_BOT_SSL_PFX' 'data/ssl/portal-bot.pfx'
 $envText = Set-EnvLine $envText 'PMO_BOT_SSL_PASSPHRASE' $PfxPassword
-Set-Content -LiteralPath $envPath -Value $envText -Encoding UTF8
-Write-Host '  PMO_BOT_HTTPS_PORT / PMO_BOT_SSL_PFX / PMO_BOT_SSL_PASSPHRASE' -ForegroundColor Green
+if ($usePem) {
+  $envText = Set-EnvLine $envText 'PMO_BOT_SSL_KEY' 'data/ssl/portal-bot-key.pem'
+  $envText = Set-EnvLine $envText 'PMO_BOT_SSL_CERT' 'data/ssl/portal-bot-cert.pem'
+}
+# UTF8 sin BOM (PowerShell 5 Set-Content -Encoding UTF8 mete BOM y puede romper .env)
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($envPath, $envText, $utf8)
+Write-Host '  PMO_BOT_HTTPS_PORT / SSL paths en .env' -ForegroundColor Green
 
 Write-Host '== 5) Reiniciar servicio Node ==' -ForegroundColor Cyan
 $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue

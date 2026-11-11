@@ -257,21 +257,55 @@ function startPmoBotHttpsIfConfigured(): https.Server | null {
   // Bypass IIS/ARR: Azure → https://portal:3443/api/pmo/messages (Authorization intacto)
   const botPort = Number(process.env.PMO_BOT_HTTPS_PORT || 0)
   if (!botPort) return null
-  const pfxPath = (process.env.PMO_BOT_SSL_PFX || '').trim()
+
   const passphrase = process.env.PMO_BOT_SSL_PASSPHRASE ?? ''
-  if (!pfxPath) {
-    console.warn('PMO_BOT_HTTPS_PORT definido pero falta PMO_BOT_SSL_PFX — no se abre HTTPS del bot')
+  const pfxPath = (process.env.PMO_BOT_SSL_PFX || '').trim()
+  const keyPath = (process.env.PMO_BOT_SSL_KEY || '').trim()
+  const certPath = (process.env.PMO_BOT_SSL_CERT || '').trim()
+
+  const resolvePath = (p: string) => (path.isAbsolute(p) ? p : path.resolve(process.cwd(), p))
+
+  let tlsOpts: https.ServerOptions | null = null
+  try {
+    if (keyPath && certPath) {
+      const keyFile = resolvePath(keyPath)
+      const certFile = resolvePath(certPath)
+      if (!fs.existsSync(keyFile) || !fs.existsSync(certFile)) {
+        console.warn(`PMO_BOT_SSL_KEY/CERT no existen: ${keyFile} / ${certFile}`)
+        return null
+      }
+      tlsOpts = {
+        key: fs.readFileSync(keyFile),
+        cert: fs.readFileSync(certFile),
+      }
+      console.log(`PMO bot TLS: PEM key/cert (${keyFile})`)
+    } else if (pfxPath) {
+      const resolved = resolvePath(pfxPath)
+      if (!fs.existsSync(resolved)) {
+        console.warn(`PMO_BOT_SSL_PFX no existe: ${resolved}`)
+        return null
+      }
+      tlsOpts = {
+        pfx: fs.readFileSync(resolved),
+        passphrase,
+      }
+      console.log(`PMO bot TLS: PFX (${resolved})`)
+    } else {
+      console.warn('PMO_BOT_HTTPS_PORT definido pero falta PMO_BOT_SSL_PFX o PMO_BOT_SSL_KEY+CERT')
+      return null
+    }
+  } catch (err) {
+    console.error('PMO bot TLS: no se pudo cargar el certificado:', err)
     return null
   }
-  const resolved = path.isAbsolute(pfxPath) ? pfxPath : path.resolve(process.cwd(), pfxPath)
-  if (!fs.existsSync(resolved)) {
-    console.warn(`PMO_BOT_SSL_PFX no existe: ${resolved}`)
-    return null
-  }
-  const server = https.createServer(
-    { pfx: fs.readFileSync(resolved), passphrase },
-    app,
-  )
+
+  const server = https.createServer(tlsOpts, app)
+  server.on('tlsClientError', (err) => {
+    console.error('[pmo-bot-https] tlsClientError:', err.message)
+  })
+  server.on('error', (err) => {
+    console.error('[pmo-bot-https] server error:', err)
+  })
   server.listen(botPort, HOST, () => {
     console.log(
       `PMO Personal bot HTTPS (bypass IIS): https://${HOST}:${botPort}/api/pmo/messages`,
