@@ -19,7 +19,7 @@ param(
   [string]$HostName = 'portal.rcjcorp.hn',
   [int]$HttpsPort = 3443,
   [string]$RepoRoot = 'D:\rcj-it-manager',
-  [string]$ServiceName = 'rcj-it-manager',
+  [string]$ServiceName = 'RCJITManager',
   [string]$PfxPassword = 'PmoBotLocalOnly'
 )
 
