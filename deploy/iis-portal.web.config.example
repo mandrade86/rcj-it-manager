@@ -1,23 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  web.config del sitio IIS → reverse proxy a Node (127.0.0.1:3001).
+  Reverse proxy IIS → Node. Reinyecta Authorization (ARR lo quita al backend HTTP).
 
-  Si el bot llega con auth=false, ARR está quitando Authorization.
-  Requisitos (PowerShell Admin, UNA vez en el servidor) — ver deploy/PMO-IIS-AUTH.md
-
-  En IIS Manager (NO en este XML): sitio → Authentication
-  → Anonymous Enabled, Windows Disabled.
+  Una vez (Admin):
+    .\fix-iis-pmo-auth.ps1 -SiteName "rcj-it-manager" -PhysicalPath "D:\rcj-it-manager"
 -->
 <configuration>
   <system.webServer>
     <rewrite>
       <rules>
+        <!-- 1) Guarda Authorization en variable propia antes del proxy -->
+        <rule name="PmoCaptureAuthorization" stopProcessing="false">
+          <match url=".*" />
+          <conditions>
+            <add input="{HTTP_AUTHORIZATION}" pattern=".+" />
+          </conditions>
+          <serverVariables>
+            <set name="HTTP_X_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" replace="true" />
+          </serverVariables>
+          <action type="None" />
+        </rule>
+        <!-- 2) Proxy a Node + reinyecta Authorization -->
         <rule name="ReverseProxyInboundRule1" stopProcessing="true">
           <match url="(.*)" />
           <action type="Rewrite" url="http://127.0.0.1:3001/{R:1}" />
           <serverVariables>
-            <set name="HTTP_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" />
-            <set name="HTTP_X_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" />
+            <set name="HTTP_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" replace="true" />
+            <set name="HTTP_X_AUTHORIZATION" value="{HTTP_X_AUTHORIZATION}" replace="true" />
           </serverVariables>
         </rule>
       </rules>

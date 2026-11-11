@@ -1,65 +1,73 @@
-# PMO Personal: `auth=false` (IIS quita Authorization)
+# Authorization en :443 (IIS/ARR + Sophos)
 
-Azure/Teams llegan a Node, pero **IIS/ARR elimina `Authorization`**.
-Sin ese header el bot no valida ni responde.
-
-Sitio IIS: **`rcj-it-manager`** → `D:\rcj-it-manager` → binding `portal.rcjcorp.hn:443`.
-
-## Opción B — Bypass IIS en :3443
-
-Node escucha HTTPS en **3443** (ARR no toca el token).
-
-```powershell
-cd D:\rcj-it-manager
-git pull
-cd deploy
-.\enable-pmo-bot-https.ps1
-Restart-Service RCJITManager
-```
-
-**Importante:** Azure está en Internet. Si `Test-NetConnection portal.rcjcorp.hn -Port 3443`
-da timeout desde fuera de la red RCJ, el puerto **no está publicado** (NAT/firewall).
-El 443 del portal sí suele estarlo; el 3443 hay que abrirlo o usar un túnel.
-
-### B1 — Pedir a redes (producción)
-
-Publicar **TCP 3443** hacia el servidor del portal (`172.16.146.19` o la IP interna real),
-misma IP pública que ya atiende `portal.rcjcorp.hn:443`.
-
-Messaging endpoint:
+Azure debe usar:
 
 ```text
-https://portal.rcjcorp.hn:3443/api/pmo/messages
+https://portal.rcjcorp.hn/api/pmo/messages
 ```
 
-### B2 — Túnel temporal (prueba hoy, sin abrir firewall)
+Sin puerto extra. Si llega `auth=false`, el header se pierde en **Sophos** o en **IIS/ARR**.
 
-Con el bot ya en `:3443`:
+## 1) Diagnóstico (obligatorio)
+
+En el servidor (tras `git pull` + `Restart-Service RCJITManager`):
 
 ```powershell
-cd D:\rcj-it-manager\deploy
-.\pmo-bot-tunnel.ps1
+curl.exe -sk -H "Authorization: Bearer TEST-IIS" https://portal.rcjcorp.hn/api/pmo/headers-echo
 ```
 
-Copia `https://xxxx.trycloudflare.com` y en Azure:
+| Resultado | Significado |
+|---|---|
+| `"authorization":true` | IIS/ARR OK → prueba Web Chat |
+| `"x_authorization":true` y authorization false | ARR casi OK; Node ya copia `x-authorization` |
+| **ambos false** | El header **no llega** a Node → suele ser **Sophos WAF** (o auth de IIS) |
 
-```text
-https://xxxx.trycloudflare.com/api/pmo/messages
+Comparar sin IIS (bypass local):
+
+```powershell
+curl.exe -sk -H "Authorization: Bearer TEST-IIS" https://127.0.0.1:3443/api/pmo/headers-echo
 ```
 
-Web Chat → `hola` → en el log `auth=true`.
+(Ahí debería ser `authorization:true` si el bypass sigue activo.)
 
-Si el export del certificado falla (clave no exportable), exporta el PFX a mano desde
-`certlm.msc` → Personal → Certificates → `*.rcjcorp.hn` → Export with private key →
-`D:\rcj-it-manager\data\ssl\portal-bot.pfx` y vuelve a correr `enable-pmo-bot-https.ps1`.
-
-## Opción A — Reenviar Authorization con ARR
-
-Solo si quieres insistir con el proxy en `:443`:
+## 2) Arreglar IIS/ARR
 
 ```powershell
 cd D:\rcj-it-manager\deploy
 .\fix-iis-pmo-auth.ps1 -SiteName "rcj-it-manager" -PhysicalPath "D:\rcj-it-manager"
 ```
 
-Si tras eso sigue `auth=false`, usa la **Opción B**.
+Vuelve a correr el `headers-echo` del paso 1.
+
+## 3) Si sigue false → excepción en Sophos
+
+El WAF / HTTP protection de Sophos a veces **elimina `Authorization`** en HTTPS inspeccionado.
+
+En Sophos Firewall:
+
+1. **Protect → Web server protection** (o **WAF**) → el sitio / protected zone de `portal.rcjcorp.hn`
+2. **Exceptions** → Add:
+   - Path / URL: `/api/pmo/*` (o host `portal.rcjcorp.hn` + path)
+   - Skip / disable: **HTTP header filtering**, **Authentication**, **Protocol enforcement** agresivo que toque headers
+3. Si usan **DPI / Decrypt & scan HTTPS** hacia el portal: añade excepción para no alterar headers de `/api/pmo/*`, o bypass WAF solo para esa ruta
+4. **Rules and policies**: confirma que no haya una regla de “Remove headers” / rewrite que borre `Authorization`
+
+También revisa **Authentication → Web authentication** / captive: no debe aplicarse a esa ruta.
+
+Tras guardar, otra vez:
+
+```powershell
+curl.exe -sk -H "Authorization: Bearer TEST-IIS" https://portal.rcjcorp.hn/api/pmo/headers-echo
+```
+
+## 4) Azure
+
+Con `authorization:true` en el echo:
+
+1. Messaging endpoint: `https://portal.rcjcorp.hn/api/pmo/messages`
+2. Save → Web Chat → `hola`
+3. Log: `auth=true`
+
+## Plan B (si Sophos no puede exceptuar)
+
+Publicar otro puerto (8443/3443) o túnel — ver secciones anteriores / `enable-pmo-bot-https.ps1`.

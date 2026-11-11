@@ -130,6 +130,16 @@ app.get('/api/pmo/bot-status', (_req, res) => {
     messaging_path: '/api/pmo/messages',
   })
 })
+/** Diagnóstico IIS/Sophos: ¿llega Authorization a Node? (no expone el token) */
+app.get('/api/pmo/headers-echo', (req, res) => {
+  const names = Object.keys(req.headers).sort()
+  res.json({
+    ok: true,
+    authorization: Boolean(req.headers.authorization),
+    x_authorization: Boolean(req.headers['x-authorization']),
+    header_names: names,
+  })
+})
 app.post('/api/pmo/digest/enviar', async (req, res, next) => {
   try {
     const key = (process.env.PMO_DIGEST_KEY ?? '').trim()
