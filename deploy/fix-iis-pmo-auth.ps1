@@ -3,20 +3,77 @@
   Arregla Authorization hacia Node (auth=false en [pmo-bot]).
   Ejecutar en el SERVIDOR del portal, PowerShell Admin:
 
-    cd D:\rcj-it-manager\deploy   # o la ruta real del repo en el servidor
+    cd D:\rcj-it-manager\deploy
     .\fix-iis-pmo-auth.ps1 -SiteName "portal.rcjcorp.hn"
 
-  Si no sabes el nombre del sitio, omite -SiteName y el script lista sitios.
+  Si no encuentra la carpeta del sitio:
+
+    .\fix-iis-pmo-auth.ps1 -SiteName "portal.rcjcorp.hn" -PhysicalPath "C:\inetpub\wwwroot\portal"
 #>
 param(
   [string]$SiteName = '',
-  [string]$Backend = 'http://127.0.0.1:3001'
+  [string]$Backend = 'http://127.0.0.1:3001',
+  [string]$PhysicalPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $appcmd = Join-Path $env:windir 'system32\inetsrv\appcmd.exe'
 if (-not (Test-Path $appcmd)) {
   throw 'IIS appcmd no encontrado. ¿Está instalado IIS?'
+}
+
+function Get-SitePhysicalPath {
+  param([string]$Name)
+
+  # 1) WebAdministration (más fiable)
+  try {
+    Import-Module WebAdministration -ErrorAction Stop
+    $site = Get-Website -Name $Name -ErrorAction Stop
+    $p = $site.physicalPath
+    if ($p) {
+      # Expande %SystemDrive% etc.
+      $p = [Environment]::ExpandEnvironmentVariables($p)
+      if (Test-Path -LiteralPath $p) { return $p }
+    }
+  } catch {
+    Write-Host "  (WebAdministration: $($_.Exception.Message))" -ForegroundColor DarkYellow
+  }
+
+  # 2) appcmd list app
+  try {
+    $raw = & $appcmd list app /site.name:"$Name" /text:path 2>$null
+    $appPath = @($raw | Where-Object { $_ -and $_.ToString().Trim() }) | Select-Object -First 1
+    if (-not $appPath) { $appPath = '/' }
+    $vraw = & $appcmd list vdir "$Name$appPath" /text:physicalPath 2>$null
+    $p = @($vraw | Where-Object { $_ -and $_.ToString().Trim() }) | Select-Object -First 1
+    if ($p) {
+      $p = [Environment]::ExpandEnvironmentVariables($p.ToString().Trim())
+      if (Test-Path -LiteralPath $p) { return $p }
+    }
+  } catch {
+    Write-Host "  (appcmd app: $($_.Exception.Message))" -ForegroundColor DarkYellow
+  }
+
+  # 3) appcmd list vdir SITE/
+  foreach ($key in @("$Name/", "${Name}/")) {
+    $vraw = & $appcmd list vdir $key /text:physicalPath 2>$null
+    $p = @($vraw | Where-Object { $_ -and $_.ToString().Trim() }) | Select-Object -First 1
+    if ($p) {
+      $p = [Environment]::ExpandEnvironmentVariables($p.ToString().Trim())
+      if (Test-Path -LiteralPath $p) { return $p }
+    }
+  }
+
+  # 4) listar todos los vdir y filtrar
+  $all = & $appcmd list vdir 2>$null
+  foreach ($line in @($all)) {
+    if ($line -match [regex]::Escape("VDIR `"$Name/") -and $line -match 'physicalPath:"([^"]+)"') {
+      $p = [Environment]::ExpandEnvironmentVariables($Matches[1])
+      if (Test-Path -LiteralPath $p) { return $p }
+    }
+  }
+
+  return $null
 }
 
 Write-Host '== 1) ARR proxy + serverVariables ==' -ForegroundColor Cyan
@@ -33,30 +90,18 @@ foreach ($var in @('HTTP_AUTHORIZATION', 'HTTP_X_AUTHORIZATION')) {
 }
 
 Write-Host '== 2) Sitios IIS ==' -ForegroundColor Cyan
-$sitesXml = & $appcmd list sites /xml
-[xml]$sitesDoc = $sitesXml
-$sites = @($sitesDoc.appcmd.SITE)
-if (-not $sites -or $sites.Count -eq 0) {
-  # fallback texto
-  & $appcmd list sites
-  throw 'No se pudieron listar sitios. Pasa -SiteName manualmente.'
-}
-
+& $appcmd list sites
 if (-not $SiteName) {
-  Write-Host 'Sitios encontrados:'
-  foreach ($s in $sites) {
-    Write-Host ("  - {0}" -f $s.SITE.NAME)
-  }
-  # Heurística: nombre con portal o rcj
-  $guess = $sites | Where-Object {
-    $n = $_.SITE.NAME
-    $n -match 'portal|rcjcorp|rcj'
-  } | Select-Object -First 1
-  if ($guess) {
-    $SiteName = $guess.SITE.NAME
-    Write-Host "Usando sitio: $SiteName" -ForegroundColor Green
-  } else {
-    throw 'Indica -SiteName "NombreExactoDelSitio"'
+  try {
+    Import-Module WebAdministration -ErrorAction Stop
+    $guess = Get-Website | Where-Object { $_.Name -match 'portal|rcjcorp|rcj' } | Select-Object -First 1
+    if ($guess) {
+      $SiteName = $guess.Name
+      Write-Host "Usando sitio: $SiteName" -ForegroundColor Green
+    }
+  } catch {}
+  if (-not $SiteName) {
+    throw 'Indica -SiteName "NombreExactoDelSitio" (mira la lista arriba).'
   }
 }
 
@@ -65,10 +110,24 @@ Write-Host "== 3) Auth del sitio: $SiteName ==" -ForegroundColor Cyan
 & $appcmd set config "$SiteName" /section:windowsAuthentication /enabled:false /commit:apphost
 
 Write-Host '== 4) Ubicación física del sitio ==' -ForegroundColor Cyan
-$vdir = & $appcmd list vdir "$SiteName/" /text:physicalPath
-$physical = ($vdir | Select-Object -First 1).ToString().Trim()
-if (-not $physical -or -not (Test-Path $physical)) {
-  throw "No se encontró physicalPath para $SiteName (obtuve: '$physical')"
+$physical = $PhysicalPath
+if ($physical) {
+  $physical = [Environment]::ExpandEnvironmentVariables($physical)
+} else {
+  $physical = Get-SitePhysicalPath -Name $SiteName
+}
+
+if (-not $physical -or -not (Test-Path -LiteralPath $physical)) {
+  Write-Host ''
+  Write-Host 'No se encontró la carpeta del sitio. En IIS Manager:' -ForegroundColor Yellow
+  Write-Host '  Sitios → tu sitio → panel derecho Basic Settings → Physical path'
+  Write-Host ''
+  Write-Host 'Luego vuelve a correr:' -ForegroundColor Yellow
+  Write-Host "  .\fix-iis-pmo-auth.ps1 -SiteName `"$SiteName`" -PhysicalPath `"C:\ruta\del\sitio`""
+  Write-Host ''
+  Write-Host 'O lista rutas con:' -ForegroundColor Yellow
+  Write-Host '  Import-Module WebAdministration; Get-Website | Format-Table Name, physicalPath'
+  throw "physicalPath vacío para '$SiteName'"
 }
 Write-Host "  path: $physical"
 
@@ -96,7 +155,7 @@ $webConfig = @"
 </configuration>
 "@
 
-if (Test-Path $webConfigPath) {
+if (Test-Path -LiteralPath $webConfigPath) {
   Copy-Item -LiteralPath $webConfigPath -Destination $backup -Force
   Write-Host "  backup: $backup" -ForegroundColor Yellow
 }

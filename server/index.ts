@@ -2,7 +2,10 @@ import 'dotenv/config'
 
 import cors from 'cors'
 import express from 'express'
+import fs from 'fs'
+import https from 'https'
 import mongoose from 'mongoose'
+import path from 'path'
 
 import { connectDb } from './db/connection.js'
 import './db/models/index.js'
@@ -250,6 +253,33 @@ async function runStartupTasks() {
   }
 }
 
+function startPmoBotHttpsIfConfigured(): https.Server | null {
+  // Bypass IIS/ARR: Azure → https://portal:3443/api/pmo/messages (Authorization intacto)
+  const botPort = Number(process.env.PMO_BOT_HTTPS_PORT || 0)
+  if (!botPort) return null
+  const pfxPath = (process.env.PMO_BOT_SSL_PFX || '').trim()
+  const passphrase = process.env.PMO_BOT_SSL_PASSPHRASE ?? ''
+  if (!pfxPath) {
+    console.warn('PMO_BOT_HTTPS_PORT definido pero falta PMO_BOT_SSL_PFX — no se abre HTTPS del bot')
+    return null
+  }
+  const resolved = path.isAbsolute(pfxPath) ? pfxPath : path.resolve(process.cwd(), pfxPath)
+  if (!fs.existsSync(resolved)) {
+    console.warn(`PMO_BOT_SSL_PFX no existe: ${resolved}`)
+    return null
+  }
+  const server = https.createServer(
+    { pfx: fs.readFileSync(resolved), passphrase },
+    app,
+  )
+  server.listen(botPort, HOST, () => {
+    console.log(
+      `PMO Personal bot HTTPS (bypass IIS): https://${HOST}:${botPort}/api/pmo/messages`,
+    )
+  })
+  return server
+}
+
 async function main() {
   const server = app.listen(PORT, HOST, () => {
     console.log(`RCJ IT Manager — http://${HOST}:${PORT}`)
@@ -258,8 +288,10 @@ async function main() {
       console.log(`CORS: ${CORS_ORIGINS.join(', ')}`)
     }
   })
+  const botHttps = startPmoBotHttpsIfConfigured()
 
   const shutdown = () => {
+    botHttps?.close()
     server.close(() => process.exit(0))
   }
   process.once('SIGTERM', shutdown)
