@@ -5,6 +5,10 @@ const DEFAULT_CORS_ORIGINS = [
   'http://127.0.0.1:3001',
   'http://portal.rcjcorp.hn',
   'https://portal.rcjcorp.hn',
+  // Test in Web Chat (Azure Portal)
+  'https://portal.azure.com',
+  'https://webchat.botframework.com',
+  'https://cdn.botframework.com',
 ]
 
 /** Orígenes permitidos para CORS (incluye APP_PUBLIC_URL y variante http/https). */

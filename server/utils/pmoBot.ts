@@ -160,10 +160,19 @@ export async function handlePmoBotMessages(req: Request, res: Response): Promise
     if (typeof authHeader === 'string' && authHeader && !req.headers.authorization) {
       req.headers.authorization = authHeader
     }
+    const body = req.body as { type?: unknown } | undefined
+    const activityType = body && typeof body === 'object' ? String(body.type ?? '') : ''
     const headerNames = Object.keys(req.headers).sort().join(',')
     console.log(
-      `[pmo-bot] POST /api/pmo/messages auth=${Boolean(req.headers.authorization)} content-type=${req.headers['content-type'] ?? ''} headers=${headerNames}`,
+      `[pmo-bot] POST /api/pmo/messages auth=${Boolean(req.headers.authorization)} type=${activityType || '(vacío)'} content-type=${req.headers['content-type'] ?? ''} headers=${headerNames}`,
     )
+    if (!activityType) {
+      // Típico de curl con body {} — no es un mensaje de Azure/Teams.
+      res.status(400).json({
+        error: 'Falta activity.type. Azure/Teams envían JSON con type (message, conversationUpdate, etc.).',
+      })
+      return
+    }
     await ad.process(req, res, async (context) => {
       await handleTurn(context)
     })
@@ -171,8 +180,11 @@ export async function handlePmoBotMessages(req: Request, res: Response): Promise
     console.error('[pmo-bot] process falló:', err)
     if (!res.headersSent) {
       const msg = err instanceof Error ? err.message : 'Error del bot'
-      // Sin Authorization de Bot Framework es normal que falle la validación.
-      const status = /authorization|authenticate|unauthorized|401/i.test(msg) ? 401 : 500
+      const status = /authorization|authenticate|unauthorized|401/i.test(msg)
+        ? 401
+        : /activity type|invalid request body|BadRequest/i.test(msg)
+          ? 400
+          : 500
       res.status(status).json({ error: msg })
     }
   }
