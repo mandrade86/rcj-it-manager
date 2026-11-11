@@ -70,6 +70,8 @@ PMO_DIGEST_INTERVAL_HOURS=24
 APP_PUBLIC_URL=https://portal.rcjcorp.hn
 ```
 
+Si Web Chat llega a Node con `auth=false`, IIS está quitando `Authorization`. Sigue [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
+
 ## 1. Crear el bot en Azure (plan Free F0)
 
 1. Entra a [Azure Portal](https://portal.azure.com) → **App registrations** → **New registration**  

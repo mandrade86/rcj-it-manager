@@ -155,8 +155,14 @@ export async function handlePmoBotMessages(req: Request, res: Response): Promise
     return
   }
   try {
+    // Express normaliza headers a minúsculas. Si IIS/ARR quita Authorization, auth=false.
+    const authHeader = req.headers.authorization || req.headers['x-authorization']
+    if (typeof authHeader === 'string' && authHeader && !req.headers.authorization) {
+      req.headers.authorization = authHeader
+    }
+    const headerNames = Object.keys(req.headers).sort().join(',')
     console.log(
-      `[pmo-bot] POST /api/pmo/messages auth=${Boolean(req.headers.authorization)} content-type=${req.headers['content-type'] ?? ''}`,
+      `[pmo-bot] POST /api/pmo/messages auth=${Boolean(req.headers.authorization)} content-type=${req.headers['content-type'] ?? ''} headers=${headerNames}`,
     )
     await ad.process(req, res, async (context) => {
       await handleTurn(context)

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  web.config del sitio IIS → reverse proxy a Node (127.0.0.1:3001).
+
+  Si el bot llega con auth=false, ARR está quitando Authorization.
+  Requisitos (PowerShell Admin, UNA vez en el servidor) — ver deploy/PMO-IIS-AUTH.md
+
+  En IIS Manager (NO en este XML): sitio → Authentication
+  → Anonymous Enabled, Windows Disabled.
+-->
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <rule name="ReverseProxyInboundRule1" stopProcessing="true">
+          <match url="(.*)" />
+          <action type="Rewrite" url="http://127.0.0.1:3001/{R:1}" />
+          <serverVariables>
+            <set name="HTTP_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" />
+            <set name="HTTP_X_AUTHORIZATION" value="{HTTP_AUTHORIZATION}" />
+          </serverVariables>
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
