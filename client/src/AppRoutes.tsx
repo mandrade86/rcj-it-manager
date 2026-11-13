@@ -29,6 +29,7 @@ import { ProveedoresCapacitacionPage } from '@/pages/maestros/ProveedoresCapacit
 import { RolesPage } from '@/pages/maestros/RolesPage'
 import { UsuariosPage } from '@/pages/maestros/UsuariosPage'
 import { ArquitecturaDashboardPage } from '@/pages/it/ArquitecturaDashboardPage'
+import { EticketServiciosPage } from '@/pages/it/EticketServiciosPage'
 import { CosteoMuestrasPage } from '@/pages/bi/CosteoMuestrasPage'
 import { CostosItPage } from '@/pages/gastos-it/CostosItPage'
 import { GastosDashboardPage } from '@/pages/gastos-it/GastosDashboardPage'
@@ -122,6 +123,10 @@ export function AppRoutes() {
 
           <Route element={<ProtectedRoute permiso="it:arquitectura:ver" />}>
             <Route path="it/arquitectura" element={<ArquitecturaDashboardPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permiso="eticket:servicios:ver" />}>
+            <Route path="it/eticket-servicios" element={<EticketServiciosPage />} />
           </Route>
 
           <Route element={<ProtectedRoute permiso="maestros:ver" />}>

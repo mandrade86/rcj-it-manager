@@ -30,6 +30,7 @@ import {
   Shield,
   ShieldCheck,
   Target,
+  Ticket,
   Users,
   UsersRound,
   Wallet,
@@ -236,8 +237,10 @@ export function AppSidebar() {
   }, [])
 
   const mostrarArqIT = hasPermiso('it:arquitectura:ver') || hasPermiso('*')
+  const mostrarEticket = hasPermiso('eticket:servicios:ver') || hasPermiso('*')
   const mostrarBiCosteo = hasPermiso('bi:costeo:ver') || hasPermiso('*')
   const mostrarGastosIt = hasPermiso('it:gastos:ver') || hasPermiso('*')
+  const mostrarItTecnico = mostrarArqIT || mostrarEticket
 
   const puedeVerItem = (item: NavItemDef) => cumplePermiso(item.permiso, hasPermiso)
 
@@ -269,13 +272,20 @@ export function AppSidebar() {
           } satisfies NavGroupDef,
         ]
       : []),
-    ...(mostrarArqIT
+    ...(mostrarItTecnico
       ? [
           {
             id: 'it',
             label: 'IT Técnico',
             icon: Server,
-            items: [{ to: '/it/arquitectura', label: 'Arquitectura IT', icon: Server }],
+            items: [
+              ...(mostrarArqIT
+                ? [{ to: '/it/arquitectura', label: 'Arquitectura IT', icon: Server } satisfies NavItemDef]
+                : []),
+              ...(mostrarEticket
+                ? [{ to: '/it/eticket-servicios', label: 'Servicios eTicket', icon: Ticket } satisfies NavItemDef]
+                : []),
+            ],
           } satisfies NavGroupDef,
         ]
       : []),

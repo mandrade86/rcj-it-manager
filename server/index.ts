@@ -63,8 +63,10 @@ import { tareasRouter } from './routes/tareas.js'
 import { usuariosRouter } from './routes/usuarios.js'
 import { vacacionesRouter } from './routes/vacaciones.js'
 import { pmoRouter } from './routes/pmo.js'
+import { eticketServiciosRouter } from './routes/eticketServicios.js'
 import { handlePmoBotMessages, isPmoBotConfigured } from './utils/pmoBot.js'
 import { enviarDigestsPmo, startPmoDigestCron } from './utils/pmoDigest.js'
+import { startEticketSyncCron } from './utils/eticketSync.js'
 import { ADJUNTOS_TAREAS_DIR } from './utils/multerAdjuntosTareas.js'
 import { ADJUNTOS_PROYECTOS_DIR } from './utils/multerAdjuntosProyectos.js'
 import { CERTS_DIR } from './utils/multerCertificados.js'
@@ -192,6 +194,7 @@ app.use('/api/proyectos', proyectosRouter)
 app.use('/api/tareas', tareasRouter)
 app.use('/api/vacaciones', vacacionesRouter)
 app.use('/api/pmo', pmoRouter)
+app.use('/api/eticket/servicios', eticketServiciosRouter)
 
 const clientMounted = mountClientApp(app)
 if (clientMounted) {
@@ -350,6 +353,7 @@ async function main() {
         console.log('Carga de datos iniciales desactivada (INIT_DATA_ON_START=false).')
       }
       startPmoDigestCron()
+      startEticketSyncCron()
       if (isPmoBotConfigured()) {
         console.log('PMO Personal bot: endpoint /api/pmo/messages listo')
       } else {

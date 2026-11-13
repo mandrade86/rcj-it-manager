@@ -44,6 +44,7 @@ export const PERMISOS_CATALOGO: PermisoCatalogoItem[] = [
   { clave: 'it:gastos:config', descripcion: 'Configurar gastos IT / SAP', grupo: 'IT / Finanzas' },
   { clave: 'bi:costeo:ver', descripcion: 'Ver BI Costeo de muestras', grupo: 'IT / Finanzas' },
   { clave: 'bi:costeo:config', descripcion: 'Configurar conexión SAP de costeo', grupo: 'IT / Finanzas' },
+  { clave: 'eticket:servicios:ver', descripcion: 'Ver e importar servicios de desarrollo desde eTicket', grupo: 'IT / Finanzas' },
 ]
 
 /** Filas de la matriz visual (módulo → permiso representativo). */
@@ -59,6 +60,7 @@ export const MATRIZ_MODULOS: Array<{ id: string; label: string; permiso: string 
   { id: 'evaluaciones', label: 'Evaluaciones', permiso: 'equipo:ver' },
   { id: 'roles', label: 'Roles', permiso: 'roles:ver' },
   { id: 'usuarios', label: 'Usuarios', permiso: 'usuarios:ver' },
+  { id: 'eticket', label: 'Servicios eTicket', permiso: 'eticket:servicios:ver' },
 ]
 
 export const PERMISOS_DISPONIBLES = PERMISOS_CATALOGO.map(({ clave, descripcion }) => ({
