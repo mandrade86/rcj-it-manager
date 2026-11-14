@@ -15,7 +15,8 @@ Portal (poll o botón) GET .../services?status=pending
 ```env
 # URL base del API eTicket (sin barra final). Dominio oficial: eticket.rcjcorporacion.com
 # Si el API responde 404 en la raíz, prueba .../api al final de la URL.
-ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com
+# Importante: /api al final (sin /api el portal recibe el HTML del frontend)
+ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com/api
 # Misma clave que IT_MANAGER_API_KEY en eTicket
 ETICKET_API_KEY=genera-una-clave-larga
 

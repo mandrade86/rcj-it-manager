@@ -77,12 +77,26 @@ function withTimeout(ms: number): AbortSignal {
   return ctrl.signal
 }
 
-/** Rutas candidatas: algunos deploys montan el API en /api. */
-function candidatePaths(path: string): string[] {
+function looksLikeHtml(text: string, contentType: string | null): boolean {
+  const ct = (contentType ?? '').toLowerCase()
+  if (ct.includes('text/html')) return true
+  const head = text.trimStart().slice(0, 32).toLowerCase()
+  return head.startsWith('<!doctype') || head.startsWith('<html')
+}
+
+/** Variantes de URL: la web SPA responde HTML; el API suele estar en /api. */
+function candidateUrls(path: string): string[] {
   const p = path.startsWith('/') ? path : `/${path}`
   const root = baseUrl()
-  if (/\/api$/i.test(root)) return [p]
-  return [p, `/api${p}`]
+  const urls: string[] = []
+  if (/\/api$/i.test(root)) {
+    urls.push(`${root}${p}`)
+  } else {
+    // Probar /api primero (evita el index.html del frontend)
+    urls.push(`${root}/api${p}`)
+    urls.push(`${root}${p}`)
+  }
+  return urls
 }
 
 async function eticketFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -90,14 +104,13 @@ async function eticketFetch(path: string, init?: RequestInit): Promise<Response>
   if (!root) throw new Error('ETICKET_API_BASE_URL no configurada en el .env del servidor')
   if (!apiKey()) throw new Error('ETICKET_API_KEY no configurada en el .env del servidor')
   if (typeof fetch !== 'function') {
-    throw new Error('Node no tiene fetch global (necesita Node 18+). Actualiza Node en el servidor.')
+    throw new Error('Node no tiene fetch global (necesita Node 18+).')
   }
 
-  const paths = candidatePaths(path)
+  const urls = candidateUrls(path)
   let lastErr: Error | null = null
 
-  for (const p of paths) {
-    const url = `${root}${p}`
+  for (const url of urls) {
     try {
       console.log(`[eticket] ${init?.method ?? 'GET'} ${url}`)
       const res = await fetch(url, {
@@ -105,23 +118,53 @@ async function eticketFetch(path: string, init?: RequestInit): Promise<Response>
         headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) },
         signal: withTimeout(30_000),
       })
-      if (res.status === 404 && paths.length > 1 && p === paths[0]) {
-        console.warn(`[eticket] 404 en ${url}, probando variante /api`)
+      const text = await res.text()
+      const ct = res.headers.get('content-type')
+
+      if (looksLikeHtml(text, ct)) {
+        lastErr = new Error(
+          `eTicket devolvió HTML (frontend) en ${url}. Usa ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com/api`,
+        )
+        console.warn('[eticket]', lastErr.message)
         continue
       }
-      return res
+
+      // Re-construir Response con el body ya leído
+      return new Response(text, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
+      })
     } catch (e) {
+      if (e instanceof Error && e.message.includes('devolvió HTML')) {
+        lastErr = e
+        continue
+      }
       const msg = e instanceof Error ? e.message : String(e)
-      const hint = /abort/i.test(msg)
-        ? 'timeout 30s'
-        : /ENOTFOUND|ECONNREFUSED|cert|SSL|TLS/i.test(msg)
-          ? 'red/DNS/certificado'
-          : 'red'
-      lastErr = new Error(`No se pudo conectar a eTicket (${url}) [${hint}]: ${msg}`)
+      lastErr = new Error(`No se pudo conectar a eTicket (${url}): ${msg}`)
       console.error('[eticket]', lastErr.message)
     }
   }
-  throw lastErr ?? new Error('No se pudo conectar a eTicket')
+  throw (
+    lastErr ??
+    new Error(
+      'No se pudo hablar con el API de eTicket. Prueba ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com/api',
+    )
+  )
+}
+
+async function readJson(res: Response): Promise<unknown> {
+  const text = await res.text()
+  if (looksLikeHtml(text, res.headers.get('content-type'))) {
+    throw new Error(
+      'eTicket devolvió HTML en lugar de JSON. Configura ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com/api',
+    )
+  }
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    throw new Error(`Respuesta eTicket no es JSON (HTTP ${res.status}): ${text.slice(0, 120)}`)
+  }
 }
 
 /** GET /integrations/it-manager/services?status=pending|imported|all */
@@ -137,7 +180,7 @@ export async function fetchEticketServicios(
     const text = await res.text().catch(() => '')
     throw new Error(`eTicket GET services → ${res.status}: ${text.slice(0, 300)}`)
   }
-  const data = (await res.json()) as EticketListResponse | EticketServicioItem[]
+  const data = (await readJson(res)) as EticketListResponse | EticketServicioItem[]
   if (Array.isArray(data)) {
     return { items: data, total: data.length }
   }
@@ -147,10 +190,6 @@ export async function fetchEticketServicios(
   }
 }
 
-/**
- * POST /integrations/it-manager/services/{id}/imported
- * 409 = ya importado (idempotente para el portal).
- */
 export async function ackEticketImported(
   externalId: string,
   remoteServiceId: string,
@@ -174,7 +213,6 @@ export async function ackEticketImported(
   return { ok: true, already: false }
 }
 
-/** Prueba de conectividad (sin importar). */
 export async function diagnosticarEticket(): Promise<Record<string, unknown>> {
   const cfg = eticketConfigPublic()
   if (!cfg.configurado) {
