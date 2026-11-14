@@ -86,7 +86,11 @@ export function EticketServiciosPage() {
       } catch {
         /* cuerpo no JSON */
       }
-      if (!res.ok) throw new Error(data.error || `Error al sincronizar (HTTP ${res.status})`)
+      if (!res.ok) {
+        const detail =
+          (data as { detalle?: string }).detalle || data.error || `Error al sincronizar (HTTP ${res.status})`
+        throw new Error(detail)
+      }
       const parts = [
         `Consultados: ${data.consultados ?? 0}`,
         `nuevos: ${data.creados ?? 0}`,

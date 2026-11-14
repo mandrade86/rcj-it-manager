@@ -222,7 +222,11 @@ app.use(
       return
     }
     console.error(err)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    const detalle = err instanceof Error ? err.message : String(err)
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      detalle,
+    })
   },
 )
 

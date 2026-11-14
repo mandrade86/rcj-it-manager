@@ -48,6 +48,19 @@ export function isEticketConfigured(): boolean {
   return Boolean(baseUrl() && apiKey())
 }
 
+export function eticketConfigPublic(): {
+  configurado: boolean
+  base_url: string
+  tiene_key: boolean
+} {
+  const base = baseUrl()
+  return {
+    configurado: Boolean(base && apiKey()),
+    base_url: base || '(vacío)',
+    tiene_key: Boolean(apiKey()),
+  }
+}
+
 function authHeaders(): Record<string, string> {
   const key = apiKey()
   return {
@@ -56,6 +69,12 @@ function authHeaders(): Record<string, string> {
     'X-API-Key': key,
     Authorization: `Bearer ${key}`,
   }
+}
+
+function withTimeout(ms: number): AbortSignal {
+  const ctrl = new AbortController()
+  setTimeout(() => ctrl.abort(), ms).unref?.()
+  return ctrl.signal
 }
 
 /** Rutas candidatas: algunos deploys montan el API en /api. */
@@ -68,8 +87,11 @@ function candidatePaths(path: string): string[] {
 
 async function eticketFetch(path: string, init?: RequestInit): Promise<Response> {
   const root = baseUrl()
-  if (!root) throw new Error('ETICKET_API_BASE_URL no configurada')
-  if (!apiKey()) throw new Error('ETICKET_API_KEY no configurada')
+  if (!root) throw new Error('ETICKET_API_BASE_URL no configurada en el .env del servidor')
+  if (!apiKey()) throw new Error('ETICKET_API_KEY no configurada en el .env del servidor')
+  if (typeof fetch !== 'function') {
+    throw new Error('Node no tiene fetch global (necesita Node 18+). Actualiza Node en el servidor.')
+  }
 
   const paths = candidatePaths(path)
   let lastErr: Error | null = null
@@ -81,9 +103,8 @@ async function eticketFetch(path: string, init?: RequestInit): Promise<Response>
       const res = await fetch(url, {
         ...init,
         headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) },
-        signal: AbortSignal.timeout(30_000),
+        signal: withTimeout(30_000),
       })
-      // 404 en la primera variante → probar /api/...
       if (res.status === 404 && paths.length > 1 && p === paths[0]) {
         console.warn(`[eticket] 404 en ${url}, probando variante /api`)
         continue
@@ -91,7 +112,12 @@ async function eticketFetch(path: string, init?: RequestInit): Promise<Response>
       return res
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      lastErr = new Error(`No se pudo conectar a eTicket (${url}): ${msg}`)
+      const hint = /abort/i.test(msg)
+        ? 'timeout 30s'
+        : /ENOTFOUND|ECONNREFUSED|cert|SSL|TLS/i.test(msg)
+          ? 'red/DNS/certificado'
+          : 'red'
+      lastErr = new Error(`No se pudo conectar a eTicket (${url}) [${hint}]: ${msg}`)
       console.error('[eticket]', lastErr.message)
     }
   }
@@ -146,4 +172,31 @@ export async function ackEticketImported(
     throw new Error(`eTicket POST imported → ${res.status}: ${text.slice(0, 300)}`)
   }
   return { ok: true, already: false }
+}
+
+/** Prueba de conectividad (sin importar). */
+export async function diagnosticarEticket(): Promise<Record<string, unknown>> {
+  const cfg = eticketConfigPublic()
+  if (!cfg.configurado) {
+    return { ...cfg, ok: false, error: 'Faltan ETICKET_API_BASE_URL o ETICKET_API_KEY en el servidor' }
+  }
+  try {
+    const list = await fetchEticketServicios('pending')
+    return {
+      ...cfg,
+      ok: true,
+      pending: list.total,
+      sample: list.items.slice(0, 3).map((i) => ({
+        externalId: i.externalId,
+        ticketNumber: i.ticketNumber,
+        title: i.title,
+      })),
+    }
+  } catch (e) {
+    return {
+      ...cfg,
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+    }
+  }
 }

@@ -1,13 +1,21 @@
 import { Router } from 'express'
 
 import { ServicioEticket } from '../db/models/ServicioEticket.js'
-import { isEticketConfigured } from '../utils/eticketClient.js'
+import {
+  diagnosticarEticket,
+  eticketConfigPublic,
+  isEticketConfigured,
+} from '../utils/eticketClient.js'
 import { sincronizarServiciosEticket } from '../utils/eticketSync.js'
 
 export const eticketServiciosRouter = Router()
 
 /** Admin (*), permiso dedicado, o quien ya ve proyectos. */
-function canViewEticket(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
+function canViewEticket(
+  req: import('express').Request,
+  res: import('express').Response,
+  next: import('express').NextFunction,
+): void {
   const user = req.user
   if (!user) {
     res.status(401).json({ error: 'No autorizado' })
@@ -28,32 +36,48 @@ function canViewEticket(req: import('express').Request, res: import('express').R
 const canView = canViewEticket
 
 eticketServiciosRouter.get('/status', canView, (_req, res) => {
+  const cfg = eticketConfigPublic()
   res.json({
     ok: true,
-    configurado: isEticketConfigured(),
-    base_url: Boolean((process.env.ETICKET_API_BASE_URL ?? '').trim()),
+    ...cfg,
     cron: process.env.ETICKET_SYNC_CRON === 'true',
     intervalo_minutos: Number(process.env.ETICKET_SYNC_INTERVAL_MINUTES) || 15,
   })
 })
 
-eticketServiciosRouter.get('/', canView, async (req, res, next) => {
+eticketServiciosRouter.get('/diag', canView, async (_req, res) => {
+  try {
+    const diag = await diagnosticarEticket()
+    res.status(diag.ok ? 200 : 502).json(diag)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    res.status(500).json({ ok: false, error: msg, ...eticketConfigPublic() })
+  }
+})
+
+eticketServiciosRouter.get('/', canView, async (req, res) => {
   try {
     const q = String(req.query.q ?? '').trim()
     const filter: Record<string, unknown> = {}
     if (q) {
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       filter.$or = [
-        { title: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-        { ticketNumber: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-        { requesterEmail: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-        { system: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+        { title: new RegExp(esc, 'i') },
+        { ticketNumber: new RegExp(esc, 'i') },
+        { requesterEmail: new RegExp(esc, 'i') },
+        { system: new RegExp(esc, 'i') },
         { externalId: q },
       ]
     }
-    const items = await ServicioEticket.find(filter).sort({ importedAt: -1, createdAt: -1 }).limit(200).lean()
+    const items = await ServicioEticket.find(filter)
+      .sort({ importedAt: -1, createdAt: -1 })
+      .limit(200)
+      .lean()
     res.json({ items, total: items.length })
   } catch (err) {
-    next(err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[eticket] GET / falló:', msg)
+    res.status(500).json({ error: msg, detalle: msg })
   }
 })
 
@@ -61,7 +85,8 @@ eticketServiciosRouter.post('/sync', canView, async (_req, res) => {
   try {
     if (!isEticketConfigured()) {
       res.status(503).json({
-        error: 'eTicket no configurado. Define ETICKET_API_BASE_URL y ETICKET_API_KEY en el .env del servidor.',
+        error:
+          'eTicket no configurado. En el servidor D:\\rcj-it-manager\\.env define ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com y ETICKET_API_KEY, luego Restart-Service RCJITManager.',
       })
       return
     }
@@ -70,11 +95,11 @@ eticketServiciosRouter.post('/sync', canView, async (_req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[eticket-sync] POST /sync falló:', msg)
-    res.status(502).json({ error: msg })
+    res.status(502).json({ error: msg, detalle: msg })
   }
 })
 
-eticketServiciosRouter.get('/:id', canView, async (req, res, next) => {
+eticketServiciosRouter.get('/:id', canView, async (req, res) => {
   try {
     const id = req.params.id
     let doc = null as Record<string, unknown> | null
@@ -92,6 +117,7 @@ eticketServiciosRouter.get('/:id', canView, async (req, res, next) => {
     }
     res.json(doc)
   } catch (err) {
-    next(err)
+    const msg = err instanceof Error ? err.message : String(err)
+    res.status(500).json({ error: msg, detalle: msg })
   }
 })
