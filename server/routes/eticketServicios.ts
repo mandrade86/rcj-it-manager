@@ -57,18 +57,20 @@ eticketServiciosRouter.get('/', canView, async (req, res, next) => {
   }
 })
 
-eticketServiciosRouter.post('/sync', canView, async (_req, res, next) => {
+eticketServiciosRouter.post('/sync', canView, async (_req, res) => {
   try {
     if (!isEticketConfigured()) {
       res.status(503).json({
-        error: 'eTicket no configurado. Define ETICKET_API_BASE_URL y ETICKET_API_KEY en el .env.',
+        error: 'eTicket no configurado. Define ETICKET_API_BASE_URL y ETICKET_API_KEY en el .env del servidor.',
       })
       return
     }
     const result = await sincronizarServiciosEticket()
     res.json({ ok: true, ...result })
   } catch (err) {
-    next(err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[eticket-sync] POST /sync falló:', msg)
+    res.status(502).json({ error: msg })
   }
 })
 

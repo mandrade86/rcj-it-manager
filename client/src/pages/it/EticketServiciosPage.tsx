@@ -80,8 +80,13 @@ export function EticketServiciosPage() {
     setErr(null)
     try {
       const res = await fetch('/api/eticket/servicios/sync', { method: 'POST' })
-      const data = (await res.json()) as SyncResult
-      if (!res.ok) throw new Error(data.error || 'Error al sincronizar')
+      let data: SyncResult = {}
+      try {
+        data = (await res.json()) as SyncResult
+      } catch {
+        /* cuerpo no JSON */
+      }
+      if (!res.ok) throw new Error(data.error || `Error al sincronizar (HTTP ${res.status})`)
       const parts = [
         `Consultados: ${data.consultados ?? 0}`,
         `nuevos: ${data.creados ?? 0}`,
