@@ -125,7 +125,11 @@ export function AppRoutes() {
             <Route path="it/arquitectura" element={<ArquitecturaDashboardPage />} />
           </Route>
 
-          <Route element={<ProtectedRoute permiso="eticket:servicios:ver" />}>
+          <Route
+            element={
+              <ProtectedRoute permiso={['eticket:servicios:ver', 'proyectos:ver', 'proyectos:ver-todos']} />
+            }
+          >
             <Route path="it/eticket-servicios" element={<EticketServiciosPage />} />
           </Route>
 

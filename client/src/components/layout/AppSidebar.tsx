@@ -237,7 +237,11 @@ export function AppSidebar() {
   }, [])
 
   const mostrarArqIT = hasPermiso('it:arquitectura:ver') || hasPermiso('*')
-  const mostrarEticket = hasPermiso('eticket:servicios:ver') || hasPermiso('*')
+  const mostrarEticket =
+    hasPermiso('eticket:servicios:ver') ||
+    hasPermiso('proyectos:ver') ||
+    hasPermiso('proyectos:ver-todos') ||
+    hasPermiso('*')
   const mostrarBiCosteo = hasPermiso('bi:costeo:ver') || hasPermiso('*')
   const mostrarGastosIt = hasPermiso('it:gastos:ver') || hasPermiso('*')
   const mostrarItTecnico = mostrarArqIT || mostrarEticket

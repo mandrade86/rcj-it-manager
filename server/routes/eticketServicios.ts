@@ -1,13 +1,31 @@
 import { Router } from 'express'
 
 import { ServicioEticket } from '../db/models/ServicioEticket.js'
-import { requirePermiso } from '../middleware/requireAuth.js'
 import { isEticketConfigured } from '../utils/eticketClient.js'
 import { sincronizarServiciosEticket } from '../utils/eticketSync.js'
 
 export const eticketServiciosRouter = Router()
 
-const canView = requirePermiso('eticket:servicios:ver')
+/** Admin (*), permiso dedicado, o quien ya ve proyectos. */
+function canViewEticket(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
+  const user = req.user
+  if (!user) {
+    res.status(401).json({ error: 'No autorizado' })
+    return
+  }
+  const ok =
+    user.permisos.includes('*') ||
+    user.permisos.includes('eticket:servicios:ver') ||
+    user.permisos.includes('proyectos:ver') ||
+    user.permisos.includes('proyectos:ver-todos')
+  if (!ok) {
+    res.status(403).json({ error: 'Sin permiso para servicios eTicket' })
+    return
+  }
+  next()
+}
+
+const canView = canViewEticket
 
 eticketServiciosRouter.get('/status', canView, (_req, res) => {
   res.json({

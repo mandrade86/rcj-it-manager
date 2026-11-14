@@ -55,6 +55,7 @@ export const RUTA_PERMISOS: Record<string, string | string[]> = {
   '/admin/usuarios': 'usuarios:ver',
   '/admin/roles': 'roles:ver',
   '/it/arquitectura': 'it:arquitectura:ver',
+  '/it/eticket-servicios': ['eticket:servicios:ver', 'proyectos:ver', 'proyectos:ver-todos'],
   '/it/gastos-control': 'it:gastos:ver',
   '/it/gastos-dashboard': 'it:gastos:ver',
   '/it/gastos-presupuesto': 'it:gastos:ver',
