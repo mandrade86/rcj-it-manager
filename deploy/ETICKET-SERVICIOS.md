@@ -13,8 +13,9 @@ Portal (poll o botón) GET .../services?status=pending
 ## Variables en `.env` del portal
 
 ```env
-# URL base del API eTicket (sin barra final)
-ETICKET_API_BASE_URL=https://eticket.rcjcorp.hn
+# URL base del API eTicket (sin barra final). Dominio oficial: eticket.rcjcorporacion.com
+# Si el API responde 404 en la raíz, prueba .../api al final de la URL.
+ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com
 # Misma clave que IT_MANAGER_API_KEY en eTicket
 ETICKET_API_KEY=genera-una-clave-larga
 
@@ -22,6 +23,9 @@ ETICKET_API_KEY=genera-una-clave-larga
 ETICKET_SYNC_CRON=false
 ETICKET_SYNC_INTERVAL_MINUTES=15
 ```
+
+Deben estar en el `.env` del **servidor** (`D:\rcj-it-manager\.env`), no solo en tu PC.
+Tras cambiar: `Restart-Service RCJITManager`.
 
 ## Permiso
 
