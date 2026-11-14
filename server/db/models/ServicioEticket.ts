@@ -43,6 +43,11 @@ const ServicioEticketSchema = new Schema(
     },
     importedAt: { type: Date },
     importedBy: { type: String, default: 'it-rcj-manager' },
+    /** Proyecto del Plan IT al que se vincula este servicio/ticket. */
+    proyecto_id: { type: String, ref: 'Proyecto', default: null, index: true },
+    proyecto_nombre: { type: String, default: '' },
+    asignado_at: { type: Date },
+    asignado_por: { type: String, default: '' },
     raw: { type: Schema.Types.Mixed },
   },
   { timestamps: true },

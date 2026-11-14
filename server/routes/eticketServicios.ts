@@ -1,5 +1,6 @@
 import { Router } from 'express'
 
+import { Proyecto } from '../db/models/Proyecto.js'
 import { ServicioEticket } from '../db/models/ServicioEticket.js'
 import {
   diagnosticarEticket,
@@ -58,6 +59,8 @@ eticketServiciosRouter.get('/diag', canView, async (_req, res) => {
 eticketServiciosRouter.get('/', canView, async (req, res) => {
   try {
     const q = String(req.query.q ?? '').trim()
+    const proyectoId = String(req.query.proyecto_id ?? '').trim()
+    const sinProyecto = req.query.sin_proyecto === '1' || req.query.sin_proyecto === 'true'
     const filter: Record<string, unknown> = {}
     if (q) {
       const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -68,6 +71,14 @@ eticketServiciosRouter.get('/', canView, async (req, res) => {
         { system: new RegExp(esc, 'i') },
         { externalId: q },
       ]
+    }
+    if (sinProyecto) {
+      filter.$and = [
+        ...(Array.isArray(filter.$and) ? (filter.$and as unknown[]) : []),
+        { $or: [{ proyecto_id: null }, { proyecto_id: '' }, { proyecto_id: { $exists: false } }] },
+      ]
+    } else if (proyectoId) {
+      filter.proyecto_id = proyectoId
     }
     const items = await ServicioEticket.find(filter)
       .sort({ importedAt: -1, createdAt: -1 })
@@ -86,7 +97,7 @@ eticketServiciosRouter.post('/sync', canView, async (_req, res) => {
     if (!isEticketConfigured()) {
       res.status(503).json({
         error:
-          'eTicket no configurado. En el servidor D:\\rcj-it-manager\\.env define ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com y ETICKET_API_KEY, luego Restart-Service RCJITManager.',
+          'eTicket no configurado. En el servidor define ETICKET_API_BASE_URL=https://nitnbof6w9.execute-api.us-east-1.amazonaws.com/prod y ETICKET_API_KEY, luego reinicia el portal.',
       })
       return
     }
@@ -96,6 +107,59 @@ eticketServiciosRouter.post('/sync', canView, async (_req, res) => {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[eticket-sync] POST /sync falló:', msg)
     res.status(502).json({ error: msg, detalle: msg })
+  }
+})
+
+eticketServiciosRouter.patch('/:id/proyecto', canView, async (req, res) => {
+  try {
+    const id = req.params.id
+    const rawId = req.body?.proyecto_id
+    const proyectoId =
+      rawId === null || rawId === undefined || rawId === ''
+        ? null
+        : String(rawId).trim()
+
+    let doc = null as { _id: unknown } | null
+    if (/^[a-fA-F0-9]{24}$/.test(id)) {
+      doc = (await ServicioEticket.findById(id).select('_id')) as { _id: unknown } | null
+    }
+    if (!doc) {
+      doc = (await ServicioEticket.findOne({
+        $or: [{ externalId: id }, { ticketNumber: id }],
+      }).select('_id')) as { _id: unknown } | null
+    }
+    if (!doc) {
+      res.status(404).json({ error: 'Servicio no encontrado' })
+      return
+    }
+
+    let proyectoNombre = ''
+    if (proyectoId) {
+      const proy = await Proyecto.findById(proyectoId).select('_id nombre').lean()
+      if (!proy) {
+        res.status(400).json({ error: `Proyecto no encontrado: ${proyectoId}` })
+        return
+      }
+      proyectoNombre = String(proy.nombre ?? '')
+    }
+
+    const updated = await ServicioEticket.findByIdAndUpdate(
+      doc._id,
+      {
+        $set: {
+          proyecto_id: proyectoId,
+          proyecto_nombre: proyectoNombre,
+          asignado_at: proyectoId ? new Date() : null,
+          asignado_por: proyectoId ? (req.user?.email || req.user?.nombre || '') : '',
+        },
+      },
+      { new: true },
+    ).lean()
+
+    res.json(updated)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    res.status(500).json({ error: msg, detalle: msg })
   }
 })
 

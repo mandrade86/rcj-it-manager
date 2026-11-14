@@ -13,10 +13,8 @@ Portal (poll o botón) GET .../services?status=pending
 ## Variables en `.env` del portal
 
 ```env
-# URL base del API eTicket (sin barra final). Dominio oficial: eticket.rcjcorporacion.com
-# Si el API responde 404 en la raíz, prueba .../api al final de la URL.
-# Importante: /api al final (sin /api el portal recibe el HTML del frontend)
-ETICKET_API_BASE_URL=https://eticket.rcjcorporacion.com/api
+# URL del API Gateway de eTicket (NO el frontend https://eticket.rcjcorporacion.com ni .../api)
+ETICKET_API_BASE_URL=https://nitnbof6w9.execute-api.us-east-1.amazonaws.com/prod
 # Misma clave que IT_MANAGER_API_KEY en eTicket
 ETICKET_API_KEY=genera-una-clave-larga
 
@@ -39,14 +37,16 @@ Los roles con `*` (admin) ya pasan. Asígnarlo a jefatura IT / PMO en **Admin �
 
 - Lista lo importado en Mongo (`ServicioEticket`)
 - **Sincronizar ahora** → GET pending + upsert + ACK
+- Columna **Proyecto**: asignar / quitar vínculo a un proyecto del Plan IT (se conserva al re-sincronizar)
 
 ## API del portal (JWT)
 
 | Método | Ruta | Uso |
 |---|---|---|
 | GET | `/api/eticket/servicios/status` | ¿Hay URL/key? |
-| GET | `/api/eticket/servicios?q=` | Listado local |
+| GET | `/api/eticket/servicios?q=&proyecto_id=&sin_proyecto=1` | Listado local |
 | GET | `/api/eticket/servicios/:id` | Detalle (_id, externalId o ticketNumber) |
+| PATCH | `/api/eticket/servicios/:id/proyecto` | Body `{ "proyecto_id": "INV-001" }` o `null` |
 | POST | `/api/eticket/servicios/sync` | Importar pendientes desde eTicket |
 
 ## Contrato eTicket (referencia)

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ExternalLink, RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { fetchProyectos } from '@/lib/api/proyectos'
 import { formatDateDMY } from '@/lib/format'
+import type { Proyecto } from '@/types/proyecto'
 
 type Servicio = {
   _id: string
@@ -21,6 +24,8 @@ type Servicio = {
   markedBy?: string
   markedAt?: string
   importedAt?: string
+  proyecto_id?: string | null
+  proyecto_nombre?: string
 }
 
 type SyncResult = {
@@ -33,25 +38,33 @@ type SyncResult = {
   ya_confirmados?: number
   errores?: Array<{ externalId: string; error: string }>
   error?: string
+  detalle?: string
 }
+
+type FiltroProyecto = 'todos' | 'sin' | string
 
 export function EticketServiciosPage() {
   const [items, setItems] = useState<Servicio[]>([])
+  const [proyectos, setProyectos] = useState<Proyecto[]>([])
   const [q, setQ] = useState('')
+  const [filtroProy, setFiltroProy] = useState<FiltroProyecto>('todos')
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [configurado, setConfigurado] = useState<boolean | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
 
-  const load = useCallback(async (term: string) => {
+  const load = useCallback(async (term: string, filtro: FiltroProyecto) => {
     setLoading(true)
     setErr(null)
     try {
-      const url = term.trim()
-        ? `/api/eticket/servicios?q=${encodeURIComponent(term.trim())}`
-        : '/api/eticket/servicios'
-      const res = await fetch(url)
+      const params = new URLSearchParams()
+      if (term.trim()) params.set('q', term.trim())
+      if (filtro === 'sin') params.set('sin_proyecto', '1')
+      else if (filtro !== 'todos') params.set('proyecto_id', filtro)
+      const qs = params.toString()
+      const res = await fetch(`/api/eticket/servicios${qs ? `?${qs}` : ''}`)
       if (!res.ok) throw new Error('No se pudo cargar los servicios')
       const data = (await res.json()) as { items: Servicio[] }
       setItems(data.items ?? [])
@@ -64,7 +77,7 @@ export function EticketServiciosPage() {
   }, [])
 
   useEffect(() => {
-    void load('')
+    void load('', 'todos')
     void fetch('/api/eticket/servicios/status')
       .then(async (r) => {
         if (!r.ok) return
@@ -72,6 +85,9 @@ export function EticketServiciosPage() {
         setConfigurado(Boolean(d.configurado))
       })
       .catch(() => setConfigurado(null))
+    void fetchProyectos()
+      .then((list) => setProyectos(list))
+      .catch(() => setProyectos([]))
   }, [load])
 
   async function syncNow() {
@@ -87,9 +103,7 @@ export function EticketServiciosPage() {
         /* cuerpo no JSON */
       }
       if (!res.ok) {
-        const detail =
-          (data as { detalle?: string }).detalle || data.error || `Error al sincronizar (HTTP ${res.status})`
-        throw new Error(detail)
+        throw new Error(data.detalle || data.error || `Error al sincronizar (HTTP ${res.status})`)
       }
       const parts = [
         `Consultados: ${data.consultados ?? 0}`,
@@ -99,7 +113,7 @@ export function EticketServiciosPage() {
       ]
       if (data.errores?.length) parts.push(`errores: ${data.errores.length}`)
       setSyncMsg(parts.join(' · '))
-      await load(q)
+      await load(q, filtroProy)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al sincronizar')
     } finally {
@@ -107,14 +121,37 @@ export function EticketServiciosPage() {
     }
   }
 
+  async function asignarProyecto(servicioId: string, proyectoId: string) {
+    setSavingId(servicioId)
+    setErr(null)
+    try {
+      const body = { proyecto_id: proyectoId === '' ? null : proyectoId }
+      const res = await fetch(`/api/eticket/servicios/${encodeURIComponent(servicioId)}/proyecto`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = (await res.json().catch(() => ({}))) as Servicio & { error?: string }
+      if (!res.ok) throw new Error(data.error || 'No se pudo asignar el proyecto')
+      setItems((prev) => prev.map((s) => (s._id === servicioId ? { ...s, ...data } : s)))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error al asignar')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const proyectosOrdenados = [...proyectos].sort((a, b) =>
+    String(a._id).localeCompare(String(b._id), 'es'),
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-[var(--navy)]">Servicios eTicket (desarrollo)</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Tickets de desarrollo marcados en eTicket e importados aquí como servicios.
-            Clave única: <code className="text-xs">externalId</code>.
+            Tickets importados desde eTicket. Asígnalos a un proyecto del Plan IT.
           </p>
           {configurado === false && (
             <p className="mt-2 text-sm text-amber-700">
@@ -124,18 +161,35 @@ export function EticketServiciosPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <form
-            className="flex gap-2"
+            className="flex flex-wrap gap-2"
             onSubmit={(e) => {
               e.preventDefault()
-              void load(q)
+              void load(q, filtroProy)
             }}
           >
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Ticket, título, sistema…"
-              className="h-9 w-56"
+              className="h-9 w-48"
             />
+            <select
+              className="h-9 rounded-md border border-input bg-white px-2 text-sm"
+              value={filtroProy}
+              onChange={(e) => {
+                const v = e.target.value as FiltroProyecto
+                setFiltroProy(v)
+                void load(q, v)
+              }}
+            >
+              <option value="todos">Todos los proyectos</option>
+              <option value="sin">Sin proyecto</option>
+              {proyectosOrdenados.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p._id} — {p.nombre}
+                </option>
+              ))}
+            </select>
             <Button type="submit" variant="outline" className="h-9">
               Buscar
             </Button>
@@ -158,7 +212,7 @@ export function EticketServiciosPage() {
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border bg-white">
-          <table className="w-full min-w-[880px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-left text-sm">
             <thead className="border-b bg-[var(--gray-lt)] text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Ticket</th>
@@ -166,6 +220,7 @@ export function EticketServiciosPage() {
                 <th className="px-3 py-2 font-medium">Sistema</th>
                 <th className="px-3 py-2 font-medium">Prioridad</th>
                 <th className="px-3 py-2 font-medium">Solicitante</th>
+                <th className="px-3 py-2 font-medium">Proyecto</th>
                 <th className="px-3 py-2 font-medium">Importado</th>
                 <th className="px-3 py-2 font-medium">eTicket</th>
               </tr>
@@ -173,14 +228,16 @@ export function EticketServiciosPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                    No hay servicios importados. Marca tickets en eTicket y pulsa Sincronizar.
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                    No hay servicios. Marca tickets en eTicket y pulsa Sincronizar.
                   </td>
                 </tr>
               ) : (
                 items.map((s) => (
                   <tr key={s._id} className="border-b last:border-0 hover:bg-[var(--gray-bg)]">
-                    <td className="px-3 py-2 font-mono text-xs">{s.ticketNumber || s.externalId.slice(-8)}</td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {s.ticketNumber || s.externalId.slice(-8)}
+                    </td>
                     <td className="px-3 py-2">
                       <div className="font-medium text-[var(--text)]">{s.title}</div>
                       <div className="text-xs text-muted-foreground">{s.status}</div>
@@ -190,6 +247,29 @@ export function EticketServiciosPage() {
                     <td className="px-3 py-2">
                       <div>{s.requesterName || '—'}</div>
                       <div className="text-xs text-muted-foreground">{s.requesterEmail}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <select
+                        className="h-8 max-w-[220px] rounded-md border border-input bg-white px-1.5 text-xs disabled:opacity-60"
+                        value={s.proyecto_id || ''}
+                        disabled={savingId === s._id}
+                        onChange={(e) => void asignarProyecto(s._id, e.target.value)}
+                      >
+                        <option value="">— Sin proyecto —</option>
+                        {proyectosOrdenados.map((p) => (
+                          <option key={p._id} value={p._id}>
+                            {p._id} — {p.nombre}
+                          </option>
+                        ))}
+                      </select>
+                      {s.proyecto_id ? (
+                        <Link
+                          to={`/proyectos/${encodeURIComponent(s.proyecto_id)}`}
+                          className="mt-1 block text-xs text-[var(--navy)] underline-offset-2 hover:underline"
+                        >
+                          Abrir {s.proyecto_id}
+                        </Link>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {s.importedAt ? formatDateDMY(s.importedAt) : '—'}
