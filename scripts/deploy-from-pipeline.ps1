@@ -8,45 +8,78 @@
     .\scripts\deploy-from-pipeline.ps1 -Env Prod
 
   Variables de entorno opcionales (pipeline):
-    RCJ_DEPLOY_ROOT   → ruta del repo (default D:\rcj-it-manager)
-    RCJ_SERVICE_NAME  → servicio Windows (default RCJITManager)
-    RCJ_GIT_BRANCH    → rama a desplegar (default main)
+    RCJ_DEPLOY_ROOT     → ruta del repo (default D:\rcj-it-manager o C:\apps\rcj-it-manager)
+    RCJ_SERVICE_NAME    → servicio Windows (default RCJITManager)
+    RCJ_GIT_BRANCH      → rama a desplegar (default main)
+    RCJ_GIT_REMOTE      → URL del repo Azure
+    SYSTEM_ACCESSTOKEN  → token OAuth del pipeline (clone/fetch)
 #>
 param(
   [ValidateSet('Dev', 'Prod')]
   [string]$Env = 'Dev',
-  [string]$Root = $(if ($env:RCJ_DEPLOY_ROOT) { $env:RCJ_DEPLOY_ROOT } else { 'D:\rcj-it-manager' }),
+  [string]$Root = '',
   [string]$ServiceName = $(if ($env:RCJ_SERVICE_NAME) { $env:RCJ_SERVICE_NAME } else { 'RCJITManager' }),
   [string]$Branch = $(if ($env:RCJ_GIT_BRANCH) { $env:RCJ_GIT_BRANCH } else { 'main' })
 )
 
 $ErrorActionPreference = 'Stop'
 
+function Resolve-DeployRoot {
+  if ($env:RCJ_DEPLOY_ROOT) { return $env:RCJ_DEPLOY_ROOT }
+  if ($Root) { return $Root }
+  if (Test-Path -LiteralPath 'D:\') { return 'D:\rcj-it-manager' }
+  return 'C:\apps\rcj-it-manager'
+}
+
+function Invoke-GitAuth {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+  if ($env:SYSTEM_ACCESSTOKEN) {
+    $header = "AUTHORIZATION: bearer $($env:SYSTEM_ACCESSTOKEN)"
+    & git -c "http.extraheader=$header" @GitArgs
+  } else {
+    & git @GitArgs
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($GitArgs -join ' ') falló (exit $LASTEXITCODE)"
+  }
+}
+
+$Root = Resolve-DeployRoot
+$remote = if ($env:RCJ_GIT_REMOTE) {
+  $env:RCJ_GIT_REMOTE
+} else {
+  'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
+}
+
 Write-Host "=== Deploy $Env ===" -ForegroundColor Cyan
 Write-Host "Root: $Root"
 Write-Host "Branch: $Branch"
 Write-Host "Service: $ServiceName"
+Write-Host "Remote: $remote"
 
 if (-not (Test-Path -LiteralPath $Root)) {
-  throw "No existe $Root. Clona el repo ahí antes del primer pipeline."
+  $parent = Split-Path -Parent $Root
+  if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+  }
+  Write-Host "Clonando repo en $Root…" -ForegroundColor Cyan
+  Invoke-GitAuth clone --branch $Branch --single-branch $remote $Root
 }
 
 Set-Location -LiteralPath $Root
 
-# Asegurar remoto Azure DevOps si existe RCJ_GIT_REMOTE
-if ($env:RCJ_GIT_REMOTE) {
-  $remotes = git remote
-  if ($remotes -notcontains 'origin') {
-    git remote add origin $env:RCJ_GIT_REMOTE
-  } else {
-    git remote set-url origin $env:RCJ_GIT_REMOTE
-  }
+$remotes = @(git remote 2>$null)
+if ($remotes -notcontains 'origin') {
+  git remote add origin $remote
+} else {
+  git remote set-url origin $remote
 }
 
 Write-Host 'git fetch / reset…' -ForegroundColor Cyan
-git fetch origin
+Invoke-GitAuth fetch origin
 git checkout $Branch
-git reset --hard "origin/$Branch"
+if ($LASTEXITCODE -ne 0) { throw "git checkout $Branch falló" }
+Invoke-GitAuth reset --hard "origin/$Branch"
 
 Write-Host 'npm install (root)…' -ForegroundColor Cyan
 npm install --prefer-offline --no-audit --no-fund
@@ -61,15 +94,34 @@ npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw 'client build falló' }
 Pop-Location
 
-# No tocar .env — debe existir en el servidor
-if (-not (Test-Path -LiteralPath (Join-Path $Root '.env'))) {
-  Write-Host "AVISO: no hay .env en $Root — créalo antes (desde .env.development / .env.production)." -ForegroundColor Yellow
+$envFile = Join-Path $Root '.env'
+if (-not (Test-Path -LiteralPath $envFile)) {
+  $seed = if ($Env -eq 'Dev') {
+    @(
+      (Join-Path $Root '.env.development'),
+      (Join-Path $Root '.env.development.example'),
+      (Join-Path $Root '.env.example')
+    )
+  } else {
+    @(
+      (Join-Path $Root '.env.production'),
+      (Join-Path $Root '.env.production.example'),
+      (Join-Path $Root '.env.example')
+    )
+  }
+  $from = $seed | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if ($from) {
+    Copy-Item -LiteralPath $from -Destination $envFile
+    Write-Host "Se creó .env desde $(Split-Path $from -Leaf). Revisa secretos en el servidor." -ForegroundColor Yellow
+  } else {
+    Write-Host "AVISO: no hay .env en $Root — créalo antes de usar la app." -ForegroundColor Yellow
+  }
 }
 
 Write-Host "Reiniciando servicio $ServiceName…" -ForegroundColor Cyan
 $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $svc) {
-  throw "Servicio Windows '$ServiceName' no encontrado. Instálalo con NSSM/pm2 antes."
+  throw "Servicio Windows '$ServiceName' no encontrado en $Root. Instálalo con NSSM apuntando a esta carpeta, luego re-ejecuta el pipeline."
 }
 Restart-Service -Name $ServiceName -Force
 Start-Sleep -Seconds 3

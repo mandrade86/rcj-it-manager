@@ -71,6 +71,7 @@ stages:
                 - checkout: self
                   fetchDepth: 1
                   clean: false
+                  persistCredentials: true
 
                 - task: PowerShell@2
                   displayName: Deploy Dev (git + build + restart)
@@ -81,6 +82,8 @@ stages:
                     pwsh: false
                     workingDirectory: '$(Build.SourcesDirectory)'
                   env:
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                    RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
                     RCJ_DEPLOY_ROOT: 'D:\rcj-it-manager'
                     RCJ_SERVICE_NAME: 'RCJITManager'
                     RCJ_GIT_BRANCH: 'main'
@@ -104,6 +107,7 @@ stages:
                 - checkout: self
                   fetchDepth: 1
                   clean: false
+                  persistCredentials: true
 
                 - task: PowerShell@2
                   displayName: Deploy Prod (git + build + restart)
@@ -114,6 +118,8 @@ stages:
                     pwsh: false
                     workingDirectory: '$(Build.SourcesDirectory)'
                   env:
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                    RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
                     RCJ_DEPLOY_ROOT: 'D:\rcj-it-manager'
                     RCJ_SERVICE_NAME: 'RCJITManager'
                     RCJ_GIT_BRANCH: 'main'

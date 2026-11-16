@@ -73,14 +73,10 @@ cd C:\azagent
 
 Si el pipeline dice “pool not authorized”, al primer run autoriza el pool en el diálogo de Azure DevOps.
 
-4. En el servidor ya debe existir el clone:
+4. El pipeline **clona solo** en `D:\rcj-it-manager` si no existe (si no hay `D:\`, usa `C:\apps\rcj-it-manager`).  
+   Después debes tener el servicio Windows y el `.env` (el script puede sembrar `.env` desde el example la primera vez).
 
-```powershell
-git clone https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER D:\rcj-it-manager
-# .env ya configurado (no lo genera el pipeline)
-```
-
-5. Node 22+, Git, servicio `RCJITManager` (NSSM) corriendo.
+5. Node 22+, Git, servicio `RCJITManager` (NSSM) apuntando a esa carpeta.
 6. La cuenta del agente debe poder reiniciar el servicio, p. ej. ejecutar el agente como **Local System** o darle derecho a `RCJITManager` (`sc.exe sdset` / grupo Administrators).
 
 ---
