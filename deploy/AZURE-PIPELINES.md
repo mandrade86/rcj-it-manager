@@ -20,17 +20,16 @@ Hosts típicos:
 
 ## 1. Crear el proyecto y el repo en Azure DevOps
 
-1. Entra a [https://dev.azure.com](https://dev.azure.com) → New project → **RCJ IT Manager**.
-2. **Repos** → Import repository (desde GitHub `mandrade86/rcj-it-manager`)  
-   **o** en tu PC:
+Proyecto: [RCJ-IT-MANAGER](https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER)
+
+Remote ya configurado en este clone:
 
 ```powershell
-cd D:\rcj-it-manager   # o tu clone
-git remote add azure https://dev.azure.com/TU_ORG/RCJ%20IT%20Manager/_git/rcj-it-manager
+git remote add azure https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER
 git push -u azure main
 ```
 
-3. Deja GitHub como espejo opcional (`origin`) o cambia `origin` a Azure.
+GitHub queda como `origin` (espejo opcional); Azure como `azure`.
 
 ---
 
@@ -65,7 +64,7 @@ En cada servidor (PowerShell Admin):
 # Ejemplo
 cd C:\azagent
 .\config.cmd
-# URL: https://dev.azure.com/TU_ORG
+# URL: https://dev.azure.com/RCJCorporation
 # Auth: PAT con Agent Pools (read, manage)
 # Pool: RCJ-Windows-Dev  (o Prod)
 # Agent name: rcj-dev-01
@@ -78,7 +77,7 @@ cd C:\azagent
 4. En el servidor ya debe existir el clone:
 
 ```powershell
-git clone https://dev.azure.com/TU_ORG/RCJ%20IT%20Manager/_git/rcj-it-manager D:\rcj-it-manager
+git clone https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER D:\rcj-it-manager
 # .env ya configurado (no lo genera el pipeline)
 ```
 
