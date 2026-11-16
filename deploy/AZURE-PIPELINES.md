@@ -94,8 +94,10 @@ git clone https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGE
 Flujo:
 
 ```text
-push main → Build (ubuntu) → DeployDev (auto) → [espera aprobación] → DeployProd
+push main → Build (agente Default) → DeployDev (auto) → [espera aprobación] → DeployProd
 ```
+
+> No usa agentes Microsoft hosted (`ubuntu-latest`): la org no necesita comprar paralelismo hosted.
 
 Cuando termine Dev, Azure pide **Review** en Prod; el admin aprueba o rechaza.
 

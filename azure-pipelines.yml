@@ -27,14 +27,14 @@ variables:
   agentPoolProd: 'Default'
 
 stages:
-  # ── Build (verificación en agente Microsoft) ───────────────────────────────
+  # ── Build (mismo agente self-hosted; evita paralelismo Microsoft hosted) ───
   - stage: Build
     displayName: Build
     jobs:
       - job: Verify
         displayName: Install + build (verificación)
         pool:
-          vmImage: 'ubuntu-latest'
+          name: $(agentPoolDev)
         steps:
           - checkout: self
             fetchDepth: 1
@@ -44,10 +44,13 @@ stages:
               versionSpec: $(nodeVersion)
             displayName: Node.js
 
-          - script: |
+          - powershell: |
               npm install --no-audit --no-fund
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               npm install --prefix client --no-audit --no-fund
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               npm run build
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             displayName: npm install + build client
 
   # ── Desarrollo (automático) ────────────────────────────────────────────────
