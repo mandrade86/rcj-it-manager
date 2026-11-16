@@ -70,8 +70,23 @@ PMO_DIGEST_INTERVAL_HOURS=24
 APP_PUBLIC_URL=https://portal.rcjcorp.hn
 ```
 
-Si Web Chat llega a Node con `auth=false`, IIS/ARR está quitando `Authorization`.
-Usa el bypass HTTPS (`deploy/enable-pmo-bot-https.ps1`) — detalles en [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
+### Host del bot (recomendado)
+
+Messaging endpoint oficial:
+
+```text
+https://bot.rcjcorporacion.com/api/pmo/messages
+```
+
+En el servidor (DNS ya apuntando + cert `*.rcjcorporacion.com` o SAN):
+
+```powershell
+cd D:\rcj-it-manager\deploy
+.\setup-bot-hostname.ps1
+# Si Authorization falla: .\fix-iis-pmo-auth.ps1 -SiteName "rcj-it-manager" -PhysicalPath "D:\rcj-it-manager"
+```
+
+Si Web Chat llega con `auth=false`, ver [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
 
 ## 1. Crear el bot en Azure (plan Free F0)
 
@@ -84,7 +99,7 @@ Usa el bypass HTTPS (`deploy/enable-pmo-bot-https.ps1`) — detalles en [`PMO-II
    - **Pricing tier: Free F0** (no Standard S1).  
    - Type of App: Multi Tenant o Single Tenant (igual que el registro).  
    - Creation type: **Use existing app registration** → pega el App ID.  
-   - Messaging endpoint: `https://portal.rcjcorp.hn/api/pmo/messages`  
+   - Messaging endpoint: `https://bot.rcjcorporacion.com/api/pmo/messages`  
    - Channels → **Microsoft Teams** → Enable.
 5. En el servidor Windows:
 
@@ -167,7 +182,7 @@ iisreset
 Comprueba desde fuera:
 
 ```powershell
-curl.exe -s https://portal.rcjcorp.hn/api/pmo/bot-status
+curl.exe -sk https://bot.rcjcorporacion.com/api/pmo/bot-status
 # {"ok":true,"bot_configurado":true,...}
 ```
 
