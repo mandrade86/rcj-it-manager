@@ -1,14 +1,14 @@
-# bot.rcjcorporacion.com — Messaging endpoint del PMO Personal
+# bot.rcjcorp.hn — Messaging endpoint del PMO Personal
 
 Azure / Teams deben pegar aquí (puerto **443**, sin `:3443`):
 
 ```text
-https://bot.rcjcorporacion.com/api/pmo/messages
+https://bot.rcjcorp.hn/api/pmo/messages
 ```
 
 ## 1. DNS
 
-Registro **A** (o CNAME) `bot.rcjcorporacion.com` → misma IP pública que atiende el portal.
+Registro **A** (o CNAME) `bot.rcjcorp.hn` → misma IP pública que atiende el portal.
 
 ## 2. IIS (servidor)
 
@@ -26,7 +26,7 @@ Eso agrega el binding HTTPS SNI en el sitio `rcj-it-manager` y reutiliza el reve
 Configuration → Messaging endpoint:
 
 ```text
-https://bot.rcjcorporacion.com/api/pmo/messages
+https://bot.rcjcorp.hn/api/pmo/messages
 ```
 
 **Apply** → Test in Web Chat → `hola`.
@@ -34,8 +34,8 @@ https://bot.rcjcorporacion.com/api/pmo/messages
 ## 4. Comprobar
 
 ```powershell
-curl.exe -sk https://bot.rcjcorporacion.com/api/pmo/bot-status
-curl.exe -sk -H "Authorization: Bearer TEST" https://bot.rcjcorporacion.com/api/pmo/headers-echo
+curl.exe -sk https://bot.rcjcorp.hn/api/pmo/bot-status
+curl.exe -sk -H "Authorization: Bearer TEST" https://bot.rcjcorp.hn/api/pmo/headers-echo
 Get-Content D:\rcj-it-manager\logs\servicio.log -Wait -Tail 5
 ```
 
@@ -43,4 +43,4 @@ Get-Content D:\rcj-it-manager\logs\servicio.log -Wait -Tail 5
 
 ## 5. Teams app
 
-Tras Web Chat OK, regenera el ZIP del manifest (ya incluye `bot.rcjcorporacion.com` en `validDomains`) y súbelo a Teams.
+Tras Web Chat OK, regenera el ZIP del manifest (incluye `bot.rcjcorp.hn` en `validDomains`) y súbelo a Teams.

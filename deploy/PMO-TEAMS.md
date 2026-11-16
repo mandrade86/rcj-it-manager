@@ -75,10 +75,10 @@ APP_PUBLIC_URL=https://portal.rcjcorp.hn
 Messaging endpoint oficial:
 
 ```text
-https://bot.rcjcorporacion.com/api/pmo/messages
+https://bot.rcjcorp.hn/api/pmo/messages
 ```
 
-En el servidor (DNS ya apuntando + cert `*.rcjcorporacion.com` o SAN):
+En el servidor (DNS ya apuntando + cert `*.rcjcorp.hn` o SAN):
 
 ```powershell
 cd D:\rcj-it-manager\deploy
@@ -99,7 +99,7 @@ Si Web Chat llega con `auth=false`, ver [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
    - **Pricing tier: Free F0** (no Standard S1).  
    - Type of App: Multi Tenant o Single Tenant (igual que el registro).  
    - Creation type: **Use existing app registration** → pega el App ID.  
-   - Messaging endpoint: `https://bot.rcjcorporacion.com/api/pmo/messages`  
+   - Messaging endpoint: `https://bot.rcjcorp.hn/api/pmo/messages`  
    - Channels → **Microsoft Teams** → Enable.
 5. En el servidor Windows:
 
@@ -182,7 +182,7 @@ iisreset
 Comprueba desde fuera:
 
 ```powershell
-curl.exe -sk https://bot.rcjcorporacion.com/api/pmo/bot-status
+curl.exe -sk https://bot.rcjcorp.hn/api/pmo/bot-status
 # {"ok":true,"bot_configurado":true,...}
 ```
 

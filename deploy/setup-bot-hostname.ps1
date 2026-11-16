@@ -1,17 +1,17 @@
 ﻿#Requires -RunAsAdministrator
 <#
-  Configura bot.rcjcorporacion.com en IIS (mismo sitio que el portal → Node :3001).
-  Requisito: DNS A/CNAME de bot.rcjcorporacion.com → IP pública del servidor.
-  Certificado: idealmente *.rcjcorporacion.com (o un cert con ese SAN).
+  Configura bot.rcjcorp.hn en IIS (mismo sitio que el portal → Node :3001).
+  Requisito: DNS A/CNAME de bot.rcjcorp.hn → IP pública del servidor.
+  Certificado: idealmente *.rcjcorp.hn (o un cert con ese SAN).
 
   Uso:
     cd D:\rcj-it-manager\deploy
     .\setup-bot-hostname.ps1
-    .\setup-bot-hostname.ps1 -SiteName "rcj-it-manager" -HostName "bot.rcjcorporacion.com"
+    .\setup-bot-hostname.ps1 -SiteName "rcj-it-manager" -HostName "bot.rcjcorp.hn"
 #>
 param(
   [string]$SiteName = 'rcj-it-manager',
-  [string]$HostName = 'bot.rcjcorporacion.com',
+  [string]$HostName = 'bot.rcjcorp.hn',
   [int]$Port = 443
 )
 
@@ -34,15 +34,15 @@ $existing = Get-WebBinding -Name $SiteName -Protocol https -ErrorAction Silently
 if ($existing) {
   Write-Host '  Binding ya existe' -ForegroundColor Green
 } else {
-  # Cert: preferir *.rcjcorporacion.com o el del hostname
+  # Cert: preferir *.rcjcorp.hn o el del hostname
   $cert = Get-ChildItem Cert:\LocalMachine\My | Where-Object {
     ($_.DnsNameList | ForEach-Object { $_.Unicode }) -contains $HostName -or
-    ($_.DnsNameList | ForEach-Object { $_.Unicode }) -contains '*.rcjcorporacion.com' -or
-    $_.Subject -match 'rcjcorporacion\.com'
+    ($_.DnsNameList | ForEach-Object { $_.Unicode }) -contains '*.rcjcorp.hn' -or
+    $_.Subject -match 'rcjcorp\.hn'
   } | Sort-Object NotAfter -Descending | Select-Object -First 1
 
   if (-not $cert) {
-    throw "No hay certificado en LocalMachine\My para $HostName o *.rcjcorporacion.com. Instala el cert y reintenta."
+    throw "No hay certificado en LocalMachine\My para $HostName o *.rcjcorp.hn. Instala el cert y reintenta."
   }
   Write-Host "  Cert: $($cert.Subject) thumb=$($cert.Thumbprint)"
 

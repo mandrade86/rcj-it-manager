@@ -9,8 +9,8 @@ const DEFAULT_CORS_ORIGINS = [
   'https://portal.azure.com',
   'https://webchat.botframework.com',
   'https://cdn.botframework.com',
-  'https://bot.rcjcorporacion.com',
-  'http://bot.rcjcorporacion.com',
+  'https://bot.rcjcorp.hn',
+  'http://bot.rcjcorp.hn',
 ]
 
 /** Orígenes permitidos para CORS (incluye APP_PUBLIC_URL y variante http/https). */
