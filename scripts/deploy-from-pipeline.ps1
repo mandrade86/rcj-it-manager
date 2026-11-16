@@ -1,7 +1,7 @@
-﻿#Requires -RunAsAdministrator
-<#
+﻿<#
   Deploy usado por Azure Pipelines en el agente Windows (self-hosted).
   NO sobrescribe .env (secretos quedan en el servidor).
+  El agente debe poder reiniciar RCJITManager (ideal: servicio del agente como Local System).
 
   Uso en el agente:
     .\scripts\deploy-from-pipeline.ps1 -Env Dev
