@@ -1,0 +1,111 @@
+# RCJ IT Manager — Azure Pipelines
+#
+# Dev:  automático en cada push a main
+# Prod: solo tras aprobación en el environment "production"
+#
+# Setup: ver deploy/AZURE-PIPELINES.md
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - '**/*.md'
+      - 'deploy/teams-pmo-personal/**'
+      - 'docs/**'
+
+pr: none
+
+variables:
+  nodeVersion: '22.x'
+
+stages:
+  # ── Build (opcional en agente Microsoft; el deploy real hace build en el servidor) ──
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: Verify
+        displayName: Install + build (verificación)
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+            displayName: Node.js
+
+          - script: |
+              npm install --no-audit --no-fund
+              npm install --prefix client --no-audit --no-fund
+              npm run build
+            displayName: npm install + build client
+
+  # ── Desarrollo (automático) ────────────────────────────────────────────────
+  - stage: DeployDev
+    displayName: Deploy desarrollo
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployDevJob
+        displayName: Deploy a desarrollo
+        environment: development
+        pool:
+          name: RCJ-Windows-Dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  fetchDepth: 1
+                  clean: false
+
+                - task: PowerShell@2
+                  displayName: Deploy Dev (git + build + restart)
+                  inputs:
+                    targetType: filePath
+                    filePath: '$(Build.SourcesDirectory)/scripts/deploy-from-pipeline.ps1'
+                    arguments: '-Env Dev'
+                    pwsh: false
+                    workingDirectory: '$(Build.SourcesDirectory)'
+                  env:
+                    RCJ_DEPLOY_ROOT: 'D:\rcj-it-manager'
+                    RCJ_SERVICE_NAME: 'RCJITManager'
+                    RCJ_GIT_BRANCH: 'main'
+
+  # ── Producción (requiere aprobación del environment "production") ──────────
+  - stage: DeployProd
+    displayName: Deploy producción
+    dependsOn: DeployDev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployProdJob
+        displayName: Deploy a producción
+        # En Azure DevOps → Environments → production → Approvals and checks
+        # agrega Approvals con el/los administradores.
+        environment: production
+        pool:
+          name: RCJ-Windows-Prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  fetchDepth: 1
+                  clean: false
+
+                - task: PowerShell@2
+                  displayName: Deploy Prod (git + build + restart)
+                  inputs:
+                    targetType: filePath
+                    filePath: '$(Build.SourcesDirectory)/scripts/deploy-from-pipeline.ps1'
+                    arguments: '-Env Prod'
+                    pwsh: false
+                    workingDirectory: '$(Build.SourcesDirectory)'
+                  env:
+                    RCJ_DEPLOY_ROOT: 'D:\rcj-it-manager'
+                    RCJ_SERVICE_NAME: 'RCJITManager'
+                    RCJ_GIT_BRANCH: 'main'
