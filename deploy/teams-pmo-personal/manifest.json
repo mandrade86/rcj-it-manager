@@ -43,5 +43,5 @@
     }
   ],
   "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": ["portal.rcjcorp.hn", "bot.rcjcorp.hn"]
+  "validDomains": ["portal.rcjcorp.hn", "bot.rcjcorp.hn", "dev-bot.rcjcorp.hn"]
 }

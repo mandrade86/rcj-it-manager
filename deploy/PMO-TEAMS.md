@@ -72,21 +72,21 @@ APP_PUBLIC_URL=https://portal.rcjcorp.hn
 
 ### Host del bot (recomendado)
 
-Messaging endpoint oficial:
+| Ambiente | Messaging endpoint |
+|---|---|
+| Producción | `https://bot.rcjcorp.hn/api/pmo/messages` |
+| Desarrollo | `https://dev-bot.rcjcorp.hn/api/pmo/messages` |
 
-```text
-https://bot.rcjcorp.hn/api/pmo/messages
-```
-
-En el servidor (DNS ya apuntando + cert `*.rcjcorp.hn` o SAN):
+En el servidor (DNS + cert `*.rcjcorp.hn` o SAN):
 
 ```powershell
 cd D:\rcj-it-manager\deploy
-.\setup-bot-hostname.ps1
+.\setup-bot-hostname.ps1                              # prod → bot.rcjcorp.hn
+.\setup-bot-hostname.ps1 -HostName "dev-bot.rcjcorp.hn" # desarrollo
 # Si Authorization falla: .\fix-iis-pmo-auth.ps1 -SiteName "rcj-it-manager" -PhysicalPath "D:\rcj-it-manager"
 ```
 
-Si Web Chat llega con `auth=false`, ver [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
+Detalle: [`PMO-BOT-HOSTNAME.md`](PMO-BOT-HOSTNAME.md). Si Web Chat llega con `auth=false`, ver [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
 
 ## 1. Crear el bot en Azure (plan Free F0)
 
@@ -99,7 +99,7 @@ Si Web Chat llega con `auth=false`, ver [`PMO-IIS-AUTH.md`](PMO-IIS-AUTH.md).
    - **Pricing tier: Free F0** (no Standard S1).  
    - Type of App: Multi Tenant o Single Tenant (igual que el registro).  
    - Creation type: **Use existing app registration** → pega el App ID.  
-   - Messaging endpoint: `https://bot.rcjcorp.hn/api/pmo/messages`  
+   - Messaging endpoint: `https://bot.rcjcorp.hn/api/pmo/messages` (prod) o `https://dev-bot.rcjcorp.hn/api/pmo/messages` (dev)  
    - Channels → **Microsoft Teams** → Enable.
 5. En el servidor Windows:
 

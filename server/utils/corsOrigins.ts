@@ -11,6 +11,8 @@ const DEFAULT_CORS_ORIGINS = [
   'https://cdn.botframework.com',
   'https://bot.rcjcorp.hn',
   'http://bot.rcjcorp.hn',
+  'https://dev-bot.rcjcorp.hn',
+  'http://dev-bot.rcjcorp.hn',
 ]
 
 /** Orígenes permitidos para CORS (incluye APP_PUBLIC_URL y variante http/https). */

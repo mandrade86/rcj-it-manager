@@ -1,13 +1,16 @@
 ﻿#Requires -RunAsAdministrator
 <#
-  Configura bot.rcjcorp.hn en IIS (mismo sitio que el portal → Node :3001).
-  Requisito: DNS A/CNAME de bot.rcjcorp.hn → IP pública del servidor.
-  Certificado: idealmente *.rcjcorp.hn (o un cert con ese SAN).
+  Configura el hostname del bot en IIS (mismo sitio → Node :3001).
+
+  Producción:  bot.rcjcorp.hn
+  Desarrollo:  dev-bot.rcjcorp.hn
+
+  Requisito: DNS A/CNAME → IP del servidor + cert *.rcjcorp.hn (o SAN).
 
   Uso:
     cd D:\rcj-it-manager\deploy
     .\setup-bot-hostname.ps1
-    .\setup-bot-hostname.ps1 -SiteName "rcj-it-manager" -HostName "bot.rcjcorp.hn"
+    .\setup-bot-hostname.ps1 -HostName "dev-bot.rcjcorp.hn"
 #>
 param(
   [string]$SiteName = 'rcj-it-manager',
