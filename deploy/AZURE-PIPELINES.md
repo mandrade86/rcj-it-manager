@@ -49,14 +49,11 @@ Sin este paso, el stage Prod arranca solo (no queremos eso).
 
 ## 3. Agentes self-hosted (Windows)
 
-El pipeline usa pools:
+Por defecto el YAML usa el pool **`Default`** (`agentPoolDev` / `agentPoolProd` en `azure-pipelines.yml`).
 
-- `RCJ-Windows-Dev` → servidor de desarrollo  
-- `RCJ-Windows-Prod` → servidor de producción  
+En el servidor de **desarrollo** (PowerShell Admin):
 
-En cada servidor (PowerShell Admin):
-
-1. Azure DevOps → Project settings → **Agent pools** → New pool `RCJ-Windows-Dev` (y otro `RCJ-Windows-Prod`).
+1. Azure DevOps → Project settings → **Agent pools** → abre **Default** (o crea uno y cambia el nombre en el YAML).
 2. Add agent → Windows → descarga el ZIP.
 3. En el servidor:
 
@@ -66,13 +63,15 @@ cd C:\azagent
 .\config.cmd
 # URL: https://dev.azure.com/RCJCorporation
 # Auth: PAT con Agent Pools (read, manage)
-# Pool: RCJ-Windows-Dev  (o Prod)
+# Pool: Default
 # Agent name: rcj-dev-01
 .\run.cmd
 # Instalar como servicio:
 .\svc.cmd install
 .\svc.cmd start
 ```
+
+Si el pipeline dice “pool not authorized”, al primer run autoriza el pool en el diálogo de Azure DevOps.
 
 4. En el servidor ya debe existir el clone:
 

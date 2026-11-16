@@ -4,6 +4,9 @@
 # Prod: solo tras aprobación en el environment "production"
 #
 # Setup: ver deploy/AZURE-PIPELINES.md
+#
+# Pool: usa "Default" (agente self-hosted Windows). Si creas pools propios,
+# cambia agentPoolDev / agentPoolProd abajo o en Variables del pipeline.
 
 trigger:
   branches:
@@ -19,9 +22,12 @@ pr: none
 
 variables:
   nodeVersion: '22.x'
+  # Nombre exacto del Agent pool en Project settings → Agent pools
+  agentPoolDev: 'Default'
+  agentPoolProd: 'Default'
 
 stages:
-  # ── Build (opcional en agente Microsoft; el deploy real hace build en el servidor) ──
+  # ── Build (verificación en agente Microsoft) ───────────────────────────────
   - stage: Build
     displayName: Build
     jobs:
@@ -54,7 +60,7 @@ stages:
         displayName: Deploy a desarrollo
         environment: development
         pool:
-          name: RCJ-Windows-Dev
+          name: $(agentPoolDev)
         strategy:
           runOnce:
             deploy:
@@ -84,11 +90,10 @@ stages:
     jobs:
       - deployment: DeployProdJob
         displayName: Deploy a producción
-        # En Azure DevOps → Environments → production → Approvals and checks
-        # agrega Approvals con el/los administradores.
+        # Environments → production → Approvals and checks → Approvals
         environment: production
         pool:
-          name: RCJ-Windows-Prod
+          name: $(agentPoolProd)
         strategy:
           runOnce:
             deploy:
