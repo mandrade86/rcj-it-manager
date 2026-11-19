@@ -24,11 +24,29 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Test-DriveReady {
+  param([string]$Path)
+  if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+  try {
+    $root = [System.IO.Path]::GetPathRoot($Path)
+    if ([string]::IsNullOrWhiteSpace($root)) { return $false }
+    return (Test-Path -LiteralPath $root)
+  } catch {
+    return $false
+  }
+}
+
 function Resolve-DeployRoot {
-  if ($env:RCJ_DEPLOY_ROOT) { return $env:RCJ_DEPLOY_ROOT }
-  if ($Root) { return $Root }
-  if (Test-Path -LiteralPath 'D:\') { return 'D:\rcj-it-manager' }
-  return 'C:\apps\rcj-it-manager'
+  $candidates = @()
+  if ($env:RCJ_DEPLOY_ROOT) { $candidates += $env:RCJ_DEPLOY_ROOT }
+  if ($Root) { $candidates += $Root }
+  $candidates += @('D:\rcj-it-manager', 'C:\apps\rcj-it-manager')
+
+  foreach ($candidate in $candidates) {
+    if (Test-DriveReady -Path $candidate) { return $candidate }
+    Write-Host "Omitiendo $candidate (unidad no disponible)" -ForegroundColor Yellow
+  }
+  throw 'No hay unidad válida para el deploy. Define RCJ_DEPLOY_ROOT en una ruta existente (ej. C:\apps\rcj-it-manager).'
 }
 
 function Invoke-GitAuth {
@@ -59,7 +77,8 @@ Write-Host "Remote: $remote"
 
 if (-not (Test-Path -LiteralPath $Root)) {
   $parent = Split-Path -Parent $Root
-  if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+  # No intentar crear la raíz de unidad (D:\, C:\); solo subcarpetas
+  if ($parent -and $parent -notmatch '^[A-Za-z]:\\?$' -and -not (Test-Path -LiteralPath $parent)) {
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
   }
   Write-Host "Clonando repo en $Root…" -ForegroundColor Cyan
