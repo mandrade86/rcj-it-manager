@@ -8,9 +8,12 @@
   - Restringe los permisos del .env a Administradores y SYSTEM.
   - Arranca el servicio y verifica /api/health.
 
-  Ejecutar en PowerShell como Administrador, desde la carpeta del proyecto:
-    cd D:\rcj-it-manager
-    powershell -ExecutionPolicy Bypass -File .\scripts\instalar-servicio-windows.ps1
+  Desarrollo (unidad P:) — PowerShell como Administrador:
+    cd P:\rcj-it-manager
+    # Si no hay .env aún:
+    #   Copy-Item .env.development.example .env
+    #   notepad .env   # MONGODB_URI, JWT_SECRET, PORT=3001, etc.
+    powershell -ExecutionPolicy Bypass -File .\scripts\instalar-servicio-windows.ps1 -AppDir P:\rcj-it-manager
 
   Volver a ejecutarlo es seguro: actualiza la configuración del servicio existente.
 #>
