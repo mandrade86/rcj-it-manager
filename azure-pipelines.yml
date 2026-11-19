@@ -1,12 +1,9 @@
-# RCJ IT Manager — Azure Pipelines
+# RCJ IT Manager — Pipeline DESARROLLO (solo)
 #
-# Dev:  automático en cada push a main
-# Prod: solo tras aprobación en el environment "production"
+# Trigger: push a main → Build + Deploy Dev automático
+# Producción: pipeline aparte → azure-pipelines-prod.yml
 #
-# Setup: ver deploy/AZURE-PIPELINES.md
-#
-# Pool: usa "Default" (agente self-hosted Windows). Si creas pools propios,
-# cambia agentPoolDev / agentPoolProd abajo o en Variables del pipeline.
+# Setup: deploy/AZURE-PIPELINES.md
 
 trigger:
   branches:
@@ -17,17 +14,17 @@ trigger:
       - '**/*.md'
       - 'deploy/teams-pmo-personal/**'
       - 'docs/**'
+      - 'azure-pipelines-prod.yml'
 
 pr: none
 
 variables:
   nodeVersion: '22.x'
-  # Nombre exacto del Agent pool en Project settings → Agent pools
   agentPoolDev: 'Default'
-  agentPoolProd: 'Default'
+  deployRootDev: 'P:\rcj-it-manager'
+  serviceNameDev: 'RCJITManager'
 
 stages:
-  # ── Build (mismo agente self-hosted; evita paralelismo Microsoft hosted) ───
   - stage: Build
     displayName: Build
     jobs:
@@ -53,7 +50,6 @@ stages:
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             displayName: npm install + build client
 
-  # ── Desarrollo (automático) ────────────────────────────────────────────────
   - stage: DeployDev
     displayName: Deploy desarrollo
     dependsOn: Build
@@ -86,44 +82,6 @@ stages:
                   env:
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
                     RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
-                    # Desarrollo: unidad P:
-                    RCJ_DEPLOY_ROOT: 'P:\rcj-it-manager'
-                    RCJ_SERVICE_NAME: 'RCJITManager'
-                    RCJ_GIT_BRANCH: 'main'
-
-  # ── Producción (requiere aprobación del environment "production") ──────────
-  - stage: DeployProd
-    displayName: Deploy producción
-    dependsOn: DeployDev
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    jobs:
-      - deployment: DeployProdJob
-        displayName: Deploy a producción
-        # Environments → production → Approvals and checks → Approvals
-        environment: production
-        pool:
-          name: $(agentPoolProd)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-                  fetchDepth: 1
-                  clean: false
-                  persistCredentials: true
-
-                - task: PowerShell@2
-                  displayName: Deploy Prod (git + build + restart)
-                  inputs:
-                    targetType: filePath
-                    filePath: '$(Build.SourcesDirectory)/scripts/deploy-from-pipeline.ps1'
-                    arguments: '-Env Prod'
-                    pwsh: false
-                    workingDirectory: '$(Build.SourcesDirectory)'
-                  env:
-                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-                    RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
-                    # Prod: cambia a D:\rcj-it-manager si esa unidad existe en el servidor
-                    RCJ_DEPLOY_ROOT: 'C:\apps\rcj-it-manager'
-                    RCJ_SERVICE_NAME: 'RCJITManager'
+                    RCJ_DEPLOY_ROOT: $(deployRootDev)
+                    RCJ_SERVICE_NAME: $(serviceNameDev)
                     RCJ_GIT_BRANCH: 'main'

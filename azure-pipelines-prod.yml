@@ -1,0 +1,81 @@
+# RCJ IT Manager — Pipeline PRODUCCIÓN (separado)
+#
+# NO se dispara con push a main.
+# Ejecutar a mano en Azure DevOps → Run pipeline.
+# Requiere aprobación del environment "production".
+#
+# Setup: deploy/AZURE-PIPELINES.md
+
+trigger: none
+pr: none
+
+variables:
+  nodeVersion: '22.x'
+  # Agente del servidor de producción (cámbialo si usas otro pool)
+  agentPoolProd: 'Default'
+  deployRootProd: 'C:\apps\rcj-it-manager'
+  serviceNameProd: 'RCJITManager'
+
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: Verify
+        displayName: Install + build (verificación)
+        pool:
+          name: $(agentPoolProd)
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+            displayName: Node.js
+
+          - powershell: |
+              npm install --no-audit --no-fund
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              npm install --prefix client --no-audit --no-fund
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              npm run build
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            displayName: npm install + build client
+
+  - stage: DeployProd
+    displayName: Deploy producción
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployProdJob
+        displayName: Deploy a producción
+        # Environments → production → Approvals and checks → Approvals
+        environment: production
+        pool:
+          name: $(agentPoolProd)
+        timeoutInMinutes: 90
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  fetchDepth: 1
+                  clean: false
+                  persistCredentials: true
+
+                - task: PowerShell@2
+                  displayName: Deploy Prod (git + build + restart)
+                  inputs:
+                    targetType: filePath
+                    filePath: '$(Build.SourcesDirectory)/scripts/deploy-from-pipeline.ps1'
+                    arguments: '-Env Prod'
+                    pwsh: false
+                    workingDirectory: '$(Build.SourcesDirectory)'
+                  timeoutInMinutes: 75
+                  env:
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                    RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
+                    RCJ_DEPLOY_ROOT: $(deployRootProd)
+                    RCJ_SERVICE_NAME: $(serviceNameProd)
+                    RCJ_GIT_BRANCH: 'main'
+                    RCJ_REQUIRE_SERVICE: '1'
