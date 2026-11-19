@@ -11,8 +11,8 @@ pr: none
 
 variables:
   nodeVersion: '22.x'
-  # Agente del servidor de producción (cámbialo si usas otro pool)
-  agentPoolProd: 'Default'
+  # Pool distinto al de Dev (Default). Debe coincidir con Project settings → Agent pools
+  agentPoolProd: 'RCJ-Windows-Prod'
   deployRootProd: 'C:\apps\rcj-it-manager'
   serviceNameProd: 'RCJITManager'
 
