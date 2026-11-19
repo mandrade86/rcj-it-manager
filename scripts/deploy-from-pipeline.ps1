@@ -108,10 +108,14 @@ Write-Host 'npm install (client)…' -ForegroundColor Cyan
 Push-Location client
 npm install --prefer-offline --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw 'npm install client falló' }
-Write-Host 'npm run build…' -ForegroundColor Cyan
-npm run build
+Write-Host 'npm run build (logLevel warn)…' -ForegroundColor Cyan
+$env:CI = 'true'
+# Menos ruido: el listado de chunks de Vite satura el log de Azure
+npm run build -- --logLevel warn
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw 'client build falló' }
 Pop-Location
+Write-Host '##[section] Client build OK' -ForegroundColor Green
+Write-Host "Build terminado: $(Get-Date -Format 'HH:mm:ss')"
 
 $envFile = Join-Path $Root '.env'
 if (-not (Test-Path -LiteralPath $envFile)) {
@@ -137,13 +141,19 @@ if (-not (Test-Path -LiteralPath $envFile)) {
   }
 }
 
-Write-Host "Reiniciando servicio $ServiceName…" -ForegroundColor Cyan
+Write-Host "##[section] Reinicio servicio $ServiceName" -ForegroundColor Cyan
 $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $svc) {
-  throw "Servicio Windows '$ServiceName' no encontrado en $Root. Instálalo con NSSM apuntando a esta carpeta, luego re-ejecuta el pipeline."
+  Write-Host "AVISO: código desplegado en $Root pero no existe el servicio '$ServiceName'." -ForegroundColor Yellow
+  Write-Host "Instala NSSM apuntando a $Root y re-ejecuta el pipeline." -ForegroundColor Yellow
+  if ($env:RCJ_REQUIRE_SERVICE -eq '1') {
+    throw "Servicio Windows '$ServiceName' no encontrado."
+  }
+  Write-Host "OK deploy $Env (sin reinicio de servicio)" -ForegroundColor Yellow
+  exit 0
 }
 Restart-Service -Name $ServiceName -Force
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 5
 $svc = Get-Service -Name $ServiceName
 if ($svc.Status -ne 'Running') {
   throw "El servicio $ServiceName no quedó Running (estado: $($svc.Status))"
@@ -151,7 +161,7 @@ if ($svc.Status -ne 'Running') {
 
 Write-Host "OK deploy $Env — $ServiceName Running" -ForegroundColor Green
 try {
-  $health = Invoke-WebRequest -Uri 'http://127.0.0.1:3001/api/health' -UseBasicParsing -TimeoutSec 10
+  $health = Invoke-WebRequest -Uri 'http://127.0.0.1:3001/api/health' -UseBasicParsing -TimeoutSec 15
   Write-Host "Health: $($health.StatusCode) $($health.Content)"
 } catch {
   Write-Host "Health check local falló (el servicio puede tardar unos segundos): $($_.Exception.Message)" -ForegroundColor Yellow

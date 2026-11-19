@@ -64,6 +64,7 @@ stages:
         environment: development
         pool:
           name: $(agentPoolDev)
+        timeoutInMinutes: 90
         strategy:
           runOnce:
             deploy:
@@ -81,6 +82,7 @@ stages:
                     arguments: '-Env Dev'
                     pwsh: false
                     workingDirectory: '$(Build.SourcesDirectory)'
+                  timeoutInMinutes: 75
                   env:
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
                     RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
