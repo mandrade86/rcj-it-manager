@@ -40,7 +40,7 @@ function Resolve-DeployRoot {
   $candidates = @()
   if ($env:RCJ_DEPLOY_ROOT) { $candidates += $env:RCJ_DEPLOY_ROOT }
   if ($Root) { $candidates += $Root }
-  $candidates += @('D:\rcj-it-manager', 'C:\apps\rcj-it-manager')
+  $candidates += @('P:\rcj-it-manager', 'D:\rcj-it-manager', 'C:\apps\rcj-it-manager')
 
   foreach ($candidate in $candidates) {
     if (Test-DriveReady -Path $candidate) { return $candidate }

@@ -84,8 +84,8 @@ stages:
                   env:
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
                     RCJ_GIT_REMOTE: 'https://dev.azure.com/RCJCorporation/RCJ-IT-MANAGER/_git/RCJ-IT-MANAGER'
-                    # Sin D: en el agente Dev → C:\apps\rcj-it-manager
-                    RCJ_DEPLOY_ROOT: 'C:\apps\rcj-it-manager'
+                    # Desarrollo: unidad P:
+                    RCJ_DEPLOY_ROOT: 'P:\rcj-it-manager'
                     RCJ_SERVICE_NAME: 'RCJITManager'
                     RCJ_GIT_BRANCH: 'main'
 

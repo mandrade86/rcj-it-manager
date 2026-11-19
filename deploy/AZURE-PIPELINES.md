@@ -13,7 +13,7 @@ Hosts típicos:
 |---|---|---|
 | Portal | `portal-dev.rcjcorp.hn` | `portal.rcjcorp.hn` |
 | Bot | `dev-bot.rcjcorp.hn` | `bot.rcjcorp.hn` |
-| Carpeta | `C:\apps\rcj-it-manager` | `C:\apps\rcj-it-manager` (o `D:\…` si existe) |
+| Carpeta | `P:\rcj-it-manager` | `C:\apps\rcj-it-manager` (o `D:\…` si existe) |
 | Servicio | `RCJITManager` | `RCJITManager` |
 
 ---
@@ -73,7 +73,7 @@ cd C:\azagent
 
 Si el pipeline dice “pool not authorized”, al primer run autoriza el pool en el diálogo de Azure DevOps.
 
-4. El pipeline clona en `C:\apps\rcj-it-manager` (variable `RCJ_DEPLOY_ROOT`).  
+4. Dev clona en `P:\rcj-it-manager`; Prod usa `RCJ_DEPLOY_ROOT` del YAML.  
    Después debes tener el servicio Windows y el `.env` (el script puede sembrar `.env` desde el example la primera vez).
 
 5. Node 22+, Git, servicio `RCJITManager` (NSSM) apuntando a esa carpeta.
