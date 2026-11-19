@@ -87,6 +87,11 @@ if (-not (Test-Path -LiteralPath $Root)) {
 
 Set-Location -LiteralPath $Root
 
+# Evita "dubious ownership" (clone como Network Service vs usuario interactivo)
+$safePath = ($Root -replace '\\', '/')
+git config --global --add safe.directory $safePath 2>$null
+git config --system --add safe.directory $safePath 2>$null
+
 $remotes = @(git remote 2>$null)
 if ($remotes -notcontains 'origin') {
   git remote add origin $remote
