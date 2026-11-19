@@ -12,7 +12,7 @@ pr: none
 variables:
   nodeVersion: '22.x'
   # Pool distinto al de Dev (Default). Debe coincidir con Project settings → Agent pools
-  agentPoolProd: 'RCJ-Windows-Prod'
+  agentPoolProd: 'PowerBiProduction'
   deployRootProd: 'C:\apps\rcj-it-manager'
   serviceNameProd: 'RCJITManager'
 

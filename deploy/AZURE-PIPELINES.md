@@ -11,7 +11,7 @@
 | Bot | `dev-bot.rcjcorp.hn` | `bot.rcjcorp.hn` |
 | Carpeta | `P:\rcj-it-manager` | `C:\apps\rcj-it-manager` |
 | Servicio | `RCJITManager` | `RCJITManager` |
-| Agent pool | `Default` | `RCJ-Windows-Prod` |
+| Agent pool | `Default` | `PowerBiProduction` |
 | Environment | `development` | `production` (con Approvals) |
 
 ---
@@ -34,7 +34,7 @@ git push -u azure main
    - `production` — **Approvals** con el administrador
 2. Agent pools:
    - Dev → **Default** (autoriza en el pipeline Dev)
-   - Prod → **RCJ-Windows-Prod** (autoriza en el pipeline Prod; crea el pool si no existe y registra el agente del servidor de producción ahí)
+   - Prod → **PowerBiProduction** (autoriza en el pipeline Prod)
 
 ---
 
@@ -84,25 +84,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\instalar-servicio-windows.ps1
 
 ---
 
-## 5. Agente Prod (pool `RCJ-Windows-Prod`)
+## 5. Agente Prod (pool `PowerBiProduction`)
 
-En el **servidor de producción** (no el de Dev):
+Usa el agente ya registrado en **PowerBiProduction** (servidor de producción).
 
-1. Project settings → Agent pools → New pool **`RCJ-Windows-Prod`** (si aún no existe).
-2. Registra el agente en ese pool (no en Default):
-
-```powershell
-cd C:\azagent
-.\config.cmd
-# URL: https://dev.azure.com/RCJCorporation
-# Pool: RCJ-Windows-Prod
-# Agent name: rcj-prod-01
-.\svc.cmd install
-.\svc.cmd start
-```
-
-3. Carpeta app: `C:\apps\rcj-it-manager`, `.env` desde `.env.production.example`, NSSM `RCJITManager`.
-4. Pipeline **Prod** → Run a mano → autoriza el pool si Azure lo pide → aprueba el environment.
+1. Autoriza ese pool en el pipeline Prod si Azure lo pide.
+2. Carpeta app: `C:\apps\rcj-it-manager`, `.env` desde `.env.production.example`, NSSM `RCJITManager`.
+3. Pipeline **Prod** → Run a mano → aprueba el environment `production`.
 
 ---
 
