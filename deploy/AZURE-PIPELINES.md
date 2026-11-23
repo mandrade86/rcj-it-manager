@@ -48,8 +48,10 @@ git push -u azure main
 Flujo:
 
 ```text
-push main → Build → Deploy Dev (P:\rcj-it-manager) → fin
+push main → Build (install + build + Vitest) → Deploy Dev (P:\…) → fin
 ```
+
+Pestaña **Tests** del run: resultados JUnit (`PublishTestResults@2`). Local: `npm test`.
 
 ### Prod (nuevo, separado)
 
