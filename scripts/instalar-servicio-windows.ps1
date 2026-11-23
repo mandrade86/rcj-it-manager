@@ -158,6 +158,18 @@ if (-not $SinPermisosEnv) {
   if ($LASTEXITCODE -ne 0) { Aviso 'No se pudieron ajustar los permisos del .env' } else { Ok 'Listo' }
 }
 
+# ── Permiso al agente Azure (Network Service) para Restart-Service ────────────
+Paso 'Permiso de control al agente Azure (Servicio de red)'
+$grantScript = Join-Path $PSScriptRoot 'grant-agent-service-control.ps1'
+if (Test-Path -LiteralPath $grantScript) {
+  try {
+    & $grantScript -ServiceName $ServiceName
+  } catch {
+    Aviso "No se concedió permiso al agente: $($_.Exception.Message)"
+    Aviso "Ejecuta después: .\scripts\grant-agent-service-control.ps1"
+  }
+}
+
 # ── Arrancar y verificar ──────────────────────────────────────────────────────
 Paso 'Arrancando'
 Start-Service $ServiceName

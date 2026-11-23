@@ -157,7 +157,53 @@ if (-not $svc) {
   Write-Host "OK deploy $Env (sin reinicio de servicio)" -ForegroundColor Yellow
   exit 0
 }
-Restart-Service -Name $ServiceName -Force
+
+function Restart-RcjService {
+  param([string]$Name)
+  $errs = @()
+
+  try {
+    Restart-Service -Name $Name -Force -ErrorAction Stop
+    return
+  } catch {
+    $errs += "Restart-Service: $($_.Exception.Message)"
+  }
+
+  $nssm = @(
+    (Get-Command nssm -ErrorAction SilentlyContinue).Source
+    'C:\nssm\nssm.exe'
+  ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+  if ($nssm) {
+    try {
+      & $nssm restart $Name
+      if ($LASTEXITCODE -eq 0) { return }
+      $errs += "nssm restart exit $LASTEXITCODE"
+    } catch {
+      $errs += "nssm: $($_.Exception.Message)"
+    }
+  }
+
+  try {
+    & sc.exe stop $Name | Out-Null
+    Start-Sleep -Seconds 2
+    & sc.exe start $Name | Out-Null
+    if ($LASTEXITCODE -eq 0) { return }
+    $errs += "sc start exit $LASTEXITCODE"
+  } catch {
+    $errs += "sc: $($_.Exception.Message)"
+  }
+
+  throw @"
+No se pudo reiniciar '$Name' (el agente no tiene permiso).
+Detalle: $($errs -join ' | ')
+
+En el servidor (PowerShell Admin, una vez):
+  powershell -ExecutionPolicy Bypass -File $Root\scripts\grant-agent-service-control.ps1
+Luego re-ejecuta el pipeline.
+"@
+}
+
+Restart-RcjService -Name $ServiceName
 Start-Sleep -Seconds 5
 $svc = Get-Service -Name $ServiceName
 if ($svc.Status -ne 'Running') {
