@@ -98,8 +98,8 @@ Usa el agente ya registrado en **PowerBiProduction** (servidor de producción).
 
 El pipeline **no** copia `.env`:
 
-- Dev: `P:\rcj-it-manager\.env` — Mongo en **`RCJ-lnx-sql01`**:  
-  `MONGODB_URI=mongodb://RCJ-lnx-sql01:27017/rcj_it_manager_dev`
+- Dev: `P:\rcj-it-manager\.env` — Mongo en **RCJ-lnx-sql01 (`172.16.150.25`)**:  
+  `MONGODB_URI=mongodb://172.16.150.25:27017/rcj_it_manager_dev`
 - Prod: `C:\apps\rcj-it-manager\.env`
 
 Script de deploy: [`scripts/deploy-from-pipeline.ps1`](../scripts/deploy-from-pipeline.ps1).

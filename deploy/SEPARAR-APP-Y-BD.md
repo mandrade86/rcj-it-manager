@@ -17,10 +17,10 @@ Para dejarlos en servidores distintos (producción o desarrollo):
 | **BD** (`RCJ-lnx-sql01`) | `docker-compose.dev-mongo.yml` | `.env.mongo.dev` | `bash scripts/deploy-ubuntu.sh --dev --mongo` | `rcj_it_manager_dev` |
 | **App** (Windows Dev, `P:\`) | NSSM `RCJITManager` | `.env` → `MONGODB_URI` | pipeline Azure / `instalar-servicio-windows.ps1` | idem |
 
-`MONGODB_URI` típico en Dev:
+`MONGODB_URI` típico en Dev (`RCJ-lnx-sql01` = `172.16.150.25`):
 
 ```env
-MONGODB_URI=mongodb://RCJ-lnx-sql01:27017/rcj_it_manager_dev
+MONGODB_URI=mongodb://172.16.150.25:27017/rcj_it_manager_dev
 ```
 
 Todo-en-uno (sin separar):
