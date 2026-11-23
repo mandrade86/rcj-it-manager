@@ -165,9 +165,15 @@ if ($svc.Status -ne 'Running') {
 }
 
 Write-Host "OK deploy $Env — $ServiceName Running" -ForegroundColor Green
+$healthPort = 3001
+$envPath = Join-Path $Root '.env'
+if (Test-Path -LiteralPath $envPath) {
+  $m = Select-String -Path $envPath -Pattern '^\s*(?:PORT|APP_PORT)\s*=\s*(\d+)' | Select-Object -First 1
+  if ($m) { $healthPort = [int]$m.Matches[0].Groups[1].Value }
+}
 try {
-  $health = Invoke-WebRequest -Uri 'http://127.0.0.1:3001/api/health' -UseBasicParsing -TimeoutSec 15
-  Write-Host "Health: $($health.StatusCode) $($health.Content)"
+  $health = Invoke-WebRequest -Uri "http://127.0.0.1:$healthPort/api/health" -UseBasicParsing -TimeoutSec 15
+  Write-Host "Health (:$healthPort): $($health.StatusCode) $($health.Content)"
 } catch {
-  Write-Host "Health check local falló (el servicio puede tardar unos segundos): $($_.Exception.Message)" -ForegroundColor Yellow
+  Write-Host "Health check local falló (:$healthPort): $($_.Exception.Message)" -ForegroundColor Yellow
 }

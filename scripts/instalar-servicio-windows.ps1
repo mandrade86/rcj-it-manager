@@ -48,6 +48,9 @@ if (-not (Test-Path $tsxCli)) { Falla "No existe $tsxCli. Ejecuta 'npm install' 
 
 $port = 3001
 $lineaPort = Select-String -Path $envFile -Pattern '^\s*PORT\s*=\s*(\d+)' | Select-Object -First 1
+if (-not $lineaPort) {
+  $lineaPort = Select-String -Path $envFile -Pattern '^\s*APP_PORT\s*=\s*(\d+)' | Select-Object -First 1
+}
 if ($lineaPort) { $port = [int]$lineaPort.Matches[0].Groups[1].Value }
 Ok ".env encontrado (puerto $port)"
 
