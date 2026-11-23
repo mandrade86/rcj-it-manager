@@ -211,11 +211,21 @@ if ($svc.Status -ne 'Running') {
 }
 
 Write-Host "OK deploy $Env — $ServiceName Running" -ForegroundColor Green
-$healthPort = 3001
-$envPath = Join-Path $Root '.env'
-if (Test-Path -LiteralPath $envPath) {
-  $m = Select-String -Path $envPath -Pattern '^\s*(?:PORT|APP_PORT)\s*=\s*(\d+)' | Select-Object -First 1
-  if ($m) { $healthPort = [int]$m.Matches[0].Groups[1].Value }
+# Dev suele ser 3002; Prod 3001. Si .env no es legible (ACL solo Admin/SYSTEM), no fallar el deploy.
+$healthPort = if ($Env -eq 'Dev') { 3002 } else { 3001 }
+if ($env:RCJ_HEALTH_PORT) {
+  $healthPort = [int]$env:RCJ_HEALTH_PORT
+} else {
+  $envPath = Join-Path $Root '.env'
+  try {
+    if (Test-Path -LiteralPath $envPath) {
+      $m = Select-String -Path $envPath -Pattern '^\s*(?:PORT|APP_PORT)\s*=\s*(\d+)' -ErrorAction Stop |
+        Select-Object -First 1
+      if ($m) { $healthPort = [int]$m.Matches[0].Groups[1].Value }
+    }
+  } catch {
+    Write-Host "No se pudo leer .env para PORT (usando $healthPort): $($_.Exception.Message)" -ForegroundColor Yellow
+  }
 }
 try {
   $health = Invoke-WebRequest -Uri "http://127.0.0.1:$healthPort/api/health" -UseBasicParsing -TimeoutSec 15

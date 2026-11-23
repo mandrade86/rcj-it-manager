@@ -100,3 +100,4 @@ stages:
                     RCJ_DEPLOY_ROOT: $(deployRootDev)
                     RCJ_SERVICE_NAME: $(serviceNameDev)
                     RCJ_GIT_BRANCH: 'main'
+                    RCJ_HEALTH_PORT: '3002'
