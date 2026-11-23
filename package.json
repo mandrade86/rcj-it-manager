@@ -10,6 +10,8 @@
     "dev:client": "node scripts/wait-for-api.mjs && npm run dev --prefix client",
     "dev:server": "nodemon --watch server --ext ts --legacy-watch --delay 500 --exec tsx server/index.ts",
     "build": "npm run build --prefix client",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "tsx server/index.ts",
     "docker:up": "docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build",
     "docker:up:dev": "docker compose -f docker-compose.dev.yml --env-file .env.development up -d --build",
@@ -25,7 +27,6 @@
     "admin:crear": "tsx server/scripts/crearAdministrador.ts",
     "teams:probar": "tsx server/scripts/probarTeams.ts",
     "pmo:digest": "tsx server/scripts/enviarDigestPmo.ts",
-
     "departamentos:cargar": "tsx server/scripts/cargarDepartamentos.ts",
     "departamentos:exportar": "tsx server/scripts/exportarDepartamentos.ts",
     "departamentos:importar": "tsx server/scripts/importarDepartamentos.ts",
@@ -60,6 +61,7 @@
     "concurrently": "^9.2.1",
     "nodemon": "^3.1.10",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }

@@ -42,6 +42,21 @@ stages:
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             displayName: npm install + build client
 
+          - powershell: |
+              npm test
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            displayName: Unit tests (Vitest)
+
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/test-results/junit.xml'
+              testRunTitle: 'RCJ IT Manager — unit (Prod pipeline)'
+              failTaskOnFailedTests: true
+              mergeTestResults: true
+
   - stage: DeployProd
     displayName: Deploy producción
     dependsOn: Build

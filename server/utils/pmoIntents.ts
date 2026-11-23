@@ -35,7 +35,7 @@ export function detectarIntent(textoRaw: string): { intent: PmoIntent; query?: s
 
   if (/\b(riesgo|riesgos)\b/.test(t)) return { intent: 'personal_riesgos' }
 
-  if (/\b(atrasad|vencid|retrasad|overdue)\b/.test(t)) return { intent: 'personal_atrasados' }
+  if (/\b(atrasad\w*|vencid\w*|retrasad\w*|overdue)\b/.test(t)) return { intent: 'personal_atrasados' }
 
   const mProy =
     t.match(/\bproyecto\s+([a-z0-9][a-z0-9._-]{1,40})\b/i) ||
