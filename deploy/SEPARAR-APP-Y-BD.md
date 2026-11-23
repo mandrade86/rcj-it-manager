@@ -12,10 +12,16 @@ Para dejarlos en servidores distintos (producción o desarrollo):
 
 ### Desarrollo / staging
 
-| Servidor | Compose | Variables | Comando | Base |
+| Servidor | Compose / runtime | Variables | Comando | Base |
 |----------|---------|-----------|---------|------|
-| **BD** | `docker-compose.dev-mongo.yml` | `.env.mongo.dev` | `bash scripts/deploy-ubuntu.sh --dev --mongo` | `rcj_it_manager_dev` |
-| **App** | `docker-compose.dev-app.yml` | `.env.development` + `MONGODB_URI` | `bash scripts/deploy-ubuntu.sh --dev --app` | idem |
+| **BD** (`RCJ-lnx-sql01`) | `docker-compose.dev-mongo.yml` | `.env.mongo.dev` | `bash scripts/deploy-ubuntu.sh --dev --mongo` | `rcj_it_manager_dev` |
+| **App** (Windows Dev, `P:\`) | NSSM `RCJITManager` | `.env` → `MONGODB_URI` | pipeline Azure / `instalar-servicio-windows.ps1` | idem |
+
+`MONGODB_URI` típico en Dev:
+
+```env
+MONGODB_URI=mongodb://RCJ-lnx-sql01:27017/rcj_it_manager_dev
+```
 
 Todo-en-uno (sin separar):
 
