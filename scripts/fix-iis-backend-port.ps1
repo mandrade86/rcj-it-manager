@@ -85,9 +85,9 @@ Get-Website | ForEach-Object {
   if ($name -match $HostHint -or $name -match 'rcj|portal|dev') {
     try {
       Restart-WebAppPool -Name $pool
-      Write-Host "  Restart-WebAppPool $pool (sitio $name)" -ForegroundColor Green
+      Write-Host "  Restart-WebAppPool ${pool} (sitio ${name})" -ForegroundColor Green
     } catch {
-      Write-Host "  No se pudo reiniciar pool $pool: $($_.Exception.Message)" -ForegroundColor Yellow
+      Write-Host "  No se pudo reiniciar pool ${pool}: $($_.Exception.Message)" -ForegroundColor Yellow
     }
   }
 }
