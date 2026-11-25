@@ -14,8 +14,13 @@
   # Prod con URI directa:
   .\scripts\mongo-prod-to-dev.ps1 -ProdUri "mongodb://172.16.x.x:27017"
 
+  # Dev con auth (si mongod exige login):
+  .\scripts\mongo-prod-to-dev.ps1 -ProdUri "mongodb://127.0.0.1:27017" `
+    -DevUser rcjdev -DevPassword 'CLAVE' -DevAuthSource admin
+
   # Solo restore de un archive ya descargado:
-  .\scripts\mongo-prod-to-dev.ps1 -Archive data\backups\rcj_it_manager-XXXX.archive -SkipExport
+  .\scripts\mongo-prod-to-dev.ps1 -Archive data\backups\rcj_it_manager-XXXX.archive -SkipExport `
+    -DevUser rcjdev -DevPassword 'CLAVE'
 #>
 param(
   [string]$ProdUri = '',
@@ -25,6 +30,9 @@ param(
   [string]$DevHost = '172.16.150.25',
   [int]$DevPort = 27017,
   [string]$DevUri = '',
+  [string]$DevUser = '',
+  [string]$DevPassword = '',
+  [string]$DevAuthSource = 'admin',
   [string]$SourceDb = 'rcj_it_manager',
   [string]$TargetDb = 'rcj_it_manager_dev',
   [string]$Archive = '',
@@ -57,7 +65,13 @@ if (-not $mongorestore) {
 $OutDir = Join-Path $Root 'data\backups'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 if (-not $DevUri) {
-  $DevUri = "mongodb://${DevHost}:${DevPort}"
+  if ($DevUser -and $DevPassword) {
+    $u = [uri]::EscapeDataString($DevUser)
+    $p = [uri]::EscapeDataString($DevPassword)
+    $DevUri = "mongodb://${u}:${p}@${DevHost}:${DevPort}/?authSource=$DevAuthSource"
+  } else {
+    $DevUri = "mongodb://${DevHost}:${DevPort}"
+  }
 }
 $doDrop = -not $NoDrop
 
